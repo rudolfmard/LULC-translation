@@ -1,9 +1,10 @@
 import torch
 import torch.nn as nn
-from graphs.models.custom_layers.double_conv import DoubleConv
 from torch.nn.functional import pad
 from torch import tensor,cat
 
+from mmt.graphs.models.custom_layers import double_conv
+DoubleConv = double_conv.DoubleConv
 
 class Up(nn.Module):
     """Upscaling then double conv"""

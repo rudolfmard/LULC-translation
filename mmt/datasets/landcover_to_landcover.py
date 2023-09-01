@@ -8,10 +8,12 @@ from os.path import basename
 import torch
 import matplotlib.pyplot as plt
 from torchvision.transforms import Compose
-from datasets.transforms import ToOneHot,CoordEnc,FlipTransform,RotationTransform
 import h5py
 from sklearn.decomposition import PCA
 from matplotlib.colors import LinearSegmentedColormap
+
+from mmt.datasets import transforms
+
 cmap_dict={"clc.hdf5":[(255,255,255),(230, 0, 77), (255, 0, 0), (204, 77, 242), (204, 0, 0), (230, 204, 204),
                 (230, 204, 230), (166, 0, 204), (166, 77, 0), (255, 77, 255), (255, 166, 255), (255, 230, 255),
                 (255, 255, 168), (255, 255, 0), (230, 230, 0), (230, 128, 0), (242, 166, 77), (230, 166, 0),
@@ -155,12 +157,12 @@ class LandcoverToLandcoverDataLoader:
         for source, targetval in self.couple_patch_per_dataset.items():
             for target, val in targetval.items():
                 if ampli:
-                    dic_list_train_transform[source][target].append(FlipTransform())
-                    dic_list_train_transform[source][target].append(RotationTransform([0,90,180,270]))
+                    dic_list_train_transform[source][target].append(transforms.FlipTransform())
+                    dic_list_train_transform[source][target].append(transforms.RotationTransform([0,90,180,270]))
                 if to_one_hot:
-                    dic_list_transform[source][target].append(ToOneHot(self.n_classes))
+                    dic_list_transform[source][target].append(transforms.ToOneHot(self.n_classes))
                 if pos_enc:
-                    dic_list_transform[source][target].append(CoordEnc(self.n_classes.keys()))
+                    dic_list_transform[source][target].append(transforms.CoordEnc(self.n_classes.keys()))
                 dic_list_train_transform[source][target] = Compose(dic_list_train_transform[source][target] + dic_list_transform[source][target])
                 dic_list_transform[source][target] = Compose(dic_list_transform[source][target])
 

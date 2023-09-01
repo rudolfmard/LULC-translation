@@ -8,7 +8,7 @@ import json
 from easydict import EasyDict
 from pprint import pprint
 
-from utils.dirs import create_dirs
+from mmt.utils import dirs
 
 
 def setup_logging(log_dir):
@@ -88,7 +88,7 @@ def process_config(json_file):
     config.checkpoint_dir = os.path.join("experiments", config.exp_name, "checkpoints/")
     config.out_dir = os.path.join("experiments", config.exp_name, "out/")
     config.log_dir = os.path.join("experiments", config.exp_name, "logs/")
-    create_dirs([config.summary_dir, config.checkpoint_dir, config.out_dir, config.log_dir])
+    utils.create_dirs([config.summary_dir, config.checkpoint_dir, config.out_dir, config.log_dir])
 
     # setup logging in the project
     setup_logging(config.log_dir)

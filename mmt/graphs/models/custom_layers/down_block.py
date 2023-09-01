@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
-from graphs.models.custom_layers.double_conv import DoubleConv
 
+from mmt.graphs.models.custom_layers import double_conv
+DoubleConv = double_conv.DoubleConv
 
 class Down(nn.Module):
     """Downscaling with maxpool then double conv"""

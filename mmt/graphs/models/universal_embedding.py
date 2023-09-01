@@ -2,6 +2,14 @@ import torch.nn as nn
 import torch
 import torch.utils.checkpoint as checkpoint
 
+from mmt.graphs.models.custom_layers import down_block
+from mmt.graphs.models.custom_layers import up_block
+from mmt.graphs.models.custom_layers import double_conv
+
+Down = down_block.Down
+Up = up_block.Up
+DoubleConv = double_conv.DoubleConv
+
 class AtrouMMU(nn.Module):
     def __init__(self,inf, scale_factor=10,bias=False):
         super(AtrouMMU, self).__init__()
@@ -22,9 +30,6 @@ class AtrouMMU(nn.Module):
         x=torch.cat((x1,x2,x3,x4,x5),1)
         return self.fin(x)
 
-from graphs.models.custom_layers.down_block import Down
-from graphs.models.custom_layers.up_block import Up
-from graphs.models.custom_layers.double_conv import DoubleConv
 
 class Upsample(nn.Module):
     def __init__(self,  scale_factor=2,mode="nearest"):

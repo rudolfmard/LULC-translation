@@ -1,33 +1,28 @@
 """
 Approche par couple mais on maxime tout en me temps !
 """
+import shutil
+from os.path import join
+import json
 import numpy as np
 from sklearn.metrics import confusion_matrix
-import shutil
 import torch
 from torch import nn
 import torch.optim as optim
-import json
-
-from agents.base import BaseAgent
-from graphs.models.universal_embedding import UnivEmb as EncDec
-
-from datasets.landcover_to_landcover import LandcoverToLandcoverDataLoader
-
-from utils.misc import print_cuda_statistics
-
-from os.path import join
-
-from utils.plt_utils import plt_loss2 as plt_loss
-from utils.plt_utils import PltPerClassMetrics
-
-from utils.tensorboardx_utils import tensorboard_summary_writer
-
-from utils.misc import timeit
-
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-class MultiLULCAgent(BaseAgent):
+from mmt.agents import base
+from mmt.graphs.models import universal_embedding
+from mmt.datasets import landcover_to_landcover
+from mmt.utils import misc
+from mmt.utils import plt_utils
+from mmt.utils import tensorboardx_utils
+
+timeit = misc.timeit
+plt_loss = plt_utils.plt_loss2
+EncDec = universal_embedding.UnivEmb
+
+class MultiLULCAgent(base.BaseAgent):
 
     def __init__(self, config):
         super().__init__(config)
@@ -47,14 +42,14 @@ class MultiLULCAgent(BaseAgent):
             self.device = torch.device("cuda")
             torch.cuda.set_device(self.config.gpu_device)
             self.logger.info("Program will run on *****GPU-CUDA***** ")
-            print_cuda_statistics()
+            misc.print_cuda_statistics()
         else:
             self.device = torch.device("cpu")
             torch.manual_seed(self.manual_seed)
             self.logger.info("Program will run on *****CPU*****\n")
 
         # define data_loader
-        self.data_loader = LandcoverToLandcoverDataLoader(config=config,device=self.device,pos_enc=True)
+        self.data_loader = landcover_to_landcover.LandcoverToLandcoverDataLoader(config=config,device=self.device,pos_enc=True)
 
         # Get required param for network initialisation
         input_channels=self.data_loader.input_channels
@@ -80,14 +75,14 @@ class MultiLULCAgent(BaseAgent):
         if self.cuda:
             self.models = [net.to(self.device) for net in self.models]
             self.coord_model = self.coord_model.to(self.device)
-            print_cuda_statistics()
+            misc.print_cuda_statistics()
 
         # Model Loading from the latest checkpoint if not found start from scratch.
         self.load_checkpoint(self.config.checkpoint_file)
 
         # Summary Writer
         if self.config.tensorboard:
-            self.summary_writer, self.tensorboard_process = tensorboard_summary_writer(config,comment=self.config.exp_name)
+            self.summary_writer, self.tensorboard_process = tensorboardx_utils.tensorboard_summary_writer(config,comment=self.config.exp_name)
 
         if self.cuda and torch.cuda.device_count() > 1:
             print("Let's use", torch.cuda.device_count(), "GPUs!")
@@ -404,7 +399,7 @@ class MultiLULCAgent(BaseAgent):
             with open(join(self.config.out_dir, "per_class_accuracy_assessement.json"), 'w') as fp:
                 json.dump(res, fp)
 
-            PltPerClassMetrics()(conf_matrix,savefig=self.config.out_dir+"/per_class")
+            plt_utils.PltPerClassMetrics()(conf_matrix,savefig=self.config.out_dir+"/per_class")
 
 
     def finalize(self):
