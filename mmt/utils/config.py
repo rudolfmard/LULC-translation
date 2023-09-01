@@ -23,11 +23,15 @@ def setup_logging(log_dir):
     console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(Formatter(log_console_format))
 
-    exp_file_handler = RotatingFileHandler('{}exp_debug.log'.format(log_dir), maxBytes=10**6, backupCount=5)
+    exp_file_handler = RotatingFileHandler(
+        "{}exp_debug.log".format(log_dir), maxBytes=10**6, backupCount=5
+    )
     exp_file_handler.setLevel(logging.DEBUG)
     exp_file_handler.setFormatter(Formatter(log_file_format))
 
-    exp_errors_file_handler = RotatingFileHandler('{}exp_error.log'.format(log_dir), maxBytes=10**6, backupCount=5)
+    exp_errors_file_handler = RotatingFileHandler(
+        "{}exp_error.log".format(log_dir), maxBytes=10**6, backupCount=5
+    )
     exp_errors_file_handler.setLevel(logging.WARNING)
     exp_errors_file_handler.setFormatter(Formatter(log_file_format))
 
@@ -44,7 +48,7 @@ def get_config_from_json(json_file):
     """
 
     # parse the configurations from the config json file provided
-    with open(json_file, 'r') as config_file:
+    with open(json_file, "r") as config_file:
         try:
             config_dict = json.load(config_file)
             # EasyDict allows to access dict values as attributes (works recursively).
@@ -79,22 +83,26 @@ def process_config(json_file):
         print("ERROR!!..Please provide the exp_name in json file..")
         exit(-1)
 
-    for k,v in config.items():
-        if v=="None":
-            config[k]=None
+    for k, v in config.items():
+        if v == "None":
+            config[k] = None
 
     # create some important directories to be used for that experiment.
     config.summary_dir = os.path.join("experiments", config.exp_name, "summaries/")
     config.checkpoint_dir = os.path.join("experiments", config.exp_name, "checkpoints/")
     config.out_dir = os.path.join("experiments", config.exp_name, "out/")
     config.log_dir = os.path.join("experiments", config.exp_name, "logs/")
-    utils.create_dirs([config.summary_dir, config.checkpoint_dir, config.out_dir, config.log_dir])
+    utils.create_dirs(
+        [config.summary_dir, config.checkpoint_dir, config.out_dir, config.log_dir]
+    )
 
     # setup logging in the project
     setup_logging(config.log_dir)
 
     logging.getLogger().info("Hi, This is root.")
-    logging.getLogger().info("After the configurations are successfully processed and dirs are created.")
+    logging.getLogger().info(
+        "After the configurations are successfully processed and dirs are created."
+    )
     logging.getLogger().info("The pipeline of the project will begin now.")
     logging.getLogger().info(" THE Configuration of your experiment ..")
     logging.getLogger().info(str(config))
