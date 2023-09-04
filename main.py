@@ -9,9 +9,8 @@ Main
 """
 
 import argparse
-from utils.config import *
-
-from agents import *
+from mmt.utils import config as utilconf
+from mmt.agents import multiLULC
 
 
 def main():
@@ -23,12 +22,12 @@ def main():
         default='None',
         help='The Configuration file in json format')
     args = arg_parser.parse_args()
-
+    
     # parse the config json file
-    config = process_config(args.config)
-
+    config = utilconf.process_config(args.config)
+    
     # Create the Agent and pass all the configuration to it then run it..
-    agent_class = globals()[config.agent]
+    agent_class = getattr(multiLULC, config.agent)
     agent = agent_class(config)
     agent.run()
     agent.finalize()
