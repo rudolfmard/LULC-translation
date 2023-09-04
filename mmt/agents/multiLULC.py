@@ -240,8 +240,9 @@ class MultiLULCAgent(base.BaseAgent):
 
         self.logger.info("Start training !")
         for epoch in range(1, self.config.max_epoch + 1):
+            self.logger.info("")
             self.logger.info(
-                "Training epoch {}/{} ({:.0f}%):\n".format(
+                " ------- Training epoch {}/{} ({:.0f}%) ------- ".format(
                     epoch,
                     self.config.max_epoch,
                     (epoch - 1) / self.config.max_epoch * 100,
@@ -254,7 +255,7 @@ class MultiLULCAgent(base.BaseAgent):
             torch.cuda.empty_cache()
             if epoch % self.config.validate_every == 0:
                 self.logger.info(
-                    "Validation epoch {}/{} ({:.0f}%):\n".format(
+                    " - - - - Validation epoch {}/{} ({:.0f}%) - - - - ".format(
                         epoch,
                         self.config.max_epoch,
                         (epoch - 1) / self.config.max_epoch * 100,
@@ -288,7 +289,6 @@ class MultiLULCAgent(base.BaseAgent):
         One epoch of training
         :return:
         """
-        self.logger.info("training one ep")
         plot_loss = {d: [] for d in self.config.datasets}
 
         [model.train() for model in self.models]
@@ -300,14 +300,23 @@ class MultiLULCAgent(base.BaseAgent):
             source: {target: iter(val) for target, val in targetval.items()}
             for source, targetval in self.data_loader.train_loader.items()
         }
+        dlcount = {}
+        for source, targetval in data_loader.items():
+            for target, dl in targetval.items():
+                dlcount[dl] = 0
+                # self.logger.info(f"Dataloader length: {len(dl)}\t {source} \t->  {target}")
+
         end = False
         while not end:
             for source, targetval in data_loader.items():
                 i_source = self.config.datasets.index(source)
+                # self.logger.info(f"Source: {source}")
                 for target, dl in targetval.items():
+                    # self.logger.info(f"Target: {target} dataloader {dl} ({len(dl)} batches)")
                     i_target = self.config.datasets.index(target)
                     try:
                         data = next(dl)
+                        dlcount[dl] += 1
                     except:
                         end = True
                         break
@@ -329,7 +338,10 @@ class MultiLULCAgent(base.BaseAgent):
                     else:
                         embedding, rec = self.models[i_source](source_patch, full=True)
 
-                    loss = nn.CrossEntropyLoss(ignore_index=0)(
+                    # loss = nn.CrossEntropyLoss(ignore_index=0)(
+                        # rec, sv
+                    # )  # self reconstruction loss
+                    loss_rec = nn.CrossEntropyLoss(ignore_index=0)(
                         rec, sv
                     )  # self reconstruction loss
                     if self.config.use_pos:
@@ -338,22 +350,34 @@ class MultiLULCAgent(base.BaseAgent):
                         )
                     else:
                         embedding2, rec = self.models[i_target](target_patch, full=True)
-                    loss += nn.CrossEntropyLoss(ignore_index=0)(
+                    loss_rec += nn.CrossEntropyLoss(ignore_index=0)(
                         rec, tv
                     )  # self reconstruction loss
-                    loss += torch.nn.MSELoss()(
+                    loss_emb = torch.nn.MSELoss()(
                         embedding, embedding2
                     )  # similar embedding loss
+                    # loss += nn.CrossEntropyLoss(ignore_index=0)(rec,tv) # self reconstruction loss
+                    # loss += torch.nn.MSELoss()(embedding, embedding2 ) # similar embedding loss
 
                     _, rec = self.models[i_target](embedding)
-                    loss += nn.CrossEntropyLoss(ignore_index=0)(
+                    loss_tra = nn.CrossEntropyLoss(ignore_index=0)(
                         rec, tv
                     )  # translation loss
+                    # loss += nn.CrossEntropyLoss(ignore_index=0)(rec,tv) # translation loss
 
                     _, rec = self.models[i_source](embedding2)
-                    loss += nn.CrossEntropyLoss(ignore_index=0)(
+                    loss_tra += nn.CrossEntropyLoss(ignore_index=0)(
                         rec, sv
                     )  # translation loss
+                    # loss += nn.CrossEntropyLoss(ignore_index=0)(rec, sv) # translation loss
+
+                    loss = loss_rec + loss_emb + loss_tra
+
+                    # if dlcount[dl] % max(int(len(dl)/20), 1) == 0:
+                    if dlcount[dl] % 10 == 0:
+                        self.logger.info(
+                            f"[ep {self.current_epoch}, i={self.current_iteration}][batch {dlcount[dl]}/{len(dl)}] train\t {source} -> {target} \t Losses: rec={loss_rec.item()}, emb={loss_emb.item()}, tra={loss_tra.item()}"
+                        )
 
                     loss.backward()
                     self.optimizers[i_source].step()
@@ -433,6 +457,9 @@ class MultiLULCAgent(base.BaseAgent):
                                 data.get("coordinate"),
                             )
                             im_save[source][target] = 1
+                            self.logger.info(
+                                f"Figure saved (patch plot {source} -> {target})"
+                            )
                         if im_save[source][source] == 0:
                             out_img = self.data_loader.plot_samples_per_epoch(
                                 source_patch,
