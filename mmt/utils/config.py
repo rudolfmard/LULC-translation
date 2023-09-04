@@ -1,4 +1,5 @@
 import os
+import shutil
 
 import logging
 from logging import Formatter
@@ -59,7 +60,7 @@ def get_config_from_json(json_file):
             exit(-1)
 
 
-def process_config(json_file):
+def process_config(json_file, quiet=False):
     """
     Get the json file
     Processing it with EasyDict to be accessible as attributes
@@ -71,14 +72,17 @@ def process_config(json_file):
     :return: config object(namespace)
     """
     config, _ = get_config_from_json(json_file)
-    print(" THE Configuration of your experiment ..")
-    pprint(config)
+    if not quiet:
+        print(" THE Configuration of your experiment ..")
+        pprint(config)
 
     # making sure that you have provided the exp_name.
     try:
-        print(" *************************************** ")
-        print("The experiment name is {}".format(config.exp_name))
-        print(" *************************************** ")
+        config.exp_name
+        if not quiet:
+            print(" *************************************** ")
+            print("The experiment name is {}".format(config.exp_name))
+            print(" *************************************** ")
     except AttributeError:
         print("ERROR!!..Please provide the exp_name in json file..")
         exit(-1)
@@ -92,19 +96,22 @@ def process_config(json_file):
     config.checkpoint_dir = os.path.join("experiments", config.exp_name, "checkpoints/")
     config.out_dir = os.path.join("experiments", config.exp_name, "out/")
     config.log_dir = os.path.join("experiments", config.exp_name, "logs/")
-    utils.create_dirs(
+    dirs.create_dirs(
         [config.summary_dir, config.checkpoint_dir, config.out_dir, config.log_dir]
     )
 
     # setup logging in the project
     setup_logging(config.log_dir)
+    
+    shutil.copy(json_file, os.path.join(config.log_dir, "config.json"))
 
-    logging.getLogger().info("Hi, This is root.")
-    logging.getLogger().info(
-        "After the configurations are successfully processed and dirs are created."
-    )
-    logging.getLogger().info("The pipeline of the project will begin now.")
-    logging.getLogger().info(" THE Configuration of your experiment ..")
-    logging.getLogger().info(str(config))
+    if not quiet:
+        logging.getLogger().info("Hi, This is root.")
+        logging.getLogger().info(
+            "After the configurations are successfully processed and dirs are created."
+        )
+        logging.getLogger().info("The pipeline of the project will begin now.")
+        logging.getLogger().info(" THE Configuration of your experiment ..")
+        logging.getLogger().info(str(config))
 
     return config
