@@ -5,6 +5,16 @@ from torch.nn import Softmax2d
 import torch
 from os.path import basename
 
+coloring = {
+    "esawc.hdf5": cm.tab10.colors[0],
+    "esgp.hdf5": cm.tab10.colors[1],
+    "ecosg.hdf5": cm.tab10.colors[2],
+    "clc.hdf5": cm.tab10.colors[3],
+    "oso.hdf5": cm.tab10.colors[4],
+    "mos.hdf5": cm.tab10.colors[5],
+    "cgls.hdf5": cm.tab10.colors[6],
+}
+
 
 class plt_loss(object):
     def __call__(
@@ -38,7 +48,9 @@ class plt_loss2(object):
         for k, v in train_loss.items():
             try:
                 v = np.array(v)
-                # plt.plot(v[:,0],v[:,1], label="training "+k)
+                plt.plot(
+                    v[:, 0], v[:, 1], "--", color=coloring[k], label="training " + k
+                )
 
                 # xnew = np.linspace(int(np.min(v[:,0])), int(np.max(v[:,0])), int(np.max(v[:,0])-np.min(v[:,0])*10) )
                 # spl = make_interp_spline(v[:,0], v[:,1], k=3)  # type: BSpline
@@ -46,15 +58,16 @@ class plt_loss2(object):
                 # plt.plot(v[30:-30,0], power_smooth[30:-30], label="Interpolated training " + k)
                 # plt.plot(v[:, 0], v[:, 1], label="training_ " + k)
             except:
-                pass
+                print(f"Error plotting loss for {k}. Values are {v}")
         for k, v in valid_loss.items():
             v = np.array(v)
-            plt.plot(v[:, 0], v[:, 1], label="validation " + k)
+            plt.plot(v[:, 0], v[:, 1], color=coloring[k], label="validation " + k)
 
         plt.legend(bbox_to_anchor=(1.0, 0.5), loc="center left", borderaxespad=0.5)
         plt.tight_layout(rect=[0, 0, 1, 1])
-        plt.xlabel("epoch")
-        plt.ylabel("loss")
+        plt.grid()
+        plt.xlabel("Iteration")
+        plt.ylabel("Loss")
         if savefig:
             f.savefig(savefig, bbox_inches="tight")
         if display:
