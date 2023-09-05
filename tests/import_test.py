@@ -45,6 +45,9 @@ import mmt.graphs
 import mmt.graphs.models
 import mmt.graphs.models.custom_layers
 
+from mmt.datasets import landcover_to_landcover
+landcover_to_landcover.LandcoverToLandcoverDataLoader
+
 from mmt.agents import base
 base.BaseAgent
 from mmt.agents import multiLULC
