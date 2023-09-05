@@ -6,13 +6,13 @@ import torch
 from os.path import basename
 
 coloring = {
-    "esawc.hdf5": cm.tab10.colors[0],
-    "esgp.hdf5": cm.tab10.colors[1],
-    "ecosg.hdf5": cm.tab10.colors[2],
-    "clc.hdf5": cm.tab10.colors[3],
-    "oso.hdf5": cm.tab10.colors[4],
-    "mos.hdf5": cm.tab10.colors[5],
-    "cgls.hdf5": cm.tab10.colors[6],
+    "esawc.hdf5": cm.Set1.colors[0],
+    "esgp.hdf5": cm.Set1.colors[1],
+    "ecosg.hdf5": cm.Set1.colors[2],
+    "clc.hdf5": cm.Set1.colors[3],
+    "oso.hdf5": cm.Set1.colors[4],
+    "mos.hdf5": cm.Set1.colors[5],
+    "cgls.hdf5": cm.Set1.colors[6],
 }
 
 
