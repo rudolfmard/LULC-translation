@@ -9,6 +9,7 @@ import json
 from easydict import EasyDict
 from pprint import pprint
 
+from mmt import _repopath_ as mmt_repopath
 from mmt.utils import dirs
 
 
@@ -54,6 +55,8 @@ def get_config_from_json(json_file):
             config_dict = json.load(config_file)
             # EasyDict allows to access dict values as attributes (works recursively).
             config = EasyDict(config_dict)
+            if not config.data_folder.startswith("/"):
+                config.data_folder = os.path.join(mmt_repopath, config.data_folder)
             return config, config_dict
         except ValueError:
             print("INVALID JSON file format.. Please provide a good json file")

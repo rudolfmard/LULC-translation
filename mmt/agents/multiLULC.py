@@ -13,6 +13,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from mmt.agents import base
 from mmt.graphs.models import universal_embedding
+from mmt.graphs.models import transformer_embedding
 from mmt.datasets import landcover_to_landcover
 from mmt.utils import misc
 from mmt.utils import plt_utils
@@ -20,8 +21,8 @@ from mmt.utils import tensorboardx_utils
 
 timeit = misc.timeit
 plt_loss = plt_utils.plt_loss2
-EncDec = universal_embedding.UnivEmb
-
+# EncDec = universal_embedding.UnivEmb
+EncDec = transformer_embedding.TransformerEmbedding
 
 class MultiLULCAgent(base.BaseAgent):
     def __init__(self, config):
@@ -336,6 +337,7 @@ class MultiLULCAgent(base.BaseAgent):
                             source_patch, full=True, res=pos_enc
                         )
                     else:
+                        # print(f"source_patch.shape={source_patch.shape}")
                         embedding, rec = self.models[i_source](source_patch, full=True)
 
                     # loss = nn.CrossEntropyLoss(ignore_index=0)(
@@ -386,7 +388,8 @@ class MultiLULCAgent(base.BaseAgent):
                 if end:
                     break
                 batch_idx += 1
-            plot_loss[source].append([self.current_iteration, loss.item()])
+                
+                plot_loss[source].append([self.current_iteration, loss.item()])
 
             self.current_iteration += 1
         self.save_checkpoint()
