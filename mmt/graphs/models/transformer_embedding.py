@@ -167,9 +167,9 @@ class AttentionDecoder(nn.Module):
         self.attn3 = CrossChannelAttention(out_channels, out_channels)
         
     def forward(self, x):
-        # x = self.attn1(x)
+        x = self.attn1(x)
         x = self.attn2(x)
-        # x = self.attn3(x)
+        x = self.attn3(x)
         return x
     
 class SimpleDecoder(nn.Module):
@@ -205,13 +205,17 @@ class SimpleDecoder(nn.Module):
                 self.decoder.add_module("pool", nn.MaxPool2d(resize))
         for i in range(1, depth):
             self.decoder.add_module(
-                "conv_{}".format(i),
+                f"conv_{i}",
                 nn.Conv2d(inc, nf, kernel_size=3, padding=1, bias=bias),
             )
             self.decoder.add_module(
-                "groupnorm_{}".format(i), nn.GroupNorm(num_groups, nf)
+                f"groupnorm_{i}", nn.GroupNorm(num_groups, nf)
             )
-            self.decoder.add_module("relu_{}".format(i), nn.ReLU(inplace=True))
+            self.decoder.add_module(f"relu_{i}", nn.ReLU(inplace=True))
+            self.decoder.add_module(
+                f"attn_{i}",
+                CrossChannelAttention(nf)
+            )
             inc = nf
         self.decoder.add_module("conv_{}".format(depth), nn.Conv2d(inc, n_classes, 1))
 
@@ -485,7 +489,7 @@ class TransformerEmbedding(nn.Module):
         resize=None,
         pooling_factors=[3, 3, 3, 3, 3],
         encoder=AttentionUNet,
-        decoder=AttentionDecoder,
+        decoder=SimpleDecoder,
         decoder_atrou=True,
         tlm_p=0,
         bias=False,
