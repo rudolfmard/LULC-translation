@@ -21,8 +21,6 @@ from mmt.utils import tensorboardx_utils
 
 timeit = misc.timeit
 plt_loss = plt_utils.plt_loss2
-# EncDec = universal_embedding.UnivEmb
-EncDec = transformer_embedding.TransformerEmbedding
 
 class MultiLULCAgent(base.BaseAgent):
     def __init__(self, config):
@@ -65,6 +63,14 @@ class MultiLULCAgent(base.BaseAgent):
             self.data_loader.real_patch_sizes
         )
         resizes = np.where(resizes == 1, None, resizes)
+        
+        if config.model_type == "transformer_embedding":
+            EncDec = transformer_embedding.TransformerEmbedding
+        elif config.model_type == "universal_embedding":
+            EncDec = universal_embedding.UnivEmb
+        else:
+            raise ValueError(f"Unknown model_type = {config.model_type}. Please change config to one among ['transformer_embedding', 'universal_embedding']")
+        
         # define models
         self.models = [
             EncDec(
@@ -88,7 +94,6 @@ class MultiLULCAgent(base.BaseAgent):
                 input_channels, output_channels, resizes
             )
         ]
-
         self.coord_model = nn.Sequential(
             nn.Linear(128, 300),
             nn.ReLU(inplace=True),
@@ -315,20 +320,27 @@ class MultiLULCAgent(base.BaseAgent):
                 for target, dl in targetval.items():
                     # self.logger.info(f"Target: {target} dataloader {dl} ({len(dl)} batches)")
                     i_target = self.config.datasets.index(target)
+                    
+                    ### Load data
                     try:
                         data = next(dl)
                         dlcount[dl] += 1
                     except:
                         end = True
                         break
+                    
                     pos_enc = data.get("coordenc").to(self.device)
                     source_patch = data.get("source_one_hot")
                     target_patch = data.get("target_one_hot")
                     sv = data.get("source_data")[:, 0]
                     tv = data.get("target_data")[:, 0]
+                    
+                    
                     self.optimizers[i_source].zero_grad(set_to_none=True)
                     self.coord_optimizer.zero_grad(set_to_none=True)
                     self.optimizers[i_target].zero_grad(set_to_none=True)
+                    
+                    ### Forward pass
                     if self.config.use_pos:
                         pos_enc = (
                             self.coord_model(pos_enc.float()).unsqueeze(2).unsqueeze(3)
@@ -337,12 +349,9 @@ class MultiLULCAgent(base.BaseAgent):
                             source_patch, full=True, res=pos_enc
                         )
                     else:
-                        # print(f"source_patch.shape={source_patch.shape}")
                         embedding, rec = self.models[i_source](source_patch, full=True)
-
-                    # loss = nn.CrossEntropyLoss(ignore_index=0)(
-                        # rec, sv
-                    # )  # self reconstruction loss
+                    
+                    ### Loss computation
                     loss_rec = nn.CrossEntropyLoss(ignore_index=0)(
                         rec, sv
                     )  # self reconstruction loss
@@ -358,20 +367,16 @@ class MultiLULCAgent(base.BaseAgent):
                     loss_emb = torch.nn.MSELoss()(
                         embedding, embedding2
                     )  # similar embedding loss
-                    # loss += nn.CrossEntropyLoss(ignore_index=0)(rec,tv) # self reconstruction loss
-                    # loss += torch.nn.MSELoss()(embedding, embedding2 ) # similar embedding loss
 
                     _, rec = self.models[i_target](embedding)
                     loss_tra = nn.CrossEntropyLoss(ignore_index=0)(
                         rec, tv
                     )  # translation loss
-                    # loss += nn.CrossEntropyLoss(ignore_index=0)(rec,tv) # translation loss
 
                     _, rec = self.models[i_source](embedding2)
                     loss_tra += nn.CrossEntropyLoss(ignore_index=0)(
                         rec, sv
                     )  # translation loss
-                    # loss += nn.CrossEntropyLoss(ignore_index=0)(rec, sv) # translation loss
 
                     loss = loss_rec + loss_emb + loss_tra
 
@@ -380,7 +385,8 @@ class MultiLULCAgent(base.BaseAgent):
                         self.logger.info(
                             f"[ep {self.current_epoch}, i={self.current_iteration}][batch {dlcount[dl]}/{len(dl)}] train\t {source} -> {target} \t Losses: rec={loss_rec.item()}, emb={loss_emb.item()}, tra={loss_tra.item()}"
                         )
-
+                    
+                    ### Backward propagation
                     loss.backward()
                     self.optimizers[i_source].step()
                     self.optimizers[i_target].step()
