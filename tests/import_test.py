@@ -44,6 +44,7 @@ import mmt.utils
 import mmt.graphs
 import mmt.graphs.models
 import mmt.graphs.models.custom_layers
+from mmt import _repopath_ as mmt_repopath
 
 from mmt.datasets import landcover_to_landcover
 landcover_to_landcover.LandcoverToLandcoverDataLoader
@@ -61,6 +62,8 @@ up_block.Up
 
 from mmt.utils import plt_utils
 plt_utils.plt_loss2
+from mmt.utils import config as utilconf
+utilconf.get_config_from_json
 
 print("All imports passed successfully")
 print(f"Package {mmt.__name__}-{mmt.__version__} from {mmt._repopath_}")

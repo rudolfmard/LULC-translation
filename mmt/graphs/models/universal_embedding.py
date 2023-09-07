@@ -14,7 +14,6 @@ DoubleConv = double_conv.DoubleConv
 class AtrouMMU(nn.Module):
     def __init__(self, inf, scale_factor=10, bias=False):
         super(AtrouMMU, self).__init__()
-        print(inf, scale_factor)
         self.conv1 = nn.Sequential(
             nn.Conv2d(
                 inf, inf, kernel_size=3, padding=1, stride=scale_factor, bias=bias
@@ -365,6 +364,19 @@ class DUNet(nn.Module):
 
     def forward(self, x):
         return self.forward_method(x)
+    
+    def check_shapes(self, x = None):
+        """Display shapes of some tensors"""
+        if x is None:
+            x = torch.rand(10, 3, 60, 120)
+            print(f"Random input: x = {x.shape}")
+        else:
+            print(f"Given input: x = {x.shape}")
+        
+        states = self.encoder_part(x)
+        for i, xx in enumerate(states):
+            print(f"x{i} = {xx.shape}")
+        
 
 
 class UnivEmb(nn.Module):

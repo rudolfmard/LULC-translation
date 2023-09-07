@@ -15,6 +15,7 @@ import os
 import sys
 import torch
 from torch import nn
+from torchinfo import summary
 from torchgeo.datasets.utils import BoundingBox
 import numpy as np
 import rasterio.crs
@@ -169,7 +170,18 @@ y = logits.detach().argmax(1)
 
 # Show results
 #-----------
-
+inner_shape = [min(s1,s2) for (s1,s2) in zip(y.shape[1:], y_true["mask"].shape[1:])]
+ccrop = transforms.t.CenterCrop(size=inner_shape)
+acc = (ccrop(y) == ccrop(y_true["mask"])).sum()/ccrop(y).numel()
+print(f"Overall accuracy over this patch: {acc}")
 out_lc.plot({"mask":y})
 plt.show(block=False)
 
+# Export
+#-----------
+model = nn.Sequential(
+    esawc_autoencoder.encoder,
+    esgp_autoencoder.decoder
+)
+summary(model, x.shape)
+# torch.onnx.export(model, "esawc2esgp_test.onnx", verbose=True)

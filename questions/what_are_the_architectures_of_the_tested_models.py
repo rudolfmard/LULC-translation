@@ -41,7 +41,8 @@ mlulcconfig, _ = utilconf.get_config_from_json(
         "universal_embedding.json",
     )
 )
-n_labels = 12
+n_labels = 43
+resize = None
 
 baseline_model = universal_embedding.UnivEmb(
     in_channels = n_labels + 1,
@@ -54,7 +55,7 @@ baseline_model = universal_embedding.UnivEmb(
     num_groups = mlulcconfig.group_norm,
     decoder_depth = mlulcconfig.decoder_depth,
     mode = mlulcconfig.mode,
-    resize = 6,
+    resize = resize,
     cat=False,
     pooling_factors = mlulcconfig.pooling_factors,
     decoder_atrou = mlulcconfig.decoder_atrou,
@@ -74,7 +75,7 @@ candidate_model = transformer_embedding.TransformerEmbedding(
     num_groups = mlulcconfig.group_norm,
     decoder_depth = mlulcconfig.decoder_depth,
     mode = mlulcconfig.mode,
-    resize = 6,
+    resize = resize,
     cat=False,
     pooling_factors = mlulcconfig.pooling_factors,
     decoder_atrou = mlulcconfig.decoder_atrou,
@@ -84,15 +85,14 @@ candidate_model = torch.nn.Sequential(
     candidate_model.decoder,
 )
 
-x = torch.rand(mlulcconfig.train_batch_size, n_labels + 1, 100, 100)
+x = torch.rand(15, n_labels + 1, 600, 600)
 
 print("     Architecture of the BASELINE model")
 baseline_summary = summary(baseline_model, x.shape)
-print(baseline_summary)
 
 print("\n     Architecture of the CANDIDATE model")
 candidate_summary = summary(candidate_model, x.shape)
-print(candidate_summary)
+
 print(" ")
 print(f"The BASELINE model has {baseline_summary.trainable_params} trainable parameters and needs {baseline_summary.total_output_bytes/10**9} GB to run")
 print(f"The CANDIDATE model has {candidate_summary.trainable_params} trainable parameters and needs {candidate_summary.total_output_bytes/10**9} GB to run")
