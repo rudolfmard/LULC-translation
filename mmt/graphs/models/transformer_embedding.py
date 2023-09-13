@@ -156,6 +156,52 @@ class CrossResolutionAttention(nn.Module):
         print(f"attention = {attention.shape}")
 
 
+class InterpConv(nn.Module):
+    def __init__(self, in_channels, out_channels, resize, kernel_size = 1, mode="bilinear"):
+        super().__init__()
+        if resize is None:
+            resize = 1
+        
+        self.scale_factor = kernel_size * resize
+        self.mode = mode
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size = kernel_size, stride = kernel_size)
+
+    def forward(self, x):
+        x = torch.nn.functional.interpolate(
+            x, scale_factor=self.scale_factor, mode=self.mode
+        )
+        x = self.conv(x)
+        return x
+
+
+class AttnInterpAttn(nn.Module):
+    def __init__(self, in_channels, out_channels, resize = 1):
+        super().__init__()
+        print(f"Init {self.__class__.__name__} with in_channels={in_channels}, out_channels={out_channels}, resize = {resize}")
+        
+        self.attn1 = CrossChannelAttention(in_channels)
+        self.interp = InterpConv(in_channels, out_channels, resize = resize)
+        self.attn2 = CrossChannelAttention(out_channels)
+        
+    def forward(self, x):
+        x = self.attn1(x)
+        x = self.interp(x)
+        x = self.attn2(x)
+        return x
+
+class AutoEncoder2(nn.Module):
+    def __init__(self, in_channels, out_channels, emb_channels = 50, resize = 1):
+        super().__init__()
+        if resize is None:
+            resize = 1
+        
+        self.encoder = AttnInterpAttn(in_channels, emb_channels, resize = 1/resize)
+        self.decoder = AttnInterpAttn(emb_channels, out_channels, resize = resize)
+        
+    def forward(self, x):
+        emb = self.encoder(x)
+        return emb, self.decoder(emb)
+
 class AttentionEncoder(nn.Module):
     def __init__(self, in_channels, out_channels, resize = 1):
         super().__init__()
@@ -607,6 +653,12 @@ class TransformerEmbedding(nn.Module):
             # atrou=decoder_atrou,
             # bias=bias,
         # )
+        
+        if resize is None:
+            resize = 1
+        self.encoder = AttnInterpAttn(in_channels, embedding_dim, resize = 1/resize)
+        self.decoder = AttnInterpAttn(embedding_dim, n_classes, resize = resize)
+        
         self.forward_method = self.classical_forward
         if memory_monger:
             self.dummy_tensor = torch.ones(1, dtype=torch.float32, requires_grad=True)
