@@ -8,6 +8,7 @@ Module with elements to build attention-augmented Unet-like auto-encoders
 import numpy as np
 import torch
 from torch import nn
+from torchvision.transforms import Resize
 
 def prime_factorization(n):
     """Return the prime factorization of `n`.
@@ -40,6 +41,7 @@ def prime_factorization(n):
             prime_factors[n] += 1
         except KeyError:
             prime_factors[n] = 1
+        
     return prime_factors
 
 
@@ -186,6 +188,43 @@ class AttentionUNet(nn.Module):
         logits = self.outc(x)
         return logits
 
+class AttentionUNet2(nn.Module):
+    """UNet with attention layer and skip connections
+    """
+    def __init__(self, in_channels, out_channels, h_channels = [32]*3, resizes = [1]*3):
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.h_channels = h_channels
+        self.resizes = resizes
+
+        self.inc = nn.Conv2d(in_channels, h_channels[0], kernel_size=1)
+        self.down1 = DownConv(h_channels[0], h_channels[1], resize = resizes[0])
+        self.down2 = DownConv(h_channels[1], h_channels[2], resize = resizes[1])
+        self.attn = CrossResolutionAttention(h_channels[-1], h_channels[-1], resize = resizes[-1])
+        self.up1 = UpConv(2 * h_channels[2], h_channels[1], resize = resizes[1])
+        self.up2 = UpConv(2 * h_channels[1], h_channels[0], resize = resizes[0])
+        self.outc = nn.Conv2d(h_channels[0], out_channels, kernel_size=1)
+    
+    def forward(self, x):
+        x = self.inc(x)
+        print(f"x:{x.shape}")
+        x1 = self.down1(x)
+        print(f"x1:{x1.shape}")
+        x2 = self.down2(x1)
+        print(f"x2:{x2.shape}")
+        x = self.attn(x2)
+        print(f"attn x:{x.shape}")
+        rsz = Resize(x.shape[2:], antialias = True)
+        x = self.up1(torch.cat([x, rsz(x2)], dim=1))
+        print(f"up1 x:{x.shape}")
+        rsz = Resize(x.shape[2:], antialias = True)
+        x = self.up2(torch.cat([x, rsz(x1)], dim=1))
+        print(f"up2 x:{x.shape}")
+        logits = self.outc(x)
+        return logits
+
+
 class AttentionAutoEncoder(nn.Module):
     """Auto-encoder using AttentionUNet for both encoder and decoder
     """
@@ -208,6 +247,8 @@ class AttentionAutoEncoder(nn.Module):
             for _ in range(pfactors[p]):
                 ae_resizes.append(p)
         
+        ae_resizes.sort()
+        ae_resizes.reverse()
         self.encoder = AttentionUNet(
             in_channels = in_channels,
             out_channels = emb_channels,
