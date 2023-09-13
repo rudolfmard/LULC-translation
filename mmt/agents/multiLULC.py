@@ -14,6 +14,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from mmt.agents import base
 from mmt.graphs.models import universal_embedding
 from mmt.graphs.models import transformer_embedding
+from mmt.graphs.models import attention_autoencoder
 from mmt.datasets import landcover_to_landcover
 from mmt.utils import misc
 from mmt.utils import plt_utils
@@ -64,36 +65,73 @@ class MultiLULCAgent(base.BaseAgent):
         )
         resizes = np.where(resizes == 1, None, resizes)
         
+        # define models
         if config.model_type == "transformer_embedding":
             EncDec = transformer_embedding.TransformerEmbedding
+            self.models = [
+                EncDec(
+                    input_channel,
+                    output_channel,
+                    mul=self.config.mul,
+                    softpos=self.config.softpos,
+                    number_feature_map=self.config.number_of_feature_map,
+                    embedding_dim=self.config.embedding_dim[0],
+                    memory_monger=self.config.memory_monger,
+                    up_mode=self.config.up_mode,
+                    num_groups=self.config.group_norm,
+                    decoder_depth=config.decoder_depth,
+                    mode=config.mode,
+                    resize=resize,
+                    cat=False,
+                    pooling_factors=config.pooling_factors,
+                    decoder_atrou=self.config.decoder_atrou,
+                )
+                for input_channel, output_channel, resize in zip(
+                    input_channels, output_channels, resizes
+                )
+            ]
         elif config.model_type == "universal_embedding":
             EncDec = universal_embedding.UnivEmb
+            self.models = [
+                EncDec(
+                    input_channel,
+                    output_channel,
+                    mul=self.config.mul,
+                    softpos=self.config.softpos,
+                    number_feature_map=self.config.number_of_feature_map,
+                    embedding_dim=self.config.embedding_dim[0],
+                    memory_monger=self.config.memory_monger,
+                    up_mode=self.config.up_mode,
+                    num_groups=self.config.group_norm,
+                    decoder_depth=config.decoder_depth,
+                    mode=config.mode,
+                    resize=resize,
+                    cat=False,
+                    pooling_factors=config.pooling_factors,
+                    decoder_atrou=self.config.decoder_atrou,
+                )
+                for input_channel, output_channel, resize in zip(
+                    input_channels, output_channels, resizes
+                )
+            ]
+        elif config.model_type == "attention_autoencoder":
+            EncDec = attention_autoencoder.AttentionAutoEncoder
+            self.models = [
+                EncDec(
+                    input_channel,
+                    output_channel,
+                    h_channels = self.config.number_of_feature_map,
+                    emb_channels = self.config.embedding_dim[0],
+                    emb_size_ratio = int(self.config.embedding_dim[1]/10),
+                    resize = resize,
+                )
+                for input_channel, output_channel, resize in zip(
+                    input_channels, output_channels, resizes
+                )
+            ]
         else:
-            raise ValueError(f"Unknown model_type = {config.model_type}. Please change config to one among ['transformer_embedding', 'universal_embedding']")
+            raise ValueError(f"Unknown model_type = {config.model_type}. Please change config to one among ['transformer_embedding', 'universal_embedding', 'attention_autoencoder']")
         
-        # define models
-        self.models = [
-            EncDec(
-                input_channel,
-                output_channel,
-                mul=self.config.mul,
-                softpos=self.config.softpos,
-                number_feature_map=self.config.number_of_feature_map,
-                embedding_dim=self.config.embedding_dim[0],
-                memory_monger=self.config.memory_monger,
-                up_mode=self.config.up_mode,
-                num_groups=self.config.group_norm,
-                decoder_depth=config.decoder_depth,
-                mode=config.mode,
-                resize=resize,
-                cat=False,
-                pooling_factors=config.pooling_factors,
-                decoder_atrou=self.config.decoder_atrou,
-            )
-            for input_channel, output_channel, resize in zip(
-                input_channels, output_channels, resizes
-            )
-        ]
         self.coord_model = nn.Sequential(
             nn.Linear(128, 300),
             nn.ReLU(inplace=True),
@@ -367,19 +405,29 @@ class MultiLULCAgent(base.BaseAgent):
                     loss_emb = torch.nn.MSELoss()(
                         embedding, embedding2
                     )  # similar embedding loss
-
-                    _, rec = self.models[i_target](embedding)
+                    
+                    if self.config.model_type == "attention_autoencoder":
+                        rec = self.models[i_target].decoder(embedding)
+                    else:
+                        _, rec = self.models[i_target](embedding)
+                        
                     loss_tra = nn.CrossEntropyLoss(ignore_index=0)(
                         rec, tv
                     )  # translation loss
 
-                    _, rec = self.models[i_source](embedding2)
+                    if self.config.model_type == "attention_autoencoder":
+                        rec = self.models[i_source].decoder(embedding2)
+                    else:
+                        _, rec = self.models[i_source](embedding2)
+                        
                     loss_tra += nn.CrossEntropyLoss(ignore_index=0)(
                         rec, sv
                     )  # translation loss
 
                     loss = loss_rec + loss_emb + loss_tra
-
+                    
+                    # self.logger.info(f"loss {loss.item()}, CUDA memory reserved: {torch.cuda.memory_reserved()/10**9} GB")
+                    
                     # if dlcount[dl] % max(int(len(dl)/20), 1) == 0:
                     if dlcount[dl] % 10 == 0:
                         self.logger.info(
@@ -447,13 +495,16 @@ class MultiLULCAgent(base.BaseAgent):
                             embedding, rec = self.models[i_source](
                                 source_patch.float(), full=True
                             )
-
-                        _, trad = self.models[i_target](embedding)
-
+                            
+                        if self.config.model_type == "attention_autoencoder":
+                            trad = self.models[i_target].decoder(embedding)
+                        else:
+                            _, trad = self.models[i_target](embedding)
+                        
                         loss = nn.CrossEntropyLoss(ignore_index=0)(
                             trad, torch.argmax(target_patch, 1)
                         )
-
+                        
                         if im_save[source][target] == 0:
                             out_img = self.data_loader.plot_samples_per_epoch(
                                 source_patch,
@@ -482,7 +533,7 @@ class MultiLULCAgent(base.BaseAgent):
                             )
                             im_save[source][source] = 1
                         plot_loss[target].append(loss.item())
-
+                        
                 if end:
                     break
         return plot_loss
@@ -533,8 +584,11 @@ class MultiLULCAgent(base.BaseAgent):
                             embedding, _ = self.models[i_source](
                                 source_patch.float(), full=True
                             )
-
-                        _, trad = self.models[i_target](embedding)
+                        
+                        if self.config.model_type == "attention_autoencoder":
+                            trad = self.models[i_target].decoder(embedding)
+                        else:
+                            _, trad = self.models[i_target](embedding)
 
                         y_pred = torch.argmax(trad, dim=1)
 
