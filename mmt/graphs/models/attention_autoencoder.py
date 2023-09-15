@@ -236,6 +236,50 @@ class AttentionUNetSC(nn.Module):
         logits = self.outc(x)
         return logits
 
+class ShortUNet(nn.Module):
+    """Short UNet with resizing at the bottleneck.
+    
+    Will reduce the size of the image by the factor `resize`
+    If resize < 1, the image size is inflated by the factor int(1.0/resize)
+    """
+    def __init__(self, in_channels, out_channels, h_channels = [32]*3, resizes = [1]*3):
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.h_channels = h_channels
+        self.resizes = resizes
+
+        self.inc = nn.Conv2d(in_channels, h_channels[0], kernel_size=1)
+        self.down1 = DownConv(h_channels[0], h_channels[1], resize = resizes[0])
+        self.down2 = DownConv(h_channels[1], h_channels[2], resize = resizes[1])
+        
+        if resizes[-1] < 1:
+            resize = int(1.0/resizes[-1])
+            self.resizeconv = UpConv(h_channels[-1], h_channels[-1], resize = resize)
+        else:
+            resize = int(resizes[-1])
+            self.resizeconv = DownConv(h_channels[-1], h_channels[-1], resize = resize)
+        
+        self.up1 = UpConv(2 * h_channels[2], h_channels[1], resize = resizes[1])
+        self.up2 = UpConv(2 * h_channels[1], h_channels[0], resize = resizes[0])
+        self.outc = nn.Conv2d(h_channels[0], out_channels, kernel_size=1)
+    
+    def forward(self, x):
+        x = self.inc(x)
+        x1 = self.down1(x)
+        x2 = self.down2(x1)
+        x = self.resizeconv(x2)
+        rsz = Resize(
+            x.shape[2:], antialias = True,interpolation=InterpolationMode.NEAREST
+        )
+        x = self.up1(torch.cat([x, rsz(x2)], dim=1))
+        rsz = Resize(
+            x.shape[2:], antialias = True,interpolation=InterpolationMode.NEAREST
+        )
+        x = self.up2(torch.cat([x, rsz(x1)], dim=1))
+        logits = self.outc(x)
+        return logits
+
 
 class AttentionAutoEncoder(nn.Module):
     """Auto-encoder using AttentionUNet for both encoder and decoder
@@ -322,3 +366,45 @@ class AttentionAutoEncoderSC(nn.Module):
         emb = self.encoder(x)
         return emb, self.decoder(emb)
 
+class ShortUNetAutoEncoder(nn.Module):
+    """Auto-encoder using ShortUNet for both encoder and decoder
+    """
+    def __init__(self, in_channels, out_channels, emb_channels = 50, h_channels = 32, emb_size_ratio = 60, resize = 1):
+        super().__init__()
+        if resize is None:
+            resize = 1
+        
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.emb_channels = emb_channels
+        self.emb_size_ratio = emb_size_ratio
+        self.h_channels = h_channels
+        self.resize = resize
+        
+        bottleneck_resize = int(emb_size_ratio/resize)
+        pfactors = prime_factorization(bottleneck_resize)
+        ae_resizes = []
+        for p in pfactors.keys():
+            for _ in range(pfactors[p]):
+                ae_resizes.append(p)
+        
+        ae_resizes.sort()
+        ae_resizes.reverse()
+        ae_resizes = ae_resizes + [1]*(3-len(ae_resizes))
+        self.encoder = ShortUNet(
+            in_channels = in_channels,
+            out_channels = emb_channels,
+            h_channels = [h_channels]*3,
+            resizes = [ae_resizes[0], ae_resizes[1], 1/resize],
+        )
+        self.decoder = ShortUNet(
+            in_channels = emb_channels,
+            out_channels = out_channels,
+            h_channels = [h_channels]*3,
+            resizes = [ae_resizes[0], ae_resizes[1], resize],
+        )
+        
+    def forward(self, x, full=True, res=None):
+        """Args `full` and `res` not used. Added for API compatibility"""
+        emb = self.encoder(x)
+        return emb, self.decoder(emb)
