@@ -3,6 +3,32 @@ import numpy as np
 import torchvision.transforms.functional as TF
 import random
 
+class OneHot:
+    def __init__(self, nclasses = -1, device = "cpu", dtype=torch.float, key="mask"):
+        self.nclasses = nclasses
+        self.dtype = dtype
+        self.key = key
+        self.device = device
+    
+    def __call__(self, sample):
+        if isinstance(sample, dict):
+            if sample[self.key].ndim == 3:
+                perm_idx = (0,3,1,2)
+            else:
+                perm_idx = (2,0,1)
+                
+            sample[self.key] = torch.nn.functional.one_hot(sample[self.key], num_classes = self.nclasses)
+            sample[self.key] = sample[self.key].permute(*perm_idx).contiguous().to(dtype = self.dtype, device = self.device)
+        else:
+            if sample.ndim == 3:
+                perm_idx = (0,3,1,2)
+            else:
+                perm_idx = (2,0,1)
+            
+            sample = torch.nn.functional.one_hot(sample, num_classes = self.nclasses)
+            sample = sample.permute(*perm_idx).contiguous().to(dtype = self.dtype, device = self.device)
+        
+        return sample
 
 class ToOneHot(object):
     """Convert ndarrays in sample to Tensors."""
