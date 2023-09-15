@@ -67,7 +67,12 @@ class MultiLULCAgent(base.BaseAgent):
         
         # define models
         if config.model_type == "transformer_embedding":
-            EncDec = transformer_embedding.TransformerEmbedding
+            try:
+                EncDec = getattr(transformer_embedding, config.model_name)
+            except AttributeError:
+                self.logger.info("Config doesn't have a model_name attribute. Loaded transformer_embedding.TransformerEmbedding")
+                EncDec = transformer_embedding.TransformerEmbedding
+            
             self.models = [
                 EncDec(
                     input_channel,
@@ -91,6 +96,12 @@ class MultiLULCAgent(base.BaseAgent):
                 )
             ]
         elif config.model_type == "universal_embedding":
+            try:
+                EncDec = getattr(universal_embedding, config.model_name)
+            except AttributeError:
+                self.logger.info("Config doesn't have a model_name attribute. Loaded universal_embedding.UnivEmb")
+                EncDec = universal_embedding.UnivEmb
+            
             EncDec = universal_embedding.UnivEmb
             self.models = [
                 EncDec(
@@ -115,7 +126,12 @@ class MultiLULCAgent(base.BaseAgent):
                 )
             ]
         elif config.model_type == "attention_autoencoder":
-            EncDec = attention_autoencoder.AttentionAutoEncoder
+            try:
+                EncDec = getattr(attention_autoencoder, config.model_name)
+            except AttributeError:
+                self.logger.info("Config doesn't have a model_name attribute. Loaded universal_embedding.AttentionAutoEncoderSC")
+                EncDec = attention_autoencoder.AttentionAutoEncoderSC
+                
             self.models = [
                 EncDec(
                     input_channel,
