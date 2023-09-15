@@ -7,8 +7,10 @@ Module with elements to build attention-augmented Unet-like auto-encoders
 
 import numpy as np
 import torch
+import math
 from torch import nn
 from torchvision.transforms import Resize
+from torchvision.transforms.functional import InterpolationMode
 
 def prime_factorization(n):
     """Return the prime factorization of `n`.
@@ -43,7 +45,6 @@ def prime_factorization(n):
             prime_factors[n] = 1
         
     return prime_factors
-
 
 
 class UpConv(nn.Module):
@@ -131,12 +132,25 @@ class CrossResolutionAttention(nn.Module):
             self.key_conv = nn.Conv2d(in_channels, qk_channels, kernel_size=resize, stride = resize)
             self.value_conv = nn.Conv2d(in_channels, out_channels, kernel_size=resize, stride = resize)
     
+    def scaled_dot_product_attention(self, Q, K, V):
+        """Equivalent to the implementation of `torch.nn.functional.scaled_dot_product_attention`
+        See: https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html
+        
+        Solve ONNX export issue "Exporting the operator 'aten::scaled_dot_product_attention' to ONNX opset version 14 is not supported"
+        See: https://github.com/pytorch/pytorch/issues/97262
+        
+        Last checked: 14 Sept. 2023
+        """
+        attn_weight = torch.softmax((Q @ K.transpose(-2, -1) / math.sqrt(Q.size(-1))), dim=-1)
+        return attn_weight @ V
+        
     def forward(self, x):
         q = self.query_conv(x).permute(0,3,2,1).contiguous()
         k = self.key_conv(x).permute(0,3,2,1).contiguous()
         v = self.value_conv(x).permute(0,3,2,1).contiguous()
-        attention = nn.functional.scaled_dot_product_attention(q, k, v).permute(0,3,2,1)
-        return attention
+        # attention = nn.functional.scaled_dot_product_attention(q, k, v)
+        attention = self.scaled_dot_product_attention(q, k, v)
+        return attention.permute(0,3,2,1)
     
     def check_shapes(self, x = None):
         """Display shapes of some tensors"""
@@ -188,7 +202,7 @@ class AttentionUNet(nn.Module):
         logits = self.outc(x)
         return logits
 
-class AttentionUNet2(nn.Module):
+class AttentionUNetSC(nn.Module):
     """UNet with attention layer and skip connections
     """
     def __init__(self, in_channels, out_channels, h_channels = [32]*3, resizes = [1]*3):
@@ -208,19 +222,17 @@ class AttentionUNet2(nn.Module):
     
     def forward(self, x):
         x = self.inc(x)
-        print(f"x:{x.shape}")
         x1 = self.down1(x)
-        print(f"x1:{x1.shape}")
         x2 = self.down2(x1)
-        print(f"x2:{x2.shape}")
         x = self.attn(x2)
-        print(f"attn x:{x.shape}")
-        rsz = Resize(x.shape[2:], antialias = True)
+        rsz = Resize(
+            x.shape[2:], antialias = True,interpolation=InterpolationMode.NEAREST
+        )
         x = self.up1(torch.cat([x, rsz(x2)], dim=1))
-        print(f"up1 x:{x.shape}")
-        rsz = Resize(x.shape[2:], antialias = True)
+        rsz = Resize(
+            x.shape[2:], antialias = True,interpolation=InterpolationMode.NEAREST
+        )
         x = self.up2(torch.cat([x, rsz(x1)], dim=1))
-        print(f"up2 x:{x.shape}")
         logits = self.outc(x)
         return logits
 
@@ -260,6 +272,49 @@ class AttentionAutoEncoder(nn.Module):
             out_channels = out_channels,
             h_channels = [h_channels]*(len(ae_resizes) + 1),
             resizes = ae_resizes + [resize],
+        )
+        
+    def forward(self, x, full=True, res=None):
+        """Args `full` and `res` not used. Added for API compatibility"""
+        emb = self.encoder(x)
+        return emb, self.decoder(emb)
+
+class AttentionAutoEncoderSC(nn.Module):
+    """Auto-encoder using AttentionUNetSC for both encoder and decoder
+    """
+    def __init__(self, in_channels, out_channels, emb_channels = 50, h_channels = 32, emb_size_ratio = 60, resize = 1):
+        super().__init__()
+        if resize is None:
+            resize = 1
+        
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.emb_channels = emb_channels
+        self.emb_size_ratio = emb_size_ratio
+        self.h_channels = h_channels
+        self.resize = resize
+        
+        bottleneck_resize = int(emb_size_ratio/resize)
+        pfactors = prime_factorization(bottleneck_resize)
+        ae_resizes = []
+        for p in pfactors.keys():
+            for _ in range(pfactors[p]):
+                ae_resizes.append(p)
+        
+        ae_resizes.sort()
+        ae_resizes.reverse()
+        ae_resizes = ae_resizes + [1]*(3-len(ae_resizes))
+        self.encoder = AttentionUNetSC(
+            in_channels = in_channels,
+            out_channels = emb_channels,
+            h_channels = [h_channels]*3,
+            resizes = [ae_resizes[0], ae_resizes[1], 1/resize],
+        )
+        self.decoder = AttentionUNetSC(
+            in_channels = emb_channels,
+            out_channels = out_channels,
+            h_channels = [h_channels]*3,
+            resizes = [ae_resizes[0], ae_resizes[1], resize],
         )
         
     def forward(self, x, full=True, res=None):
