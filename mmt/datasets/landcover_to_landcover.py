@@ -14,6 +14,9 @@ from matplotlib.colors import LinearSegmentedColormap
 
 from mmt.datasets import transforms
 
+# Length of one patch side in metres
+patch_size_metres = 6000
+
 cmap_dict = {
     "clc.hdf5": [
         (255, 255, 255),
@@ -459,6 +462,17 @@ label_dict = {
         "Mangroves",
         "Moss and lichen",
     ],
+}
+resolution_dict = { # Official geometric accuracy in metres
+    "clc.hdf5": 100,
+    "oso.hdf5": 10,
+    "mos.hdf5": 5,
+    "ocsge_o.hdf5": 5,
+    "ocsge_u.hdf5": 5,
+    "cgls.hdf5": 100,
+    "ecosg.hdf5": 300,
+    "esgp.hdf5": 60,
+    "esawc.hdf5": 10,
 }
 
 
