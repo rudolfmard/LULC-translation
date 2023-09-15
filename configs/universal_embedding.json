@@ -1,5 +1,5 @@
 {
-  "exp_name": "Image_only_sof_noise_mos_1_to_3_nl10",
+  "exp_name": "vanilla_without_memmonger",
   "agent": "MultiLULCAgent",
   "use_scheduler": false,
 
@@ -8,34 +8,36 @@
   "seed": 666,
   "num_workers": 2,
 
-  "train_batch_size": 20,
-  "valid_batch_size": 20,
-  "test_batch_size":20,
+  "train_batch_size": 30,
+  "valid_batch_size": 30,
+  "test_batch_size":30,
 
   "number_of_feature_map":32,
   "embedding_dim":[50,600],
 
-  "max_epoch": 100 ,
+  "max_epoch": 60,
 
   "validate_every": 1,
 
   "checkpoint_file": "checkpoint.pth.tar",
   "loss_by_patch_file": "loss_by_patch_file.json",
 
+  "model_type": "universal_embedding",
+  "model_name": "UnivEmb",
   "data_loader": "Landcover1To1DataLoader",
   "data_loader_workers": 0,
   "pin_memory": true,
   "async_loading": true,
 
   "data_folder": "data/universal_embedding_dataset_6000",
-  "datasets": ["oso.hdf5","mos.hdf5"],
+  "datasets": ["esawc.hdf5", "esgp.hdf5", "ecosg.hdf5", "oso.hdf5", "clc.hdf5", "cgls.hdf5"],
   "learning_rate": [0.0001,0.0001,0.0001,0.0001,0.0001,0.0001],
 
   "tensorboard":false,
 
   "cp_to_tmpdir":true,
 
-  "memory_monger": true,
+  "memory_monger": false,
 
   "up_mode": "bilinear",
 
