@@ -1,8 +1,11 @@
-"""
-Approche par couple mais on maxime tout en me temps !
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Multiple land-cover/land-use Maps Translation (MMT)
+
+Main agent
 """
 import shutil
-from os.path import join
+import os
 import json
 import numpy as np
 from sklearn.metrics import confusion_matrix
@@ -23,147 +26,82 @@ from mmt.utils import tensorboardx_utils
 timeit = misc.timeit
 plt_loss = plt_utils.plt_loss2
 
+default_bestmodel_filename = "model_best.pth.tar"
+default_checkpoint_filename = "checkpoint.pth.tar"
+
 class MultiLULCAgent(base.BaseAgent):
     def __init__(self, config):
         super().__init__(config)
-        # torch.set_default_dtype(torch.half)
 
-        # set cuda flag
-        self.is_cuda = torch.cuda.is_available()
-        if self.is_cuda and not self.config.cuda:
-            self.logger.info(
-                "WARNING: You have a CUDA device, so you should probably enable CUDA"
-            )
-
-        self.cuda = self.is_cuda & self.config.cuda
-
-        # set the manual seed for torch
+        # Set device and RNG seed
+        self.cuda = torch.cuda.is_available() & self.config.cuda
         self.manual_seed = self.config.seed
         if self.cuda:
             torch.cuda.manual_seed(self.manual_seed)
             self.device = torch.device("cuda")
-            torch.cuda.set_device(self.config.gpu_device)
             self.logger.info("Program will run on *****GPU-CUDA***** ")
             misc.print_cuda_statistics()
         else:
             self.device = torch.device("cpu")
             torch.manual_seed(self.manual_seed)
             self.logger.info("Program will run on *****CPU*****\n")
-
-        # define data_loader
-        self.data_loader = landcover_to_landcover.LandcoverToLandcoverDataLoader(
-            config=config, device=self.device, pos_enc=True
+        
+        # Define data_loader
+        DataLoader = getattr(landcover_to_landcover, self.config.dataloader.type)
+        self.data_loader = DataLoader(
+            config=self.config, **self.config.dataloader.params
         )
+        self.datasets = self.config.dataloader.params.datasets  # shortcut
 
         # Get required param for network initialisation
         input_channels = self.data_loader.input_channels
         output_channels = self.data_loader.output_channels
-
-        #
-        resizes = self.config.embedding_dim[1] // np.array(
+        resizes = self.config.dimensions.n_px_embedding // np.array(
             self.data_loader.real_patch_sizes
         )
         resizes = np.where(resizes == 1, None, resizes)
         
-        # define models
-        if config.model_type == "transformer_embedding":
-            try:
-                EncDec = getattr(transformer_embedding, config.model_name)
-            except AttributeError:
-                self.logger.info("Config doesn't have a model_name attribute. Loaded transformer_embedding.TransformerEmbedding")
-                EncDec = transformer_embedding.TransformerEmbedding
-            
-            self.models = [
-                EncDec(
-                    input_channel,
-                    output_channel,
-                    mul=self.config.mul,
-                    softpos=self.config.softpos,
-                    number_feature_map=self.config.number_of_feature_map,
-                    embedding_dim=self.config.embedding_dim[0],
-                    memory_monger=self.config.memory_monger,
-                    up_mode=self.config.up_mode,
-                    num_groups=self.config.group_norm,
-                    decoder_depth=config.decoder_depth,
-                    mode=config.mode,
-                    resize=resize,
-                    cat=False,
-                    pooling_factors=config.pooling_factors,
-                    decoder_atrou=self.config.decoder_atrou,
-                )
-                for input_channel, output_channel, resize in zip(
-                    input_channels, output_channels, resizes
-                )
-            ]
-        elif config.model_type == "universal_embedding":
-            try:
-                EncDec = getattr(universal_embedding, config.model_name)
-            except AttributeError:
-                self.logger.info("Config doesn't have a model_name attribute. Loaded universal_embedding.UnivEmb")
-                EncDec = universal_embedding.UnivEmb
-            
-            EncDec = universal_embedding.UnivEmb
-            self.models = [
-                EncDec(
-                    input_channel,
-                    output_channel,
-                    mul=self.config.mul,
-                    softpos=self.config.softpos,
-                    number_feature_map=self.config.number_of_feature_map,
-                    embedding_dim=self.config.embedding_dim[0],
-                    memory_monger=self.config.memory_monger,
-                    up_mode=self.config.up_mode,
-                    num_groups=self.config.group_norm,
-                    decoder_depth=config.decoder_depth,
-                    mode=config.mode,
-                    resize=resize,
-                    cat=False,
-                    pooling_factors=config.pooling_factors,
-                    decoder_atrou=self.config.decoder_atrou,
-                )
-                for input_channel, output_channel, resize in zip(
-                    input_channels, output_channels, resizes
-                )
-            ]
-        elif config.model_type == "attention_autoencoder":
-            try:
-                EncDec = getattr(attention_autoencoder, config.model_name)
-            except AttributeError:
-                self.logger.info("Config doesn't have a model_name attribute. Loaded universal_embedding.AttentionAutoEncoderSC")
-                EncDec = attention_autoencoder.AttentionAutoEncoderSC
-                
-            self.models = [
-                EncDec(
-                    input_channel,
-                    output_channel,
-                    h_channels = self.config.number_of_feature_map,
-                    emb_channels = self.config.embedding_dim[0],
-                    emb_size_ratio = int(self.config.embedding_dim[1]/10),
-                    resize = resize,
-                )
-                for input_channel, output_channel, resize in zip(
-                    input_channels, output_channels, resizes
-                )
-            ]
+        # Define models
+        if config.model.type == "transformer_embedding":
+            EncDec = getattr(transformer_embedding, config.model.name)
+        elif config.model.type == "universal_embedding":
+            EncDec = getattr(universal_embedding, config.model.name)
+        elif config.model.type == "attention_autoencoder":
+            EncDec = getattr(attention_autoencoder, config.model_name)
         else:
-            raise ValueError(f"Unknown model_type = {config.model_type}. Please change config to one among ['transformer_embedding', 'universal_embedding', 'attention_autoencoder']")
+            raise ValueError(f"Unknown model.type = {config.model.type}. Please change config to one among ['transformer_embedding', 'universal_embedding', 'attention_autoencoder']")
         
+        self.models = [
+            EncDec(
+                input_channel,
+                output_channel,
+                resize = resize,
+                n_channels_hiddenlay = self.config.dimensions.n_channels_hiddenlay,
+                n_channels_embedding = self.config.dimensions.n_channels_embedding,
+                **self.config.model.params
+            )
+            for input_channel, output_channel, resize in zip(
+                input_channels, output_channels, resizes
+            )
+        ]
         self.coord_model = nn.Sequential(
             nn.Linear(128, 300),
             nn.ReLU(inplace=True),
-            nn.Linear(300, self.config.embedding_dim[0]),
+            nn.Linear(300, self.config.dimensions.n_channels_embedding),
             nn.ReLU(inplace=True),
         )
-        self.coord_optimizer = optim.Adam(
-            self.coord_model.parameters(), lr=self.config.learning_rate[0]
+        
+        # Define optimizer
+        optim_class = getattr(optim, self.config.optimizer.type)
+        self.coord_optimizer = optim_class(
+            self.coord_model.parameters(), **self.config.optimizer.params
         )
-        # define optimizer
         self.optimizers = [
-            optim.Adam(net.parameters(), lr=self.config.learning_rate[i])
+            optim_class(net.parameters(), **self.config.optimizer.params)
             for i, net in enumerate(self.models)
-        ]  # eps est obligatoire avec mode half ,eps=0.0001
+        ]
 
-        # # initialize counter
+        # Initialize counters
         self.current_epoch = 0
         self.current_iteration = 0
         self.best_metric = 0
@@ -172,17 +110,17 @@ class MultiLULCAgent(base.BaseAgent):
             self.models = [net.to(self.device) for net in self.models]
             self.coord_model = self.coord_model.to(self.device)
             misc.print_cuda_statistics()
-
+        
         # Model Loading from the latest checkpoint if not found start from scratch.
-        self.load_checkpoint(self.config.checkpoint_file)
-
+        self.load_checkpoint(default_checkpoint_filename)
+        
         # Summary Writer
-        if self.config.tensorboard:
+        if self.config.training.tensorboard:
             (
                 self.summary_writer,
                 self.tensorboard_process,
             ) = tensorboardx_utils.tensorboard_summary_writer(
-                config, comment=self.config.exp_name
+                config, comment=self.config.xp_name
             )
 
         if self.cuda and torch.cuda.device_count() > 1:
@@ -197,14 +135,14 @@ class MultiLULCAgent(base.BaseAgent):
         :return:
         """
 
-        filename = self.config.checkpoint_dir + file_name
+        filename = os.path.join(self.config.paths.checkpoint_dir, file_name)
         try:
-            self.logger.info("Loading checkpoint '{}'".format(filename))
+            self.logger.info(f"Loading checkpoint '{filename}'")
             checkpoint = torch.load(filename)
 
             self.current_epoch = checkpoint["epoch"]
             self.current_iteration = checkpoint["iteration"]
-            for i, d in enumerate(self.config.datasets):
+            for i, d in enumerate(self.datasets):
                 self.models[i].load_state_dict(checkpoint["encoder_state_dict_" + d])
                 self.optimizers[i].load_state_dict(checkpoint["encoder_optimizer_" + d])
                 self.coord_model.load_state_dict(checkpoint["image_state_dict_" + d])
@@ -218,7 +156,7 @@ class MultiLULCAgent(base.BaseAgent):
 
             self.logger.info(
                 "Checkpoint loaded successfully from '{}' at (epoch {}) at (iteration {})\n".format(
-                    self.config.checkpoint_dir,
+                    self.config.paths.checkpoint_dir,
                     checkpoint["epoch"],
                     checkpoint["iteration"],
                 )
@@ -226,16 +164,15 @@ class MultiLULCAgent(base.BaseAgent):
         except OSError as e:
             self.logger.info(
                 "No checkpoint exists from '{}'. Skipping...".format(
-                    self.config.checkpoint_dir
+                    self.config.paths.checkpoint_dir
                 )
             )
             self.logger.info("**First time to train**")
 
     def save_checkpoint(
         self,
-        file_name="checkpoint.pth.tar",
+        file_name=default_checkpoint_filename,
         is_best=0,
-        historical_storage="/work/scratch/baudoulu/train2012_valid2018_modelsave/",
     ):
         """
         Checkpoint saver
@@ -249,7 +186,7 @@ class MultiLULCAgent(base.BaseAgent):
             "iteration": self.current_iteration,
             "manual_seed": self.manual_seed,
         }
-        for i, d in enumerate(self.config.datasets):
+        for i, d in enumerate(self.datasets):
             state["encoder_optimizer_" + d] = self.optimizers[i].state_dict()
             state["coord_optimizer_" + d] = self.coord_optimizer.state_dict()
             if torch.cuda.device_count() > 1 and self.cuda:
@@ -260,86 +197,89 @@ class MultiLULCAgent(base.BaseAgent):
                 state["image_state_dict_" + d] = self.coord_model.state_dict()
 
         # Save the state
-        torch.save(state, self.config.checkpoint_dir + file_name)
+        torch.save(state, os.path.join(self.config.paths.checkpoint_dir, file_name))
         # If it is the best copy it to another file 'model_best.pth.tar'
         if is_best:
             shutil.copyfile(
-                self.config.checkpoint_dir + file_name,
-                self.config.checkpoint_dir + "model_best.pth.tar",
+                os.path.join(self.config.paths.checkpoint_dir, file_name),
+                os.path.join(self.config.paths.checkpoint_dir, default_bestmodel_filename),
             )
 
     def run(self):
         """
         The main operator
-        :return:
         """
         try:
             torch.cuda.empty_cache()
             self.train()
-            # self.save_patch_loss(self.model,self.device,self.data_loader.train_loader)
             torch.cuda.empty_cache()
             self.test()
             torch.cuda.empty_cache()
-
         except KeyboardInterrupt:
             self.logger.info("You have entered CTRL+C.. Wait to finalize")
 
     def train(self):
         """
         Main training loop
-        :return:
         """
         loss_ref = 1000
-        plot_training_loss = {d: [] for d in self.config.datasets}
-        plot_validation_loss = {d: [] for d in self.config.datasets}
-        if self.config.use_scheduler:
-            scheduler = {
-                d: ReduceLROnPlateau(self.optimizers[i], "min", factor=0.5, patience=5)
-                for i, d in enumerate(self.config.datasets)
-            }
+        plot_training_loss = {d: [] for d in self.datasets}
+        plot_validation_loss = {d: [] for d in self.datasets}
+        # if self.config.use_scheduler:
+            # scheduler = {
+                # d: ReduceLROnPlateau(self.optimizers[i], "min", factor=0.5, patience=5)
+                # for i, d in enumerate(self.datasets)
+            # }
 
         self.logger.info("Start training !")
-        for epoch in range(1, self.config.max_epoch + 1):
+        for epoch in range(1, self.config.training.n_epochs + 1):
             self.logger.info("")
             self.logger.info(
                 " ------- Training epoch {}/{} ({:.0f}%) ------- ".format(
                     epoch,
-                    self.config.max_epoch,
-                    (epoch - 1) / self.config.max_epoch * 100,
+                    self.config.training.n_epochs,
+                    100 * epoch/self.config.training.n_epochs,
                 )
             )
+            
             train_loss = self.train_one_epoch()
-            # print(train_loss)
+            
             for d, l in train_loss.items():
                 plot_training_loss[d].extend(l)
+            
             torch.cuda.empty_cache()
-            if epoch % self.config.validate_every == 0:
+            if epoch % self.config.training.validate_every == 0:
                 self.logger.info(
                     " - - - - Validation epoch {}/{} ({:.0f}%) - - - - ".format(
                         epoch,
-                        self.config.max_epoch,
-                        (epoch - 1) / self.config.max_epoch * 100,
+                        self.config.training.n_epochs,
+                        100 * epoch/self.config.training.n_epochs,
                     )
                 )
+                
                 validation_loss = self.validate()
+                
                 for d, l in validation_loss.items():
                     plot_validation_loss[d].append([self.current_iteration, np.mean(l)])
+                
                 tmp = [v for v in validation_loss.values()]
                 vl = np.mean([item for elem in tmp for item in elem])
                 if vl < loss_ref:
                     self.logger.info("Best model for now  : saved ")
                     loss_ref = vl
                     self.save_checkpoint(is_best=1)
+                
                 torch.cuda.empty_cache()
-                if self.config.use_scheduler:
-                    for d in self.config.datasets:
-                        scheduler[d].step(plot_validation_loss[d][-1][1])
+                # if self.config.use_scheduler:
+                    # for d in self.datasets:
+                        # scheduler[d].step(plot_validation_loss[d][-1][1])
+                    
             self.current_epoch += 1
-            if epoch > 1 and epoch >= 2 * self.config.validate_every:
+            if epoch > 1 and epoch >= 2 * self.config.training.validate_every:
                 plt_loss()(
                     plot_training_loss,
                     plot_validation_loss,
-                    savefig=join(self.config.out_dir, "loss.png"),
+                    savefig=os.path.join(self.config.paths.out_dir, "loss.png"),
                 )
         self.logger.info("Training ended!")
 
@@ -349,7 +289,7 @@ class MultiLULCAgent(base.BaseAgent):
         One epoch of training
         :return:
         """
-        plot_loss = {d: [] for d in self.config.datasets}
+        plot_loss = {d: [] for d in self.datasets}
 
         [model.train() for model in self.models]
         self.coord_model.train()
@@ -369,11 +309,11 @@ class MultiLULCAgent(base.BaseAgent):
         end = False
         while not end:
             for source, targetval in data_loader.items():
-                i_source = self.config.datasets.index(source)
+                i_source = self.datasets.index(source)
                 # self.logger.info(f"Source: {source}")
                 for target, dl in targetval.items():
                     # self.logger.info(f"Target: {target} dataloader {dl} ({len(dl)} batches)")
-                    i_target = self.config.datasets.index(target)
+                    i_target = self.datasets.index(target)
                     
                     ### Load data
                     try:
@@ -395,7 +335,7 @@ class MultiLULCAgent(base.BaseAgent):
                     self.optimizers[i_target].zero_grad(set_to_none=True)
                     
                     ### Forward pass
-                    if self.config.use_pos:
+                    if self.config.model.use_pos:
                         pos_enc = (
                             self.coord_model(pos_enc.float()).unsqueeze(2).unsqueeze(3)
                         )
@@ -409,7 +349,7 @@ class MultiLULCAgent(base.BaseAgent):
                     loss_rec = nn.CrossEntropyLoss(ignore_index=0)(
                         rec, sv
                     )  # self reconstruction loss
-                    if self.config.use_pos:
+                    if self.config.model.use_pos:
                         embedding2, rec = self.models[i_target](
                             target_patch, full=True, res=pos_enc
                         )
@@ -422,7 +362,7 @@ class MultiLULCAgent(base.BaseAgent):
                         embedding, embedding2
                     )  # similar embedding loss
                     
-                    if self.config.model_type == "attention_autoencoder":
+                    if self.config.model.type == "attention_autoencoder":
                         rec = self.models[i_target].decoder(embedding)
                     else:
                         _, rec = self.models[i_target](embedding)
@@ -431,7 +371,7 @@ class MultiLULCAgent(base.BaseAgent):
                         rec, tv
                     )  # translation loss
 
-                    if self.config.model_type == "attention_autoencoder":
+                    if self.config.model.type == "attention_autoencoder":
                         rec = self.models[i_source].decoder(embedding2)
                     else:
                         _, rec = self.models[i_source](embedding2)
@@ -445,7 +385,7 @@ class MultiLULCAgent(base.BaseAgent):
                     # self.logger.info(f"loss {loss.item()}, CUDA memory reserved: {torch.cuda.memory_reserved()/10**9} GB")
                     
                     # if dlcount[dl] % max(int(len(dl)/20), 1) == 0:
-                    if dlcount[dl] % 10 == 0:
+                    if dlcount[dl] % self.config.training.print_inc == 0:
                         self.logger.info(
                             f"[ep {self.current_epoch}, i={self.current_iteration}][batch {dlcount[dl]}/{len(dl)}] train\t {source} -> {target} \t Losses: rec={loss_rec.item()}, emb={loss_emb.item()}, tra={loss_tra.item()}"
                         )
@@ -470,14 +410,14 @@ class MultiLULCAgent(base.BaseAgent):
         One cycle of model validation
         :return:
         """
-        plot_loss = {d: [] for d in self.config.datasets}
+        plot_loss = {d: [] for d in self.datasets}
         [model.eval() for model in self.models]
         self.coord_model.eval()
 
         test_loss = 0
         with torch.no_grad():
             im_save = {
-                d: {j: 0 for j in self.config.datasets} for d in self.config.datasets
+                d: {j: 0 for j in self.datasets} for d in self.datasets
             }
             data_loader = {
                 source: {target: iter(val) for target, val in targetval.items()}
@@ -486,9 +426,9 @@ class MultiLULCAgent(base.BaseAgent):
             end = False
             while not end:
                 for source, targetval in data_loader.items():
-                    i_source = self.config.datasets.index(source)
+                    i_source = self.datasets.index(source)
                     for target, dl in targetval.items():
-                        i_target = self.config.datasets.index(target)
+                        i_target = self.datasets.index(target)
                         try:
                             data = next(dl)
                         except:
@@ -498,7 +438,7 @@ class MultiLULCAgent(base.BaseAgent):
                         source_patch = data.get("source_one_hot")
                         target_patch = data.get("target_one_hot")
 
-                        if self.config.use_pos:
+                        if self.config.model.use_pos:
                             pos_enc = (
                                 self.coord_model(pos_enc.float())
                                 .unsqueeze(2)
@@ -512,7 +452,7 @@ class MultiLULCAgent(base.BaseAgent):
                                 source_patch.float(), full=True
                             )
                             
-                        if self.config.model_type == "attention_autoencoder":
+                        if self.config.model.type == "attention_autoencoder":
                             trad = self.models[i_target].decoder(embedding)
                         else:
                             _, trad = self.models[i_target](embedding)
@@ -555,15 +495,16 @@ class MultiLULCAgent(base.BaseAgent):
         return plot_loss
 
     def test(self):
+        self.logger.info(f"Start testing on {len(self.data_loader.test_loader)} items...")
         with torch.no_grad():
             ##### Read ground_truth_file
-            self.load_checkpoint("model_best.pth.tar")
+            self.load_checkpoint(default_bestmodel_filename)
             [model.eval() for model in self.models]
             self.coord_model.eval()
-
+            
             res_oa = {
-                d: {j: [0, 0] for j in self.config.datasets}
-                for d in self.config.datasets
+                d: {j: [0, 0] for j in self.datasets}
+                for d in self.datasets
             }
             conf_matrix = {
                 d: {
@@ -573,21 +514,21 @@ class MultiLULCAgent(base.BaseAgent):
                             self.data_loader.n_classes[j] + 1,
                         )
                     )
-                    for j in self.config.datasets
+                    for j in self.datasets
                 }
-                for d in self.config.datasets
+                for d in self.datasets
             }
-
+            
             for source, targetval in self.data_loader.test_loader.items():
-                i_source = self.config.datasets.index(source)
+                i_source = self.datasets.index(source)
                 for target, val in targetval.items():
-                    i_target = self.config.datasets.index(target)
+                    i_target = self.datasets.index(target)
                     for nb_it, data in enumerate(val):
                         pos_enc = data.get("coordenc").to(self.device)
                         source_patch = data.get("source_one_hot")
                         tv = data.get("target_data")[:, 0]
 
-                        if self.config.use_pos:
+                        if self.config.model.use_pos:
                             pos_enc = (
                                 self.coord_model(pos_enc.float())
                                 .unsqueeze(2)
@@ -601,7 +542,7 @@ class MultiLULCAgent(base.BaseAgent):
                                 source_patch.float(), full=True
                             )
                         
-                        if self.config.model_type == "attention_autoencoder":
+                        if self.config.model.type == "attention_autoencoder":
                             trad = self.models[i_target].decoder(embedding)
                         else:
                             _, trad = self.models[i_target](embedding)
@@ -629,26 +570,26 @@ class MultiLULCAgent(base.BaseAgent):
             res = {
                 d: {
                     j: res_oa[d][j][0] / (res_oa[d][j][1] + 0.00001)
-                    for j in self.config.datasets
+                    for j in self.datasets
                 }
-                for d in self.config.datasets
+                for d in self.datasets
             }
             with open(
-                join(self.config.out_dir, "accuracy_assessement.json"), "w"
+                os.path.join(self.config.paths.out_dir, "accuracy_assessement.json"), "w"
             ) as fp:
                 json.dump(res, fp)
 
             res = {
-                d: {j: conf_matrix[d][j].tolist() for j in self.config.datasets}
-                for d in self.config.datasets
+                d: {j: conf_matrix[d][j].tolist() for j in self.datasets}
+                for d in self.datasets
             }
             with open(
-                join(self.config.out_dir, "per_class_accuracy_assessement.json"), "w"
+                os.path.join(self.config.paths.out_dir, "per_class_accuracy_assessement.json"), "w"
             ) as fp:
                 json.dump(res, fp)
 
             plt_utils.PltPerClassMetrics()(
-                conf_matrix, savefig=self.config.out_dir + "/per_class"
+                conf_matrix, savefig=os.path.join(self.config.paths.out_dir, "per_class")
             )
 
     def finalize(self):

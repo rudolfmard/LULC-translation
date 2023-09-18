@@ -1,0 +1,44 @@
+xp_name: new_config_[id]
+seed: 666
+cuda: true
+paths:
+    data_dir: <your data dir>
+    experiments_dir: <your experiments dir>
+dimensions:
+    n_channels_hiddenlay: 32
+    n_channels_embedding: 50
+    n_px_embedding: 600
+dataloader:
+    type: LandcoverToLandcoverDataLoader
+    params:
+        datasets: ["ecosg.hdf5", "mos.hdf5"]
+        num_workers: 0
+        pos_enc: true
+training:
+    batch_size: 16
+    n_epochs: 3
+    tensorboard: false
+    validate_every: 1
+    print_inc: 10
+agent:
+    type: MultiLULCAgent
+    params: {}
+model:
+    type: universal_embedding
+    name: UnivEmb
+    use_pos: false
+    params:
+        memory_monger: false
+        up_mode: bilinear
+        #num_groups: 4
+        decoder_depth: 1
+        mode: light
+        pooling_factors: [3,3,3,3,3]
+        mul: true
+        softpos: true
+        decoder_atrou: true
+optimizer:
+    type: Adam
+    params:
+        lr: 0.0001
+

@@ -388,8 +388,10 @@ class UnivEmb(nn.Module):
         mul=False,
         softpos=False,
         mode="light",
-        number_feature_map=30,
-        embedding_dim=32,
+        number_feature_map=None,
+        n_channels_hiddenlay=30,
+        embedding_dim=None,
+        n_channels_embedding=32,
         memory_monger=False,
         num_groups=None,
         up_mode="bilinear",
@@ -404,6 +406,14 @@ class UnivEmb(nn.Module):
         image_operator="mul",
     ):
         super().__init__()
+        if number_feature_map is not None:
+            n_channels_hiddenlay = number_feature_map
+            print(f"<{self.__class__.__name__}>mmt-0.2 API changes: 'number_feature_map' is now renamed 'n_channels_hiddenlay'. Please use it for now on. Current value: n_channels_hiddenlay={n_channels_hiddenlay}")
+        
+        if embedding_dim is not None:
+            n_channels_embedding = embedding_dim
+            print(f"<{self.__class__.__name__}>mmt-0.2 API changes: 'embedding_dim' is now renamed 'n_channels_hiddenlay'. Please use it for now on. Current value: n_channels_embedding={n_channels_embedding}")
+        
         if not isinstance(resize, list):
             enc_resize = resize
             dec_resize = resize
@@ -412,8 +422,8 @@ class UnivEmb(nn.Module):
             dec_resize = resize[1]
         self.encoder = encoder(
             in_channels,
-            number_feature_map=number_feature_map,
-            embedding_dim=embedding_dim,
+            number_feature_map=n_channels_hiddenlay,
+            embedding_dim=n_channels_embedding,
             mode=mode,
             num_groups=num_groups,
             up_mode=up_mode,
@@ -434,7 +444,7 @@ class UnivEmb(nn.Module):
             n_classes,
             depth=decoder_depth,
             num_groups=num_groups,
-            nf=number_feature_map,
+            nf=n_channels_hiddenlay,
             resize=dec_resize,
             atrou=decoder_atrou,
             bias=bias,

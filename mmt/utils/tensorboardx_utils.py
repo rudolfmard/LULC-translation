@@ -5,9 +5,9 @@ import time
 
 
 def tensorboard_summary_writer(config, comment):
-    s = SummaryWriter(log_dir=config.summary_dir, comment=comment)
+    s = SummaryWriter(log_dir=config.paths.summary_dir, comment=comment)
     process = subprocess.Popen(
-        ["tensorboard", "--logdir=" + config.summary_dir],
+        ["tensorboard", "--logdir=" + config.paths.summary_dir],
         cwd=os.path.abspath(os.getcwd()),
     )
     time.sleep(10)

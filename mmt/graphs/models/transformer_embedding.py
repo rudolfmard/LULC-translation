@@ -597,8 +597,10 @@ class TransformerEmbedding(nn.Module):
         mul=False,
         softpos=False,
         mode="light",
-        number_feature_map=30,
-        embedding_dim=32,
+        number_feature_map=None,
+        n_channels_hiddenlay=30,
+        embedding_dim=None,
+        n_channels_embedding=32,
         memory_monger=False,
         num_groups=None,
         up_mode="bilinear",
@@ -613,6 +615,14 @@ class TransformerEmbedding(nn.Module):
         image_operator="mul",
     ):
         super().__init__()
+        if number_feature_map is not None:
+            n_channels_hiddenlay = number_feature_map
+            print(f"<{self.__class__.__name__}>mmt-0.2 API changes: 'number_feature_map' is now renamed 'n_channels_hiddenlay'. Please use it for now on. Current value: n_channels_hiddenlay={n_channels_hiddenlay}")
+        
+        if embedding_dim is not None:
+            n_channels_embedding = embedding_dim
+            print(f"<{self.__class__.__name__}>mmt-0.2 API changes: 'embedding_dim' is now renamed 'n_channels_hiddenlay'. Please use it for now on. Current value: n_channels_embedding={n_channels_embedding}")
+        
         if not isinstance(resize, list):
             enc_resize = resize
             dec_resize = resize

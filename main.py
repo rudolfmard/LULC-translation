@@ -18,17 +18,17 @@ def main():
     arg_parser = argparse.ArgumentParser(description="")
     arg_parser.add_argument(
         'config',
-        metavar='config_json_file',
+        metavar='config_yaml_file',
         default='None',
-        help='The Configuration file in json format')
+        help='The configuration file in YAML format')
     args = arg_parser.parse_args()
     
     # parse the config json file
     config = utilconf.process_config(args.config)
     
     # Create the Agent and pass all the configuration to it then run it..
-    agent_class = getattr(multiLULC, config.agent)
-    agent = agent_class(config)
+    agent_class = getattr(multiLULC, config.agent.type)
+    agent = agent_class(config, **config.agent.params)
     agent.run()
     agent.finalize()
 

@@ -1,10 +1,15 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Multiple land-cover/land-use Maps Translation (MMT)
+
+Dataset and dataloaders
+"""
+import os
 from torch.utils.data import DataLoader
 import imageio
 from torch.utils.data import Dataset
-from os.path import join
 import numpy as np
 import json
-from os.path import basename
 import torch
 import matplotlib.pyplot as plt
 from torchvision.transforms import Compose
@@ -490,12 +495,12 @@ class LandcoverToLandcover(Dataset):
         self.source = source
         # print(self.master_dataset)
         self.target = target
-        self.source_dataset_path = join(path, source)
-        self.target_dataset_path = join(path, target)
+        self.source_dataset_path = os.path.join(path, source)
+        self.target_dataset_path = os.path.join(path, target)
         self.device = device
 
         self.list_patch_id = list_patch_id
-        with open(join(path, "train_test_val_60.json"), "r") as fp:
+        with open(os.path.join(path, "train_test_val_60.json"), "r") as fp:
             data = json.load(fp)
         self.list_patch_id = list(
             set.intersection(set(self.list_patch_id), set(data[mode]))
@@ -570,8 +575,8 @@ class LandcoverToLandcoverDataLoader:
     def __init__(
         self,
         config,
+        datasets,
         to_one_hot=True,
-        device="cuda",
         pos_enc=False,
         ampli=True,
         num_workers=4,
@@ -580,8 +585,12 @@ class LandcoverToLandcoverDataLoader:
         :param config:
         """
         self.config = config
+        self.datasets = datasets
+        self.datadir = os.path.join(config.paths.data_dir, "hdf5_data")
+        self.device = "cuda" if config.cuda else "cpu"
+        
         list_all_datasets = [
-            join(config.data_folder, dataset) for dataset in config.datasets
+            os.path.join(self.datadir, dataset) for dataset in self.datasets
         ]
         self.input_channels = []
         self.output_channels = []
@@ -591,15 +600,13 @@ class LandcoverToLandcoverDataLoader:
         id_patch_per_dataset = {}
         for dataset in list_all_datasets:
             with h5py.File(dataset, "r") as f:
-                # self.input_channels.append(f.attrs["n_channels"])
-                # self.output_channels.append(f.attrs["n_channels"])
                 self.real_patch_sizes.append(int(f.attrs["patch_size"]))
-                self.n_classes[basename(dataset)] = int(f.attrs["numberclasses"])
+                self.n_classes[os.path.basename(dataset)] = int(f.attrs["numberclasses"])
                 self.input_channels.append(int(f.attrs["numberclasses"]) + 1)
                 self.output_channels.append(int(f.attrs["numberclasses"]) + 1)
                 self.nb_patch_per_dataset.append(len(f.keys()))
                 id_patch_per_dataset[dataset] = list(f.keys())
-
+            
         self.couple_patch_per_dataset = {}
         self.total_couple = 0
         for source in list_all_datasets:
@@ -613,10 +620,10 @@ class LandcoverToLandcoverDataLoader:
                         )
                     )
                     if len(inter) > 0:
-                        tmp[basename(target)] = inter
+                        tmp[os.path.basename(target)] = inter
                         self.total_couple += len(inter)
-            self.couple_patch_per_dataset[basename(source)] = tmp
-
+            self.couple_patch_per_dataset[os.path.basename(source)] = tmp
+        
         self.nb_patch_per_dataset = np.array(self.nb_patch_per_dataset)
         self.nb_patch_per_dataset = (
             self.nb_patch_per_dataset / self.nb_patch_per_dataset.sum()
@@ -647,6 +654,7 @@ class LandcoverToLandcoverDataLoader:
                     dic_list_transform[source][target].append(
                         transforms.CoordEnc(self.n_classes.keys())
                     )
+                
                 dic_list_train_transform[source][target] = Compose(
                     dic_list_train_transform[source][target]
                     + dic_list_transform[source][target]
@@ -658,13 +666,13 @@ class LandcoverToLandcoverDataLoader:
         self.train = {
             source: {
                 target: LandcoverToLandcover(
-                    config.data_folder,
+                    self.datadir,
                     source,
                     target,
                     val,
                     mode="train",
                     transform=dic_list_train_transform[source][target],
-                    device=device,
+                    device=self.device,
                 )
                 for target, val in targetval.items()
             }
@@ -674,13 +682,13 @@ class LandcoverToLandcoverDataLoader:
         self.valid = {
             source: {
                 target: LandcoverToLandcover(
-                    config.data_folder,
+                    self.datadir,
                     source,
                     target,
                     val,
                     mode="validation",
                     transform=dic_list_transform[source][target],
-                    device=device,
+                    device=self.device,
                 )
                 for target, val in targetval.items()
             }
@@ -689,31 +697,29 @@ class LandcoverToLandcoverDataLoader:
         self.test = {
             source: {
                 target: LandcoverToLandcover(
-                    config.data_folder,
+                    self.datadir,
                     source,
                     target,
                     val,
                     mode="test",
                     transform=dic_list_transform[source][target],
-                    device=device,
+                    device=self.device,
                 )
                 for target, val in targetval.items()
             }
             for source, targetval in self.couple_patch_per_dataset.items()
         }
-
-        if device == "cpu":
-            num_workers = num_workers
+        
+        if self.device == "cpu":
             pin_memory = True
         else:
-            num_workers = 0
             pin_memory = False
-
+        
         self.train_loader = {
             source: {
                 target: DataLoader(
                     val,
-                    batch_size=self.config.train_batch_size,
+                    batch_size=self.config.training.batch_size,
                     shuffle=True,
                     num_workers=num_workers,
                     pin_memory=pin_memory,
@@ -726,7 +732,7 @@ class LandcoverToLandcoverDataLoader:
             source: {
                 target: DataLoader(
                     val,
-                    batch_size=self.config.valid_batch_size,
+                    batch_size=self.config.training.batch_size,
                     shuffle=True,
                     num_workers=num_workers,
                     pin_memory=pin_memory,
@@ -739,7 +745,7 @@ class LandcoverToLandcoverDataLoader:
             source: {
                 target: DataLoader(
                     val,
-                    batch_size=self.config.test_batch_size,
+                    batch_size=self.config.training.batch_size,
                     shuffle=True,
                     num_workers=num_workers,
                     pin_memory=pin_memory,
@@ -771,14 +777,15 @@ class LandcoverToLandcoverDataLoader:
                 targets = targets[0]
             outputs = torch.argmax(outputs[0], dim=0)
             if title is None:
-                title = join(
-                    self.config.out_dir,
-                    "Epoch_{}_Source_{}_Target_{}.png".format(
-                        epoch, dataset_src, dataset_tgt
-                    ),
+                title = os.path.join(
+                    self.config.paths.out_dir,
+                    f"Epoch_{epoch}_Source_{dataset_src}_Target_{dataset_tgt}.png"
                 )
             else:
-                title = join(self.config.out_dir, title)
+                title = os.path.join(self.config.paths.out_dir, title)
+            
+            # Start figure
+            #--------------
             f, ax = plt.subplots(2, 2, figsize=(20, 20))
             # get discrete colormap
             if cmap == "default":
@@ -795,7 +802,9 @@ class LandcoverToLandcoverDataLoader:
                     np.array(cmap_dict[dataset_tgt]) / 255,
                     N=self.n_classes[dataset_tgt] + 1,
                 )
-
+            
+            # Source
+            #--------
             m1 = ax[0][0].imshow(
                 inputs.cpu().long().numpy(),
                 cmap=cmap_src,
@@ -803,6 +812,9 @@ class LandcoverToLandcoverDataLoader:
                 vmax=self.n_classes[dataset_src] + 0.5,
             )
             ax[0][0].set_title("Source")
+            
+            # Target
+            #--------
             m2 = ax[0][1].imshow(
                 targets.cpu().long().numpy(),
                 cmap=cmap_tgt,
@@ -810,6 +822,9 @@ class LandcoverToLandcoverDataLoader:
                 vmax=self.n_classes[dataset_tgt] + 0.5,
             )
             ax[0][1].set_title("Target")
+            
+            # Translation
+            #-------------
             m3 = ax[1][0].imshow(
                 outputs.cpu().long().numpy(),
                 cmap=cmap_tgt,
@@ -817,12 +832,9 @@ class LandcoverToLandcoverDataLoader:
                 vmax=self.n_classes[dataset_tgt] + 0.5,
             )
             ax[1][0].set_title("Translation")
-            # if embedding[0].shape[0]>2:
-            #     emb=embedding[0,:3].cpu().numpy().transpose(1,2,0)
-            # elif embedding[0].shape[0]==2:
-            # #     emb = (embedding[0, 0].cpu().numpy()+embedding[0, 1].cpu().numpy())/2
-            # else :
-            #     emb = embedding[0,0].cpu().numpy()
+            
+            # Embedding
+            #-----------
             fmap_dim = embedding.shape[1]  # nchannel
             n_pix = embedding.shape[2]
             # we use a pca to project the embeddings to a RGB space
@@ -839,13 +851,12 @@ class LandcoverToLandcoverDataLoader:
                 .transpose(1, 0)
             )  # yikes
             color_vector = pca.transform(fmap_)
-            # we normalize for visibility
-            # color_vector = np.maximum(np.minimum(((color_vector - color_vector.mean(1, keepdims=True) + 0.5) / (2 * color_vector.std(1, keepdims=True))), 1),0)
             emb = color_vector.reshape((n_pix, n_pix, 3), order="F").transpose(1, 0, 2)
-            # emb = np.mean(embedding[0].cpu().numpy(), axis=0)
-            # m4=  ax[1][1].imshow(emb/np.max(emb),vmin=np.percentile(emb,5),vmax=np.percentile(emb,95),cmap="jet")
             m4 = ax[1][1].imshow((emb * 255).astype(np.uint8))
             ax[1][1].set_title("Embedding")
+            
+            # Wrap-up
+            #---------
             # tell the colorbar to tick at integers
             f.colorbar(
                 m1, ticks=np.arange(0, self.n_classes[dataset_src] + 1), ax=ax[0][0]

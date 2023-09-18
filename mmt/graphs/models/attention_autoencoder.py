@@ -284,16 +284,16 @@ class ShortUNet(nn.Module):
 class AttentionAutoEncoder(nn.Module):
     """Auto-encoder using AttentionUNet for both encoder and decoder
     """
-    def __init__(self, in_channels, out_channels, emb_channels = 50, h_channels = 32, emb_size_ratio = 60, resize = 1):
+    def __init__(self, in_channels, out_channels, n_channels_embedding = 50, n_channels_hiddenlay = 32, emb_size_ratio = 60, resize = 1):
         super().__init__()
         if resize is None:
             resize = 1
         
         self.in_channels = in_channels
         self.out_channels = out_channels
-        self.emb_channels = emb_channels
+        self.n_channels_embedding = n_channels_embedding
         self.emb_size_ratio = emb_size_ratio
-        self.h_channels = h_channels
+        self.n_channels_hiddenlay = n_channels_hiddenlay
         self.resize = resize
         
         bottleneck_resize = int(emb_size_ratio/resize)
@@ -307,14 +307,14 @@ class AttentionAutoEncoder(nn.Module):
         ae_resizes.reverse()
         self.encoder = AttentionUNet(
             in_channels = in_channels,
-            out_channels = emb_channels,
-            h_channels = [h_channels]*(len(ae_resizes) + 1),
+            out_channels = n_channels_embedding,
+            h_channels = [n_channels_hiddenlay]*(len(ae_resizes) + 1),
             resizes = ae_resizes + [1/resize],
         )
         self.decoder = AttentionUNet(
-            in_channels = emb_channels,
+            in_channels = n_channels_embedding,
             out_channels = out_channels,
-            h_channels = [h_channels]*(len(ae_resizes) + 1),
+            h_channels = [n_channels_hiddenlay]*(len(ae_resizes) + 1),
             resizes = ae_resizes + [resize],
         )
         
@@ -326,16 +326,16 @@ class AttentionAutoEncoder(nn.Module):
 class AttentionAutoEncoderSC(nn.Module):
     """Auto-encoder using AttentionUNetSC for both encoder and decoder
     """
-    def __init__(self, in_channels, out_channels, emb_channels = 50, h_channels = 32, emb_size_ratio = 60, resize = 1):
+    def __init__(self, in_channels, out_channels, n_channels_embedding = 50, n_channels_hiddenlay = 32, emb_size_ratio = 60, resize = 1):
         super().__init__()
         if resize is None:
             resize = 1
         
         self.in_channels = in_channels
         self.out_channels = out_channels
-        self.emb_channels = emb_channels
+        self.n_channels_embedding = n_channels_embedding
         self.emb_size_ratio = emb_size_ratio
-        self.h_channels = h_channels
+        self.n_channels_hiddenlay = n_channels_hiddenlay
         self.resize = resize
         
         bottleneck_resize = int(emb_size_ratio/resize)
@@ -350,14 +350,14 @@ class AttentionAutoEncoderSC(nn.Module):
         ae_resizes = ae_resizes + [1]*(3-len(ae_resizes))
         self.encoder = AttentionUNetSC(
             in_channels = in_channels,
-            out_channels = emb_channels,
-            h_channels = [h_channels]*3,
+            out_channels = n_channels_embedding,
+            h_channels = [n_channels_hiddenlay]*3,
             resizes = [ae_resizes[0], ae_resizes[1], 1/resize],
         )
         self.decoder = AttentionUNetSC(
-            in_channels = emb_channels,
+            in_channels = n_channels_embedding,
             out_channels = out_channels,
-            h_channels = [h_channels]*3,
+            h_channels = [n_channels_hiddenlay]*3,
             resizes = [ae_resizes[0], ae_resizes[1], resize],
         )
         
@@ -369,16 +369,16 @@ class AttentionAutoEncoderSC(nn.Module):
 class ShortUNetAutoEncoder(nn.Module):
     """Auto-encoder using ShortUNet for both encoder and decoder
     """
-    def __init__(self, in_channels, out_channels, emb_channels = 50, h_channels = 32, emb_size_ratio = 60, resize = 1):
+    def __init__(self, in_channels, out_channels, n_channels_embedding = 50, n_channels_hiddenlay = 32, emb_size_ratio = 60, resize = 1):
         super().__init__()
         if resize is None:
             resize = 1
         
         self.in_channels = in_channels
         self.out_channels = out_channels
-        self.emb_channels = emb_channels
+        self.n_channels_embedding = n_channels_embedding
         self.emb_size_ratio = emb_size_ratio
-        self.h_channels = h_channels
+        self.n_channels_hiddenlay = n_channels_hiddenlay
         self.resize = resize
         
         bottleneck_resize = int(emb_size_ratio/resize)
@@ -393,14 +393,14 @@ class ShortUNetAutoEncoder(nn.Module):
         ae_resizes = ae_resizes + [1]*(3-len(ae_resizes))
         self.encoder = ShortUNet(
             in_channels = in_channels,
-            out_channels = emb_channels,
-            h_channels = [h_channels]*3,
+            out_channels = n_channels_embedding,
+            h_channels = [n_channels_hiddenlay]*3,
             resizes = [ae_resizes[0], ae_resizes[1], 1/resize],
         )
         self.decoder = ShortUNet(
-            in_channels = emb_channels,
+            in_channels = n_channels_embedding,
             out_channels = out_channels,
-            h_channels = [h_channels]*3,
+            h_channels = [n_channels_hiddenlay]*3,
             resizes = [ae_resizes[0], ae_resizes[1], resize],
         )
         
