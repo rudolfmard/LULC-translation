@@ -67,7 +67,7 @@ class MultiLULCAgent(base.BaseAgent):
         elif config.model.type == "universal_embedding":
             EncDec = getattr(universal_embedding, config.model.name)
         elif config.model.type == "attention_autoencoder":
-            EncDec = getattr(attention_autoencoder, config.model_name)
+            EncDec = getattr(attention_autoencoder, config.model.name)
         else:
             raise ValueError(f"Unknown model.type = {config.model.type}. Please change config to one among ['transformer_embedding', 'universal_embedding', 'attention_autoencoder']")
         
@@ -599,7 +599,7 @@ class MultiLULCAgent(base.BaseAgent):
         """
         self.logger.info("Please wait while finalizing the operation.. Thank you")
         torch.cuda.empty_cache()
-        if self.config.tensorboard:
+        if self.config.training.tensorboard:
             self.tensorboard_process.kill()
             self.summary_writer.close()
         # self.save_checkpoint()

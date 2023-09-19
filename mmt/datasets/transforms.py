@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import torchvision.transforms.functional as TF
+import torchvision.transforms as tvt
 import random
 
 class OneHot:
@@ -71,14 +72,13 @@ class ToOneHot(object):
 
 class CoordEnc(object):
     """Convert ndarrays in sample to Tensors."""
-
     def __init__(self, datasets):
         self.d = 128
         self.d = int(self.d / 2)
         self.d_i = np.arange(0, self.d / 2)
         self.freq = 1 / (10000 ** (2 * self.d_i / self.d))
         self.datasets = datasets
-
+    
     def __call__(self, sample):
         x, y = sample["coordinate"]
         x, y = x / 10000, y / 10000
@@ -93,7 +93,6 @@ class CoordEnc(object):
 
 class RotationTransform:
     """Rotate by one of the given angles."""
-
     def __init__(
         self, angles, use_image=False, keys_to_mod=["source_data", "target_data"]
     ):
@@ -110,7 +109,6 @@ class RotationTransform:
 
 class FlipTransform:
     """Rotate by one of the given angles."""
-
     def __init__(self, use_image=False, keys_to_mod=["source_data", "target_data"]):
         self.use_image = use_image
         self.keys_to_mod = keys_to_mod
@@ -123,3 +121,32 @@ class FlipTransform:
             for k in self.keys_to_mod:
                 sample[k] = TF.vflip(sample[k])
         return sample
+
+
+class FloorDivMinus:
+    """Floor division and substraction"""
+    def __init__(self, div = 10, minus = 1):
+        self.div = div
+        self.minus = minus
+    
+    def __call__(self, x):
+        if isinstance(x, dict):
+            x["mask"] = x["mask"] // self.div - self.minus
+        else:
+            x = x // self.div - self.minus
+        return x
+
+class FillMissingWithSea:
+    """Remplace missing data labels by sea label"""
+    def __init__(self, missing_label = 0, sea_label = 1):
+        self.missing_label = missing_label
+        self.sea_label = sea_label
+    
+    def __call__(self, x):
+        if isinstance(x, dict):
+            x["mask"][x["mask"] == self.missing_label] = self.sea_label
+        else:
+            x[x == self.missing_label] = self.sea_label
+        return x
+
+EsawcTransform = tvt.Compose([FloorDivMinus(10, 1), FillMissingWithSea(-1, 7)])

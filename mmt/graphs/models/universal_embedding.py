@@ -359,6 +359,7 @@ class DUNet(nn.Module):
     def MemoryMonged_forward(self, x):
         x1, x2, x3, x4, x5, x6 = checkpoint.checkpoint(
             self.encoder_wrapper, x, self.dummy_tensor
+            # self.encoder_part, x
         )
         return self.decoder_part(x1, x2, x3, x4, x5, x6)
 
@@ -427,7 +428,7 @@ class UnivEmb(nn.Module):
             mode=mode,
             num_groups=num_groups,
             up_mode=up_mode,
-            memory_monger=True,
+            memory_monger=memory_monger,
             resize=enc_resize,
             pooling_factors=pooling_factors,
             tlm_p=tlm_p,
@@ -481,6 +482,7 @@ class UnivEmb(nn.Module):
     def MemoryMonged_forward(self, x, full=False, res=None, image=None):
         if full:
             x = checkpoint.checkpoint(self.encoder_wrapper, x, self.dummy_tensor)
+            # x = checkpoint.checkpoint(self.encoder, x)
         if res is not None:
             if self.softpos:
                 res = torch.softmax(res, 1)

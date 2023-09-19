@@ -26,19 +26,23 @@ from pprint import pprint
 from sklearn import metrics
 import pandas as pd
 import seaborn as sns
-import wopt.ml.utils
-from wopt.ml import (
-    landcovers,
-    transforms,
-    graphics,
-    domains,
-)
+# import wopt.ml.utils
+# from wopt.ml import (
+    # landcovers,
+    # transforms,
+    # graphics,
+    # domains,
+# )
 
 from mmt import _repopath_ as mmt_repopath
 from mmt.graphs.models import universal_embedding
 from mmt.datasets import landcover_to_landcover
+from mmt.datasets import landcovers
+from mmt.datasets import transforms
 from mmt.datasets import transforms as mmt_transforms
 from mmt.utils import config as utilconf
+from mmt.utils import domains
+from mmt.utils import plt_utils
 from mmt.inference import io
 
 
@@ -47,7 +51,6 @@ from mmt.inference import io
 usegpu = True
 device = torch.device("cuda" if usegpu else "cpu")
 
-woptconfig = wopt.ml.utils.load_config()
 print(f"Executing program {sys.argv[0]} in {os.getcwd()}")
 
 xp_name = "vanilla_with_esgp_v2"
@@ -56,7 +59,7 @@ n_val_patches = 60
 lc_in="esawc"
 lc_out="esgp"
 
-mlulcconfig, _ = utilconf.get_config_from_json(
+config = utilconf.get_config(
     os.path.join(
         mmt_repopath,
         "experiments",
@@ -74,11 +77,6 @@ checkpoint_path = os.path.join(
     "model_best.pth.tar",
 )
 
-graphics.storeImages = woptconfig["graphics"]["store_images"]
-graphics.figureDir = woptconfig["graphics"]["figure_dir"]
-graphics.fmtImages = "." + woptconfig["graphics"]["fmt_images"]
-graphics.print_graphics_config()
-
 
 # Land cover loading
 #--------------------
@@ -86,7 +84,7 @@ dst_crs = rasterio.crs.CRS.from_epsg(3035)
 
 print(f"Loading landcovers with CRS = {dst_crs}")
 esawc = landcovers.ESAWorldCover(
-    transforms=transforms.esawc_transform,
+    transforms=transforms.EsawcTransform,
     crs = dst_crs,
 )
 esawc.crs = dst_crs
@@ -96,7 +94,7 @@ esgp = landcovers.EcoclimapSGplus(crs=dst_crs, res=60)
 esgp.crs = dst_crs
 esgp.res = 60
 
-ecosg = landcovers.TgEcoclimapSG(crs=dst_crs, res=60)
+ecosg = landcovers.EcoclimapSG(crs=dst_crs, res=60)
 ecosg.crs = dst_crs
 ecosg.res = 60
 
@@ -184,43 +182,7 @@ print(f"Bulk total overall accuracy (ESAWC -> ECOSG+): {np.diag(cmx_esawc2esgp_e
 print(f"Bulk total overall accuracy (ECOSG+ -> ECOSG+): {np.diag(cmx_esawc2esgp_esgp).sum()/cmx_esawc2esgp_esgp.sum()}")
 print(f"Bulk total overall accuracy (ECOSG): {np.diag(cmx_ecosg_esgp).sum()/cmx_ecosg_esgp.sum()}")
 
-shortlbnames = np.array(
-    """0.nodata
-1.sea
-2.lakes
-3.rivers
-4.bare land
-5.bare rock
-6.snow
-7.bor bl dec
-8.temp bl dec
-9.trop bl dec
-10.temp bl evg
-11.trop bl evg
-12.bor bl evg
-13.temp nl evg
-14.bor nl dec
-15.shrubs
-16.bor grass
-17.temp grass
-18.trop grass
-19.winC3
-20.sumC3
-21.C4crops
-22.fl trees
-23.fl grass
-24.LCZ1 c.hig
-25.LCZ2 c.mid
-26.LCZ3 c.low
-27.LCZ4 o.hig
-28.LCZ5 o.mid
-29.LCZ6 o.low
-30.LCZ7 lw.l
-31.LCZ8 lar.l
-32.LCZ9 spars
-33.LCZ10indus""".split("\n")
-)
-shortlbnames = np.array(wopt.ml.utils.ecosg_label_names)
+shortlbnames = np.array(landcovers.ecoclimapsg_labels)
 def t_(ls):
     return ["t"+l for l in ls]
 
@@ -253,7 +215,7 @@ for cmx, method, shortmet in zip(
     print(f"  Overall accuracy on primary labels ({method}): {np.diag(famcmx).sum()/famcmx.sum()}")
     oap[shortmet] = np.round(np.diag(famcmx).sum()/famcmx.sum(), 3)
     
-    # graphics.plot_confusion_matrix(
+    # plt_utils.plot_confusion_matrix(
         # dfamcmx,
         # figtitle = f"Primary label confusion matrix {method}",
         # figname = f"famcmx_{domainname}_{shortmet}",
@@ -271,7 +233,7 @@ for cmx, method, shortmet in zip(
     
     # Confusion matrix
     #---------------------
-    graphics.plot_confusion_matrix(
+    plt_utils.plot_confusion_matrix(
         dfkcmx,
         figtitle = f"Unnormed confusion matrix {method}",
         figname = f"cmx_{domainname}_{shortmet}",
@@ -283,7 +245,7 @@ for cmx, method, shortmet in zip(
     # Normalization by actual amounts -> Recall matrix
     #--------------------------------
     reccmx = kcmx/np.repeat(kcmx.sum(axis=1), nl).reshape((nl,nl))
-    graphics.plot_confusion_matrix(
+    plt_utils.plot_confusion_matrix(
         pd.DataFrame(data=reccmx, index = dfkcmx.index, columns = dfkcmx.columns),
         figtitle = f"Recall matrix (normed by reference) {method}",
         figname = f"reccmx_{domainname}_{shortmet}"
@@ -291,7 +253,7 @@ for cmx, method, shortmet in zip(
     # # Normalization by predicted amounts -> Precision matrix
     # #--------------------------------
     # precmx = kcmx/np.repeat(kcmx.sum(axis=0), nl).reshape((nl,nl)).T
-    # graphics.plot_confusion_matrix(
+    # plt_utils.plot_confusion_matrix(
         # pd.DataFrame(data=precmx, index = dfkcmx.index, columns = dfkcmx.columns),
         # figtitle = f"Precision matrix (normed by predictions) {method}",
         # figname = f"precmx_{domainname}_{shortmet}"

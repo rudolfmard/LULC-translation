@@ -723,6 +723,7 @@ class LandcoverToLandcoverDataLoader:
                     shuffle=True,
                     num_workers=num_workers,
                     pin_memory=pin_memory,
+                    persistent_workers = num_workers>0,
                 )
                 for target, val in targetval.items()
             }
@@ -736,6 +737,7 @@ class LandcoverToLandcoverDataLoader:
                     shuffle=True,
                     num_workers=num_workers,
                     pin_memory=pin_memory,
+                    persistent_workers = num_workers>0,
                 )
                 for target, val in targetval.items()
             }
@@ -749,6 +751,7 @@ class LandcoverToLandcoverDataLoader:
                     shuffle=True,
                     num_workers=num_workers,
                     pin_memory=pin_memory,
+                    persistent_workers = num_workers>0,
                 )
                 for target, val in targetval.items()
             }

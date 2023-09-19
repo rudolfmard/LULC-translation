@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib.cm as cm
+import seaborn as sns
 from torch.nn import Softmax2d
 import torch
 from os.path import basename
@@ -14,6 +15,17 @@ coloring = {
     "mos.hdf5": cm.Set1.colors[5],
     "cgls.hdf5": cm.Set1.colors[6],
 }
+
+
+fmtImages = ".png"
+# Images will be saved under this format (suffix of plt.savefig)
+
+figureDir = "../figures"
+# Images will be saved in this directory (prefix of plt.savefig)
+
+storeImages = False
+# If True, figures are saved in files but not shown
+# If False, figures are not saved in files but always shown
 
 
 class plt_loss(object):
@@ -424,3 +436,29 @@ class plt_image(object):
             plt.show()
         plt.close(fig)
         fig = None
+
+def plot_confusion_matrix(dfcmx, accuracy_in_corner = False, annot=False, figname=None, figtitle=None):
+    """Heatmap of the confusion matrix coefficients"""
+    
+    if figtitle is None:
+        figtitle = "Confusion matrix"
+    if figname is None:
+        figname = "onepatchplot"
+    
+    fig = plt.figure(figsize=(12,10))
+    ax = sns.heatmap(dfcmx, annot=annot, cmap=sns.cubehelix_palette(as_cmap=True))
+    ax.set_title(figtitle)
+    ax.set_xlabel("Prediction")
+    ax.set_ylabel("Reference")
+    if accuracy_in_corner:
+        nx, ny = dfcmx.shape
+        oa = np.round(np.diag(dfcmx.values).sum()/dfcmx.values.sum(), 3)
+        ax.text(0.8*nx, 0.1*ny, f"OA={oa}", fontsize=18)
+    fig.add_axes(ax)
+    if storeImages:
+        figpath = os.path.join(figureDir, figname + fmtImages)
+        plt.savefig(figpath)
+        plt.close()
+        print("Figure saved:", figpath)
+    else:
+        plt.show(block=False)

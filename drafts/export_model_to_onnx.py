@@ -17,7 +17,8 @@ from mmt.inference import io
 # args = arg_parser.parse_args()
 
 # print(f"Exporting model to ONNX for xp_name={args.xp_name}, lc_in={}")
-xp_name = "vanilla_with_esgp_v2"
+xp_name = "vanilla_no0"
 lc_in = "esawc"
 lc_out = "esgp"
-io.export_pytorch_to_onnx(xp_name, lc_in, lc_out)
+onnxfilename = io.export_pytorch_to_onnx(xp_name, lc_in, lc_out)
+print(f"ONNX file saved at: {onnxfilename}")

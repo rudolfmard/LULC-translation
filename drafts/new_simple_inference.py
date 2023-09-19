@@ -10,24 +10,28 @@ import torch
 import matplotlib.pyplot as plt
 import rasterio.crs
 from mmt.inference import io
-from mmt.datasets import transforms as mmt_transforms
-import wopt.ml.utils
-from wopt.ml import (
-    landcovers,
-    transforms,
-    domains,
-)
+from mmt.utils import domains
+from mmt.utils import config as utilconf
+from mmt.datasets import landcovers
+from mmt.datasets import transforms
+from torchvision import transforms as tvt
+# import wopt.ml.utils
+# from wopt.ml import (
+    # landcovers,
+    # transforms,
+    # domains,
+# )
 
 # Configs
 #---------
-xp_name = "aaunet2"
+xp_name = "vanilla_no0"
 domainname = "dublin_city"
 lc_in="esawc"
 lc_out="esgp"
 usegpu = True
 device = torch.device("cuda" if usegpu else "cpu")
 
-woptconfig = wopt.ml.utils.load_config()
+# woptconfig = wopt.ml.utils.load_config()
 print(f"Executing program {sys.argv[0]} from {os.getcwd()}")
 
 
@@ -37,7 +41,7 @@ dst_crs = rasterio.crs.CRS.from_epsg(3035)
 
 print(f"Loading landcovers with CRS = {dst_crs}")
 in_lc = landcovers.ESAWorldCover(
-    transforms=transforms.fdiv_10_minus_1,
+    transforms = transforms.FloorDivMinus(10,1),
     crs = dst_crs,
 )
 in_lc.crs = dst_crs
@@ -53,10 +57,10 @@ out_lc.res=60
 qdomain = getattr(domains, domainname)
 qb = qdomain.to_tgbox(dst_crs)
 
-t1h = mmt_transforms.OneHot(in_lc.n_labels + 1, device = device)
+t1h = transforms.OneHot(in_lc.n_labels + 1, device = device)
 x = t1h(in_lc[qb]["mask"])
 k = out_lc.res/in_lc.res
-ccrop = transforms.t.CenterCrop(size=[int(k*(d // k)) for d in x.shape[-2:]])
+ccrop = tvt.CenterCrop(size=[int(k*(d // k)) for d in x.shape[-2:]])
 x = ccrop(x)
 
 # Loading model
@@ -73,5 +77,7 @@ with torch.no_grad():
 y = logits.detach().argmax(1).cpu()
 
 print(f"Show inference on {domainname}")
+in_lc.plot(in_lc[qb])
+out_lc.plot(out_lc[qb])
 out_lc.plot({"mask":y})
 plt.show(block=False)

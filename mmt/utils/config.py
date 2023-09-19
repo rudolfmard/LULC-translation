@@ -41,7 +41,6 @@ def id_generator(size = 6, chars = string.ascii_lowercase + string.digits, forbi
     idstr: str
         String of `size` characters randomly taken among `chars`
     """
-    
     idstr = "".join([random.choice(chars) for _ in range(size)])
     while forbidden in idstr:
         idstr = "".join([random.choice(chars) for _ in range(size)])
@@ -96,7 +95,6 @@ def get_config_from_json(json_file):
             print("INVALID JSON file format.. Please provide a good json file")
             exit(-1)
 
-
 def get_config_from_yaml(yaml_file):
     """
     Get the config from a YAML file
@@ -120,7 +118,7 @@ def get_config(config_file):
     if config_file.endswith(".yaml"):
         config = get_config_from_yaml(config_file)
     elif config_file.endswith(".json"):
-        config = get_config_from_json(config_file)
+        config, _ = get_config_from_json(config_file)
         config = convert_older_config(config)
     else:
         raise ValueError("Invalid config file. It must be a YAML or a JSON file")
@@ -129,7 +127,37 @@ def get_config(config_file):
 
 def convert_older_config(old_config):
     """Ensure backward compatibility with JSON config files used in version < 0.2"""
-    raise NotImplementedError
+    new_config = get_config_from_yaml(os.path.join(mmt_repopath, "configs", "new_config_template.yaml"))
+    
+    new_config.xp_name = old_config.exp_name
+    new_config.cuda = old_config.cuda
+    new_config.paths.data_dir = old_config.data_folder
+    
+    new_config.dimensions.n_channels_hiddenlay = old_config.number_of_feature_map
+    new_config.dimensions.n_channels_embedding = old_config.embedding_dim[0]
+    new_config.dimensions.n_px_embedding = old_config.embedding_dim[1]
+    
+    new_config.dataloader.params.datasets = old_config.datasets
+    new_config.dataloader.params.num_workers = old_config.data_loader_workers
+    
+    new_config.training.batch_size = old_config.train_batch_size
+    new_config.training.n_epochs = old_config.max_epoch
+    new_config.training.validate_every = old_config.validate_every
+    new_config.training.tensorboard = old_config.tensorboard
+    
+    new_config.model.type = old_config.model_type
+    new_config.model.name = old_config.model_name
+    new_config.model.use_pos = old_config.use_pos
+    if new_config.model.type in ["universal_embedding", "transformer_embedding"]:
+        params = new_config.model.params.keys()
+    else:
+        params = []
+    
+    new_config.model.params = {}
+    for k in params:
+        new_config.model.params[k] = old_config[k]
+    
+    return new_config
 
 def process_config(config_file, quiet=False):
     """Parse the configuration file, create experiment directories and set
