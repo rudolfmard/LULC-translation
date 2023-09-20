@@ -112,6 +112,12 @@ class GeoRectangle():
             self.extract_boundingbox_(points)
         elif fmt=="points":
             self.extract_boundingbox_(coords)
+        elif fmt=="tgbox":
+            assert isinstance(coords, TgeoBoundingBox), "With fmt='tgbox', the coords arg must be a torchgeo.BoundingBox"
+            self.min_longitude = coords.minx
+            self.max_longitude = coords.maxx
+            self.min_latitude = coords.miny
+            self.max_latitude = coords.maxy
         elif fmt=="epsg":
             if crs is None:
                 raise ValueError("Please provide in 'crs' the rasterio.crs.CRS of your coordinates when using fmt='epsg'") 
@@ -281,6 +287,9 @@ class GeoRectangle():
     def enlarge(self, factor):
         return enlarge_domain(self, factor)
     
+    def central_point(self):
+        return get_central_point(self)
+    
     def __str__(self):
         return ", ".join(
             [
@@ -351,6 +360,12 @@ def bbox_from_bboxs(bboxs):
     
     return GeoRectangle(pts, fmt="points")
 
+def get_central_point(domain):
+    """Return the coordinates of the points at the center of the rectangle"""
+    x = (domain.min_longitude + domain.max_longitude)/2
+    y = (domain.min_latitude + domain.max_latitude)/2
+    return x, y
+
 def enlarge_domain(domain, factor = 1):
     """Create a larger domain than the one provided. Suitable only for small domains.
     
@@ -414,3 +429,8 @@ jokioinen_crops = GeoRectangle([23.4278, 23.4913, 60.7896, 60.8204])
 reunion_crops = GeoRectangle([55.6638, 55.7004, -21.0505, -21.0150])
 # Small island
 savage_canary_island = GeoRectangle([-15.8935, -15.8517, 30.1319, 30.1677])
+# Another small island
+iso_kihdinluoto = GeoRectangle(TgeoBoundingBox(
+    minx=21.122670101126037, maxx=21.239336767792704, miny=60.483903274933496, maxy=60.60056994160016, mint=0.0, maxt=1000000000000.0
+), fmt="tgbox")
+
