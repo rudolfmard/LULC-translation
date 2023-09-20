@@ -53,7 +53,7 @@ device = torch.device("cuda" if usegpu else "cpu")
 
 print(f"Executing program {sys.argv[0]} in {os.getcwd()}")
 
-xp_name = "vanilla_with_esgp_v2"
+xp_name = "vanilla_no0"
 domainname = "freastern_eurat"
 n_val_patches = 60
 lc_in="esawc"
@@ -65,7 +65,7 @@ config = utilconf.get_config(
         "experiments",
         xp_name,
         "logs",
-        "config.json",
+        "config.yaml",
     )
 )
 
