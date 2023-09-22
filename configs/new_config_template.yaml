@@ -4,6 +4,8 @@ cuda: true
 paths:
     data_dir: <your data dir>
     experiments_dir: <your experiments dir>
+versions:
+    ecosgplus: 0.3.e2
 dimensions:
     n_channels_hiddenlay: 32
     n_channels_embedding: 50
@@ -28,9 +30,8 @@ model:
     name: UnivEmb
     use_pos: false
     params:
-        memory_monger: false
+        memory_monger: true
         up_mode: bilinear
-        #num_groups: 4
         decoder_depth: 1
         mode: light
         pooling_factors: [3,3,3,3,3]
