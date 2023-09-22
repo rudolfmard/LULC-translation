@@ -149,4 +149,4 @@ class FillMissingWithSea:
             x[x == self.missing_label] = self.sea_label
         return x
 
-EsawcTransform = tvt.Compose([FloorDivMinus(10, 1), FillMissingWithSea(-1, 7)])
+EsawcTransform = tvt.Compose([FloorDivMinus(10, 0), FillMissingWithSea(0, 8)])

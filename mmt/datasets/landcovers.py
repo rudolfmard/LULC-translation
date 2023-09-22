@@ -246,12 +246,12 @@ class EcoclimapSG(TorchgeoLandcover):
 class ESAWorldCover(TorchgeoLandcover):
     path = os.path.join(config.paths.data_dir, "tiff_data", "ESA-WorldCover-2021")#, "ESA_WorldCover_10m_2021_v200_60deg_macrotile_N30E000")
     labels = [
-        "Tree cover", "Shrubland", "Grassland", "Cropland", "Built-up",
+        "No data", "Tree cover", "Shrubland", "Grassland", "Cropland", "Built-up",
         "Bare/sparse veg.", "Snow and ice", "Permanent water bodies",
         "Herbaceous wetland", "Mangroves", "Moss and lichen"
     ]
     cmap = [
-        (0,100,0), (255, 187, 34), (255, 255, 76), (240, 150, 255), (250, 0, 0), (180, 180, 180),
+        (0,0,0), (0,100,0), (255, 187, 34), (255, 255, 76), (240, 150, 255), (250, 0, 0), (180, 180, 180),
         (240, 240, 240), (0, 100, 200), (0, 150, 160), (0, 207, 117), (250, 230, 160)
     ]
     crs = rasterio.crs.CRS.from_epsg(4326)
