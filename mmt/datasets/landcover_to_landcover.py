@@ -232,6 +232,7 @@ cmap_dict = {
         (128, 128, 128),
     ],
     "esawc.hdf5": [
+        (0, 0, 0),
         (0, 100, 0),
         (255, 187, 34),
         (255, 255, 76),
@@ -455,6 +456,7 @@ label_dict = {
         "33: LCZ10: heavy industry",
     ],
     "esawc.hdf5": [
+        "No data",
         "Tree cover",
         "Shrubland",
         "Grassland",
@@ -480,6 +482,20 @@ resolution_dict = { # Official geometric accuracy in metres
     "esawc.hdf5": 10,
 }
 
+cmap_dict.update(
+    {
+        f"{lcname}-{subset}.hdf5":cmap_dict[lcname + ".hdf5"]
+        for lcname in ["esawc", "ecosg", "esgp"]
+        for subset in ["train", "test", "val"]
+    }
+)
+label_dict.update(
+    {
+        f"{lcname}-{subset}.hdf5":label_dict[lcname + ".hdf5"]
+        for lcname in ["esawc", "ecosg", "esgp"]
+        for subset in ["train", "test", "val"]
+    }
+)
 
 class LandcoverToLandcover(Dataset):
     def __init__(
@@ -823,6 +839,7 @@ class LandcoverToLandcoverDataLoader:
         cmap="original",
         title=None,
     ):
+        
         with torch.no_grad():
             if len(inputs.shape) == 4:
                 inputs = torch.argmax(inputs[0], dim=0)

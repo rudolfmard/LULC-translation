@@ -8,8 +8,11 @@ from os.path import basename
 
 coloring = {
     "esawc.hdf5": cm.Set1.colors[0],
+    "esawc-train.hdf5": cm.Set1.colors[0],
     "esgp.hdf5": cm.Set1.colors[1],
+    "esgp-train.hdf5": cm.Set1.colors[1],
     "ecosg.hdf5": cm.Set1.colors[2],
+    "ecosg-train.hdf5": cm.Set1.colors[2],
     "clc.hdf5": cm.Set1.colors[3],
     "oso.hdf5": cm.Set1.colors[4],
     "mos.hdf5": cm.Set1.colors[5],
