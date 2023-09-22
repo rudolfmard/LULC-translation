@@ -8,13 +8,17 @@ Main
 -Run the agent
 """
 
+import matplotlib
 import argparse
 from mmt.utils import config as utilconf
 from mmt.agents import multiLULC
 
 
 def main():
-    # parse the path of the json config file
+    # Choose the appropriate backend (see: https://matplotlib.org/stable/users/explain/figure/backends.html)
+    matplotlib.use("AGG")
+    
+    # Parse the path of the json config file
     arg_parser = argparse.ArgumentParser(description="")
     arg_parser.add_argument(
         'config',
@@ -23,7 +27,7 @@ def main():
         help='The configuration file in YAML format')
     args = arg_parser.parse_args()
     
-    # parse the config json file
+    # Parse the config json file
     config = utilconf.process_config(args.config)
     
     # Create the Agent and pass all the configuration to it then run it..
