@@ -82,6 +82,7 @@ config = utilconf.get_config(
         "new_config_template.yaml"
     )
 )
+dump_dir = os.path.join(config.paths.data_dir, "large-domain-200")
 
 
 # Land cover loading
@@ -108,7 +109,6 @@ n_pxs = {"qflag":100, "esawc":600, "esgp":100, "ecosg":20}
 
 # Open HDF5 files
 #--------------------
-dump_dir = os.path.join(config.paths.data_dir, "large-domain-hdf5")
 h5_path = dict()
 h5f = dict()
 for subset in subsets:
@@ -188,6 +188,14 @@ while add_another_patch:
 #-----------------
 for subset in subsets:
     for lcname in lcmaps.keys():
+        h5f[subset][lcname].attrs["name"] = lcname
+        h5f[subset][lcname].attrs["year"] = 2023
+        h5f[subset][lcname].attrs["type"] = "raster"
+        h5f[subset][lcname].attrs["resolution"] = lcmaps[lcname].res
+        h5f[subset][lcname].attrs["patch_size"] = n_pxs[lcname]
+        h5f[subset][lcname].attrs["n_channels"] = 1
+        h5f[subset][lcname].attrs["numberclasses"] = lcmaps[lcname].n_labels
+        h5f[subset][lcname].attrs["label_definition"] = lcmaps[lcname].labels
         h5f[subset][lcname].close()
         print(f"File {h5_path[subset][lcname]} written.")
 
