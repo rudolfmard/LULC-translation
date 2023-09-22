@@ -30,7 +30,7 @@ default_bestmodel_filename = "model_best.pth.tar"
 default_checkpoint_filename = "checkpoint.pth.tar"
 
 class MultiLULCAgent(base.BaseAgent):
-    def __init__(self, config):
+    def __init__(self, config, startfrom = None):
         super().__init__(config)
 
         # Set device and RNG seed
@@ -112,7 +112,12 @@ class MultiLULCAgent(base.BaseAgent):
             misc.print_cuda_statistics()
         
         # Model Loading from the latest checkpoint if not found start from scratch.
-        self.load_checkpoint(default_checkpoint_filename)
+        if startfrom is None:
+            checkpoint_filename = default_checkpoint_filename
+        else:
+            checkpoint_filename = os.path.join(self.config.paths.experiments_dir, startfrom, "checkpoints", default_checkpoint_filename)
+        
+        self.load_checkpoint(checkpoint_filename)
         
         # Summary Writer
         if self.config.training.tensorboard:
@@ -134,8 +139,11 @@ class MultiLULCAgent(base.BaseAgent):
         :param file_name: name of the checkpoint file
         :return:
         """
-
-        filename = os.path.join(self.config.paths.checkpoint_dir, file_name)
+        if os.path.isfile(file_name):
+            filename = file_name
+        else:
+            filename = os.path.join(self.config.paths.checkpoint_dir, file_name)
+            
         try:
             self.logger.info(f"Loading checkpoint '{filename}'")
             checkpoint = torch.load(filename)
@@ -156,7 +164,7 @@ class MultiLULCAgent(base.BaseAgent):
 
             self.logger.info(
                 "Checkpoint loaded successfully from '{}' at (epoch {}) at (iteration {})\n".format(
-                    self.config.paths.checkpoint_dir,
+                    filename,
                     checkpoint["epoch"],
                     checkpoint["iteration"],
                 )
