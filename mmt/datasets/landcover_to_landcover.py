@@ -570,12 +570,64 @@ class LandcoverToLandcover(Dataset):
             sample = self.transform(sample)
         return sample
 
+class LandcoverToLandcoverNoJson(LandcoverToLandcover):
+    def __init__(
+        self,
+        path,
+        source,
+        target,
+        list_patch_id,
+        mode="train",
+        transform=None,
+        device="cuda",
+    ):
+        if "-" in source:
+            source.replace("train", mode)
+            target.replace("train", mode)
+            
+        self.source = source
+        self.target = target
+        self.source_dataset_path = os.path.join(path, source)
+        self.target_dataset_path = os.path.join(path, target)
+        self.device = device
+        self.list_patch_id = list_patch_id
+        self.transform = transform
+
+    def __getitem__(self, idx):
+        if not hasattr(self, "source_dataset"):
+            self.open_hdf5()
+        with torch.no_grad():
+            patch_id = self.list_patch_id[idx]
+            sample = {"patch_id": float(patch_id)}
+            
+            src = self.source_dataset.get(patch_id)
+            sample["source_data"] = torch.tensor(
+                src[:].astype(np.int64), dtype=torch.long, device=self.device
+            ).unsqueeze(0)  # .astype(float)
+            trg = self.target_dataset.get(patch_id)
+            sample["target_data"] = torch.tensor(
+                trg[:].astype(np.int64), dtype=torch.long, device=self.device
+            ).unsqueeze(0)
+            
+            sample["coordinate"] = (
+                src.attrs["x_coor"].astype(float),
+                src.attrs["y_coor"].astype(float),
+            )
+            
+            sample["source_name"] = self.source
+            sample["target_name"] = self.target
+            
+        if self.transform:
+            sample = self.transform(sample)
+        return sample
+
 
 class LandcoverToLandcoverDataLoader:
     def __init__(
         self,
         config,
         datasets,
+        dataset_class = "LandcoverToLandcover",
         to_one_hot=True,
         pos_enc=False,
         ampli=True,
@@ -662,10 +714,10 @@ class LandcoverToLandcoverDataLoader:
                 dic_list_transform[source][target] = Compose(
                     dic_list_transform[source][target]
                 )
-
+        DatasetClass = eval(dataset_class)
         self.train = {
             source: {
-                target: LandcoverToLandcover(
+                target: DatasetClass(
                     self.datadir,
                     source,
                     target,
@@ -681,7 +733,7 @@ class LandcoverToLandcoverDataLoader:
 
         self.valid = {
             source: {
-                target: LandcoverToLandcover(
+                target: DatasetClass(
                     self.datadir,
                     source,
                     target,
@@ -696,7 +748,7 @@ class LandcoverToLandcoverDataLoader:
         }
         self.test = {
             source: {
-                target: LandcoverToLandcover(
+                target: DatasetClass(
                     self.datadir,
                     source,
                     target,
@@ -882,3 +934,5 @@ class LandcoverToLandcoverDataLoader:
 
     def finalize(self):
         pass
+
+# EOF
