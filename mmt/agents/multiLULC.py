@@ -51,7 +51,7 @@ class MultiLULCAgent(base.BaseAgent):
         self.data_loader = DataLoader(
             config=self.config, **self.config.dataloader.params
         )
-        self.datasets = self.config.dataloader.params.datasets  # shortcut
+        self.datasets = self.data_loader.datasets  # shortcut
 
         # Get required param for network initialisation
         input_channels = self.data_loader.input_channels

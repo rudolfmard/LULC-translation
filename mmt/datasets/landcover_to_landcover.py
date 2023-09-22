@@ -19,6 +19,8 @@ from matplotlib.colors import LinearSegmentedColormap
 
 from mmt.datasets import transforms
 
+rmsuffix = transforms.rmsuffix
+
 # Length of one patch side in metres
 patch_size_metres = 6000
 
@@ -482,20 +484,21 @@ resolution_dict = { # Official geometric accuracy in metres
     "esawc.hdf5": 10,
 }
 
-cmap_dict.update(
-    {
-        f"{lcname}-{subset}.hdf5":cmap_dict[lcname + ".hdf5"]
-        for lcname in ["esawc", "ecosg", "esgp"]
-        for subset in ["train", "test", "val"]
-    }
-)
-label_dict.update(
-    {
-        f"{lcname}-{subset}.hdf5":label_dict[lcname + ".hdf5"]
-        for lcname in ["esawc", "ecosg", "esgp"]
-        for subset in ["train", "test", "val"]
-    }
-)
+# cmap_dict.update(
+    # {
+        # f"{lcname}-{subset}.hdf5":cmap_dict[lcname + ".hdf5"]
+        # for lcname in ["esawc", "ecosg", "esgp"]
+        # for subset in ["train", "test", "val"]
+    # }
+# )
+# label_dict.update(
+    # {
+        # f"{lcname}-{subset}.hdf5":label_dict[lcname + ".hdf5"]
+        # for lcname in ["esawc", "ecosg", "esgp"]
+        # for subset in ["train", "test", "val"]
+    # }
+# )
+
 
 class LandcoverToLandcover(Dataset):
     def __init__(
@@ -653,60 +656,96 @@ class LandcoverToLandcoverDataLoader:
         :param config:
         """
         self.config = config
-        self.datasets = datasets
         self.datadir = os.path.join(config.paths.data_dir, "hdf5_data")
         self.device = "cuda" if config.cuda else "cpu"
+        self.datasets = [rmsuffix(dataset) for dataset in datasets]
         
-        list_all_datasets = [
-            os.path.join(self.datadir, dataset) for dataset in self.datasets
+        full_path_datasets = [
+            os.path.join(self.datadir, dataset) for dataset in datasets
         ]
         self.input_channels = []
         self.output_channels = []
         self.real_patch_sizes = []
-        self.n_classes = {}
         self.nb_patch_per_dataset = []
+        self.n_classes = {}
         id_patch_per_dataset = {}
-        for dataset in list_all_datasets:
-            with h5py.File(dataset, "r") as f:
+        for fpds in full_path_datasets:
+            with h5py.File(fpds, "r") as f:
                 self.real_patch_sizes.append(int(f.attrs["patch_size"]))
-                self.n_classes[os.path.basename(dataset)] = int(f.attrs["numberclasses"])
                 self.input_channels.append(int(f.attrs["numberclasses"]) + 1)
                 self.output_channels.append(int(f.attrs["numberclasses"]) + 1)
                 self.nb_patch_per_dataset.append(len(f.keys()))
-                id_patch_per_dataset[dataset] = list(f.keys())
+                self.n_classes[rmsuffix(os.path.basename(fpds))] = int(f.attrs["numberclasses"])
+                id_patch_per_dataset[fpds] = list(f.keys())
             
         self.couple_patch_per_dataset = {}
+        nested_dict_datasets = {}
         self.total_couple = 0
-        for source in list_all_datasets:
-            tmp = {}
-            for target in list_all_datasets:
-                if source != target:
+        for fpsrc in full_path_datasets:
+            innerdict_inter = {}
+            innerdict_none = {}
+            for fptrg in full_path_datasets:
+                if fpsrc != fptrg:
                     inter = list(
                         set.intersection(
-                            set(id_patch_per_dataset[source]),
-                            set(id_patch_per_dataset[target]),
+                            set(id_patch_per_dataset[fpsrc]),
+                            set(id_patch_per_dataset[fptrg]),
                         )
                     )
                     if len(inter) > 0:
-                        tmp[os.path.basename(target)] = inter
+                        innerdict_inter[os.path.basename(fptrg)] = inter
+                        innerdict_none[rmsuffix(os.path.basename(fptrg))] = None
                         self.total_couple += len(inter)
-            self.couple_patch_per_dataset[os.path.basename(source)] = tmp
+                    
+                
+            self.couple_patch_per_dataset[os.path.basename(fpsrc)] = innerdict_inter
+            nested_dict_datasets[rmsuffix(os.path.basename(fpsrc))] = innerdict_none
         
+        """At this point we have the following:
+        
+        couple_patch_per_dataset = {
+            'ecosg-train.hdf5':
+                {
+                    'esawc-train.hdf5': ['79', '3', ...],
+                    'esgp-train.hdf5': ['79', '3', ...],
+                },
+            'esawc-train.hdf5': 
+                {
+                    'ecosg-train.hdf5': ['79', '3', ...],
+                    'esgp-train.hdf5': ['79', '3', ...],
+                },
+                ...
+        } --> will be used to correctly instanciate the DatasetClasses
+        
+        nested_dict_datasets = {
+            'ecosg.hdf5':
+                {
+                    'esawc.hdf5': None,
+                    'esgp.hdf5': None,
+                },
+            'esawc.hdf5': 
+                {
+                    'ecosg.hdf5': None,
+                    'esgp.hdf5': None,
+                },
+                ...
+        } --> will be used to loop on the datasets
+        """
         self.nb_patch_per_dataset = np.array(self.nb_patch_per_dataset)
         self.nb_patch_per_dataset = (
             self.nb_patch_per_dataset / self.nb_patch_per_dataset.sum()
         )
-
+        
         dic_list_transform = {
-            source: {target: [] for target, val in targetval.items()}
-            for source, targetval in self.couple_patch_per_dataset.items()
+            source: {target: [] for target, _ in targetval.items()}
+            for source, targetval in nested_dict_datasets.items()
         }
         dic_list_train_transform = {
-            source: {target: [] for target, val in targetval.items()}
-            for source, targetval in self.couple_patch_per_dataset.items()
+            source: {target: [] for target, _ in targetval.items()}
+            for source, targetval in nested_dict_datasets.items()
         }
-        for source, targetval in self.couple_patch_per_dataset.items():
-            for target, val in targetval.items():
+        for source, targetval in nested_dict_datasets.items():
+            for target, _ in targetval.items():
                 if ampli:
                     dic_list_train_transform[source][target].append(
                         transforms.FlipTransform()
@@ -732,14 +771,14 @@ class LandcoverToLandcoverDataLoader:
                 )
         DatasetClass = eval(dataset_class)
         self.train = {
-            source: {
-                target: DatasetClass(
+            rmsuffix(source): {
+                rmsuffix(target): DatasetClass(
                     self.datadir,
                     source,
                     target,
                     val,
                     mode="train",
-                    transform=dic_list_train_transform[source][target],
+                    transform=dic_list_train_transform[rmsuffix(source)][rmsuffix(target)],
                     device=self.device,
                 )
                 for target, val in targetval.items()
@@ -748,14 +787,14 @@ class LandcoverToLandcoverDataLoader:
         }
 
         self.valid = {
-            source: {
-                target: DatasetClass(
+            rmsuffix(source): {
+                rmsuffix(target): DatasetClass(
                     self.datadir,
                     source,
                     target,
                     val,
                     mode="validation",
-                    transform=dic_list_transform[source][target],
+                    transform=dic_list_transform[rmsuffix(source)][rmsuffix(target)],
                     device=self.device,
                 )
                 for target, val in targetval.items()
@@ -763,14 +802,14 @@ class LandcoverToLandcoverDataLoader:
             for source, targetval in self.couple_patch_per_dataset.items()
         }
         self.test = {
-            source: {
-                target: DatasetClass(
+            rmsuffix(source): {
+                rmsuffix(target): DatasetClass(
                     self.datadir,
                     source,
                     target,
                     val,
                     mode="test",
-                    transform=dic_list_transform[source][target],
+                    transform=dic_list_transform[rmsuffix(source)][rmsuffix(target)],
                     device=self.device,
                 )
                 for target, val in targetval.items()

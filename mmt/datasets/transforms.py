@@ -1,8 +1,21 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Multiple land-cover/land-use Maps Translation (MMT)
+
+Transforms
+"""
 import torch
 import numpy as np
 import torchvision.transforms.functional as TF
 import torchvision.transforms as tvt
 import random
+
+def rmsuffix(s, startchar = "-", stopchar = "."):
+    """Remove suffix between `startchar` and `stopchar`"""
+    if startchar in s:
+        return s.split(startchar)[0] + stopchar + s.split(stopchar)[1]
+    else:
+        return s
 
 class OneHot:
     def __init__(self, nclasses = -1, device = "cpu", dtype=torch.float, key="mask"):
@@ -65,7 +78,7 @@ class ToOneHot(object):
             for k in self.ind:
                 sample[k.replace("_data", "_one_hot")] = self.one_hot_embedding(
                     sample[k].long(),
-                    num_classes=self.nclasses[sample[k.replace("_data", "_name")]] + 1,
+                    num_classes=self.nclasses[rmsuffix(sample[k.replace("_data", "_name")])] + 1,
                 ).permute(0, 3, 1, 2,)[0]
         return sample
 
@@ -125,7 +138,7 @@ class FlipTransform:
 
 class FloorDivMinus:
     """Floor division and substraction"""
-    def __init__(self, div = 10, minus = 1):
+    def __init__(self, div = 10, minus = 0):
         self.div = div
         self.minus = minus
     
