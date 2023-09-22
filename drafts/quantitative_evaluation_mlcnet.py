@@ -55,7 +55,7 @@ print(f"Executing program {sys.argv[0]} in {os.getcwd()}")
 
 xp_name = "vanilla_no0"
 domainname = "freastern_eurat"
-n_val_patches = 60
+n_val_patches = 1000
 lc_in="esawc"
 lc_out="esgp"
 

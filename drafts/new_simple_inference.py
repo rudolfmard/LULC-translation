@@ -37,26 +37,26 @@ print(f"Executing program {sys.argv[0]} from {os.getcwd()}")
 
 # Landcovers
 #------------
-print(f"Loading landcovers with native CRS")
-in_lc = landcovers.ESAWorldCover(
-    transforms = transforms.FloorDivMinus(10,1),
-)
-out_lc = landcovers.EcoclimapSGplus()
-dst_crs = in_lc.crs
-
-# dst_crs = rasterio.crs.CRS.from_epsg(3035)
-
-# print(f"Loading landcovers with CRS = {dst_crs}")
+# print(f"Loading landcovers with native CRS")
 # in_lc = landcovers.ESAWorldCover(
     # transforms = transforms.FloorDivMinus(10,1),
-    # crs = dst_crs,
 # )
-# in_lc.crs = dst_crs
-# in_lc.res = 10
+# out_lc = landcovers.EcoclimapSGplus()
+# dst_crs = in_lc.crs
 
-# out_lc = landcovers.EcoclimapSGplus(crs=dst_crs, res=60)
-# out_lc.crs=dst_crs
-# out_lc.res=60
+dst_crs = rasterio.crs.CRS.from_epsg(3035)
+
+print(f"Loading landcovers with CRS = {dst_crs}")
+in_lc = landcovers.ESAWorldCover(
+    transforms = transforms.FloorDivMinus(10,1),
+    crs = dst_crs,
+)
+in_lc.crs = dst_crs
+in_lc.res = 10
+
+out_lc = landcovers.EcoclimapSGplus(crs=dst_crs, res=60)
+out_lc.crs=dst_crs
+out_lc.res=60
 
 
 # Loading query
