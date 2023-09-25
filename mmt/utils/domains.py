@@ -290,6 +290,9 @@ class GeoRectangle():
     def central_point(self):
         return get_central_point(self)
     
+    def centred_fixed_size(self, n_px, res):
+        return centred_fixed_size(self, n_px, res)
+    
     def __str__(self):
         return ", ".join(
             [
@@ -366,6 +369,17 @@ def get_central_point(domain):
     y = (domain.min_latitude + domain.max_latitude)/2
     return x, y
 
+def centred_fixed_size(domain, n_px, res):
+    """Return a `GeoRectangle` with the same center as the one provided and
+    with `n_px` pixels in each direction.
+    """
+    cp = domain.central_point()
+    xmin = cp[0] - (n_px // 2) * res
+    xmax = cp[0] + (n_px // 2) * res
+    ymin = cp[1] - (n_px // 2) * res
+    ymax = cp[1] + (n_px // 2) * res
+    return GeoRectangle([xmin, xmax, ymin, ymax])
+
 def enlarge_domain(domain, factor = 1):
     """Create a larger domain than the one provided. Suitable only for small domains.
     
@@ -425,6 +439,11 @@ ngambe_jungle = GeoRectangle([10.5992, 10.6443, 4.2156, 4.2581])
 mars_cevennes = GeoRectangle([3.5389, 3.5836, 43.9913, 44.0259])
 # Northern crops and forest
 jokioinen_crops = GeoRectangle([23.4278, 23.4913, 60.7896, 60.8204])
+# # Portugese crops and forest
+portugese_crops = GeoRectangle(
+    [-7.0984782206142825, -7.0781569753000895, 40.759403727839384, 40.77504037344005],
+    fmt = "llmm"
+)
 # Reunion crops and forest
 reunion_crops = GeoRectangle([55.6638, 55.7004, -21.0505, -21.0150])
 # Small island
