@@ -9,6 +9,7 @@ import numpy as np
 import torchvision.transforms.functional as TF
 import torchvision.transforms as tvt
 import random
+from pyproj import Transformer
 
 def rmsuffix(s, startchar = "-", stopchar = "."):
     """Remove suffix between `startchar` and `stopchar`"""
@@ -95,6 +96,45 @@ class CoordEnc(object):
     def __call__(self, sample):
         x, y = sample["coordinate"]
         x, y = x / 10000, y / 10000
+        enc = np.zeros(self.d * 2)
+        enc[0 : self.d : 2] = np.sin(x * self.freq)
+        enc[1 : self.d : 2] = np.cos(x * self.freq)
+        enc[self.d :: 2] = np.sin(y * self.freq)
+        enc[self.d + 1 :: 2] = np.cos(y * self.freq)
+        sample["coordenc"] = enc
+        return sample
+
+class ToLonLat:
+    """Convert easting and northing from given CRS to regular lat-lon"""
+    
+    def __init__(self, source_crs, target_crs = "EPSG:4326"):
+        self.target_crs = target_crs
+        if hasattr(source_crs, "to_string"):
+            self.source_crs = source_crs.to_string()
+        else:
+            self.source_crs = source_crs
+        
+        self.trans = Transformer.from_crs(source_crs, target_crs, always_xy = True)
+    
+    def __call__(self, sample):
+        x, y = sample["coordinate"]
+        lon, lat = self.trans.transform(x, y)
+        sample["coordinate"] = (lon, lat)
+        return sample
+
+class GeolocEncoder:
+    """Encode lon/lat coordinates, as per Vaswani et al. (2017).
+    
+    Assume lon/lat coordinates are stored in degrees (as in EPSG:4326).
+    Default value adapted to better represent variability over the globe
+    (n = 400 instead of 10000)"""
+    def __init__(self, d = 128, n = 400):
+        self.d = int(d / 2)
+        self.d_i = np.arange(0, self.d / 2)
+        self.freq = 1 / (n ** (2 * self.d_i / self.d))
+    
+    def __call__(self, sample):
+        x, y = sample["coordinate"]
         enc = np.zeros(self.d * 2)
         enc[0 : self.d : 2] = np.sin(x * self.freq)
         enc[1 : self.d : 2] = np.cos(x * self.freq)
