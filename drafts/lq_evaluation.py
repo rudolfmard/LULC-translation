@@ -31,7 +31,7 @@ device = "cuda" if usegpu else "cpu"
 
 print(f"Executing program {sys.argv[0]} in {os.getcwd()}")
 
-xp_name = "vanilla"
+xp_name = "vanilla_eurat"
 val_domains = ["snaefell_glacier", "dublin_city", "iso_kihdinluoto", "portugese_crops"]
 
 
@@ -80,5 +80,11 @@ for i, domainname in enumerate(val_domains):
     
     
 [ax.axis("off") for ax in axs.ravel()]
+cols = ["ESAWC", "ECOSG+", "ECOSG", "ESAWC -> ECOSG+", "ECOSG -> ECOSG+"]
+for ax, col in zip(axs[0], cols):
+    ax.set_title(col)
+
+title = f"From xp {xp_name}"
+plt.suptitle(title)
 plt.tight_layout()
 plt.show(block=False)
