@@ -374,10 +374,10 @@ def centred_fixed_size(domain, n_px, res):
     with `n_px` pixels in each direction.
     """
     cp = domain.central_point()
-    xmin = cp[0] - (n_px // 2) * res
-    xmax = cp[0] + (n_px // 2) * res
-    ymin = cp[1] - (n_px // 2) * res
-    ymax = cp[1] + (n_px // 2) * res
+    xmin = cp[0] - (n_px / 2) * res
+    xmax = cp[0] + (n_px / 2) * res
+    ymin = cp[1] - (n_px / 2) * res
+    ymax = cp[1] + (n_px / 2) * res
     return GeoRectangle([xmin, xmax, ymin, ymax])
 
 def enlarge_domain(domain, factor = 1):
