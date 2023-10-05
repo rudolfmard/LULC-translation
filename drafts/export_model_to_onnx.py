@@ -17,8 +17,10 @@ from mmt.inference import io
 # args = arg_parser.parse_args()
 
 # print(f"Exporting model to ONNX for xp_name={args.xp_name}, lc_in={}")
-xp_name = "vanilla_no0"
-lc_in = "esawc"
-lc_out = "esgp"
-onnxfilename = io.export_pytorch_to_onnx(xp_name, lc_in, lc_out)
-print(f"ONNX file saved at: {onnxfilename}")
+xp_name = "vanilla_eurat"
+io.export_autoencoder_to_onnx(xp_name, lc_in = "esawc", lc_out = "encoder")
+io.export_autoencoder_to_onnx(xp_name, lc_in = "ecosg", lc_out = "encoder")
+io.export_autoencoder_to_onnx(xp_name, lc_in = "esgp", lc_out = "encoder")
+io.export_autoencoder_to_onnx(xp_name, lc_in = "esgp", lc_out = "decoder")
+io.export_autoencoder_to_onnx(xp_name, lc_in = "esawc", lc_out = "esgp")
+io.export_position_encoder_to_onnx(xp_name)

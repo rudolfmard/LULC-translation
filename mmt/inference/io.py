@@ -11,6 +11,7 @@ from torch import nn
 from mmt import _repopath_ as mmt_repopath
 from mmt.graphs.models import (
     universal_embedding,
+    position_encoding,
     transformer_embedding,
     attention_autoencoder
 )
@@ -225,11 +226,7 @@ def load_pytorch_model(xp_name, lc_in="esawc", lc_out="esgp"):
         "model_best.pth.tar",
     )
     assert os.path.isfile(checkpoint_path), f"No checkpoint found at {checkpoint_path}"
-
-    res_in = landcover_to_landcover.resolution_dict[lc_in + ".hdf5"]
-    res_out = landcover_to_landcover.resolution_dict[lc_out + ".hdf5"]
-    n_channels_in = len(landcover_to_landcover.label_dict[lc_in + ".hdf5"]) + 1
-    n_channels_out = len(landcover_to_landcover.label_dict[lc_out + ".hdf5"]) + 1
+    checkpoint = torch.load(checkpoint_path)
     
     if config.model.type == "transformer_embedding":
         EncDec = getattr(transformer_embedding, config.model.name)
@@ -240,6 +237,9 @@ def load_pytorch_model(xp_name, lc_in="esawc", lc_out="esgp"):
     else:
         raise ValueError(f"Unknown model.type = {config.model.type}. Please change config to one among ['transformer_embedding', 'universal_embedding', 'attention_autoencoder']")
     
+    res_in = landcover_to_landcover.resolution_dict[lc_in + ".hdf5"]
+    n_channels_in = len(landcover_to_landcover.label_dict[lc_in + ".hdf5"]) + 1
+    
     autoenc_in = EncDec(
         n_channels_in,
         n_channels_in,
@@ -248,45 +248,146 @@ def load_pytorch_model(xp_name, lc_in="esawc", lc_out="esgp"):
         n_channels_embedding = config.dimensions.n_channels_embedding,
         **config.model.params
     )
-    autoenc_out = EncDec(
-        n_channels_out,
-        n_channels_out,
-        resize = get_resize_from_mapname(lc_out, config),
-        n_channels_hiddenlay = config.dimensions.n_channels_hiddenlay,
-        n_channels_embedding = config.dimensions.n_channels_embedding,
-        **config.model.params
-    )
-    
-    checkpoint = torch.load(checkpoint_path)
     
     autoenc_in.load_state_dict(checkpoint[f"encoder_state_dict_{lc_in}.hdf5"])
-    autoenc_out.load_state_dict(checkpoint[f"encoder_state_dict_{lc_out}.hdf5"])
     
-    model = nn.Sequential(
-        autoenc_in.encoder,
-        autoenc_out.decoder
-    )
+    if lc_out not in ["encoder", "decoder"]:
+        res_out = landcover_to_landcover.resolution_dict[lc_out + ".hdf5"]
+        n_channels_out = len(landcover_to_landcover.label_dict[lc_out + ".hdf5"]) + 1
+        
+        autoenc_out = EncDec(
+            n_channels_out,
+            n_channels_out,
+            resize = get_resize_from_mapname(lc_out, config),
+            n_channels_hiddenlay = config.dimensions.n_channels_hiddenlay,
+            n_channels_embedding = config.dimensions.n_channels_embedding,
+            **config.model.params
+        )
+        
+        autoenc_out.load_state_dict(checkpoint[f"encoder_state_dict_{lc_out}.hdf5"])
+        
+    print(f"Loaded model at epoch {checkpoint['epoch']}, iteration {checkpoint['iteration']}")
+    
+    if lc_out == "encoder":
+        model = autoenc_in.encoder
+    elif lc_out == "decoder":
+        model = autoenc_in.decoder
+    else:
+        model = nn.Sequential(
+            autoenc_in.encoder,
+            autoenc_out.decoder
+        )
     
     return model
 
-def export_pytorch_to_onnx(xp_name, lc_in="esawc", lc_out="esgp", onnxfilename = "[default].onnx"):
+def export_position_encoder_to_onnx(xp_name, lc_name = "esawc", onnxfilename = "[default].onnx"):
     """Load the Pytorch model and export it to the ONNX format"""
     
     if "[default]" in onnxfilename:
         onnxfilename = onnxfilename.replace(
-            "[default]",
+            "[default]", "position_encoder"
+        )
+    if not os.path.isabs(onnxfilename):
+        onnxfilename = os.path.join(
+            mmt_repopath, "experiments", xp_name, "checkpoints", onnxfilename
+        )
+    
+    try:
+        config = utilconf.get_config(
             os.path.join(
-                mmt_repopath, "experiments", xp_name, "checkpoints", f"{lc_in}_to_{lc_out}"
+                mmt_repopath,
+                "experiments",
+                xp_name,
+                "logs",
+                "config.yaml",
+            )
+        )
+    except:
+        print("Loading old JSON config")
+        config = utilconf.get_config(
+            os.path.join(
+                mmt_repopath,
+                "experiments",
+                xp_name,
+                "logs",
+                "config.json",
+            )
+        )
+    
+    checkpoint_path = os.path.join(
+        mmt_repopath,
+        "experiments",
+        xp_name,
+        "checkpoints",
+        "model_best.pth.tar",
+    )
+    assert os.path.isfile(checkpoint_path), f"No checkpoint found at {checkpoint_path}"
+    
+    model = position_encoding.PositionEncoder(
+        n_channels_embedding = config.dimensions.n_channels_embedding
+    )
+    
+    checkpoint = torch.load(checkpoint_path)
+    
+    model.load_state_dict(checkpoint[f"image_state_dict_{lc_name}.hdf5"])
+    
+    x = torch.rand(model.d)
+    
+    torch.onnx.export(model, x, onnxfilename, input_names=["pos_enc"], output_names=["reduced_pos_enc"])
+    print(f"Saved: {onnxfilename}")
+    
+    return onnxfilename
+
+def export_pytorch_to_onnx(xp_name, lc_in="esawc", lc_out="esgp", onnxfilename = "[default].onnx"):
+    """Load the Pytorch model and export it to the ONNX format"""
+    print("Name change: use `export_autoencoder_to_onnx` instead")
+    return export_autoencoder_to_onnx(xp_name, lc_in, lc_out, onnxfilename)
+
+def export_autoencoder_to_onnx(xp_name, lc_in="esawc", lc_out="esgp", onnxfilename = "[default].onnx"):
+    """Load the Pytorch model and export it to the ONNX format"""
+    
+    if "[default]" in onnxfilename:
+        onnxfilename = onnxfilename.replace(
+            "[default]", f"{lc_in}_{lc_out}"
+        )
+    if not os.path.isabs(onnxfilename):
+        onnxfilename = os.path.join(
+            mmt_repopath, "experiments", xp_name, "checkpoints", onnxfilename
+        )
+    
+    try:
+        config = utilconf.get_config(
+            os.path.join(
+                mmt_repopath,
+                "experiments",
+                xp_name,
+                "logs",
+                "config.yaml",
+            )
+        )
+    except:
+        print("Loading old JSON config")
+        config = utilconf.get_config(
+            os.path.join(
+                mmt_repopath,
+                "experiments",
+                xp_name,
+                "logs",
+                "config.json",
             )
         )
     
     model = load_pytorch_model(xp_name, lc_in=lc_in, lc_out=lc_out)
     
-    res_in = landcover_to_landcover.resolution_dict[lc_in + ".hdf5"]
-    n_channels_in = len(landcover_to_landcover.label_dict[lc_in + ".hdf5"]) + 1
-    n_px = patch_size_metres // res_in
+    if lc_out == "decoder":
+        n_channels_in = config.dimensions.n_channels_embedding
+        n_px = config.dimensions.n_px_embedding
+    else:
+        n_channels_in = len(landcover_to_landcover.label_dict[lc_in + ".hdf5"]) + 1
+        n_px = patch_size_metres // landcover_to_landcover.resolution_dict[lc_in + ".hdf5"]
     
     x = torch.rand(1, n_channels_in, n_px, n_px)
     torch.onnx.export(model, x, onnxfilename, input_names=[lc_in], output_names=[lc_out])
+    print(f"Saved: {onnxfilename}")
     
     return onnxfilename
