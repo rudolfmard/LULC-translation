@@ -19,6 +19,7 @@ def rmsuffix(s, startchar = "-", stopchar = "."):
         return s
 
 class OneHot:
+    """One hot encoding of land cover patches"""
     def __init__(self, nclasses = -1, device = "cpu", dtype=torch.float, key="mask"):
         self.nclasses = nclasses
         self.dtype = dtype
@@ -117,9 +118,11 @@ class ToLonLat:
         self.trans = Transformer.from_crs(source_crs, target_crs, always_xy = True)
     
     def __call__(self, sample):
-        x, y = sample["coordinate"]
-        lon, lat = self.trans.transform(x, y)
-        sample["coordinate"] = (lon, lat)
+        if self.target_crs != self.source_crs:
+            x, y = sample["coordinate"]
+            lon, lat = self.trans.transform(x, y)
+            sample["coordinate"] = (lon, lat)
+        
         return sample
 
 class GeolocEncoder:
@@ -128,7 +131,7 @@ class GeolocEncoder:
     Assume lon/lat coordinates are stored in degrees (as in EPSG:4326).
     Default value adapted to better represent variability over the globe
     (n = 400 instead of 10000)"""
-    def __init__(self, d = 128, n = 400):
+    def __init__(self, d = 128, n = 360):
         self.d = int(d / 2)
         self.d_i = np.arange(0, self.d / 2)
         self.freq = 1 / (n ** (2 * self.d_i / self.d))

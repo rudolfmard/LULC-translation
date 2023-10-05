@@ -761,6 +761,12 @@ class LandcoverToLandcoverDataLoader:
                     dic_list_transform[source][target].append(
                         transforms.CoordEnc(self.n_classes.keys())
                     )
+                    # dic_list_transform[source][target].append(
+                        # transforms.ToLonLat(source_crs = "EPSG:2154")
+                    # )
+                    # dic_list_transform[source][target].append(
+                        # transforms.GeolocEncoder()
+                    # )
                 
                 dic_list_train_transform[source][target] = Compose(
                     dic_list_train_transform[source][target]
@@ -991,4 +997,233 @@ class LandcoverToLandcoverDataLoader:
     def finalize(self):
         pass
 
+
+class LandcoverToLandcoverDataLoaderNewPosenc(LandcoverToLandcoverDataLoader):
+    
+    def __init__(
+        self,
+        config,
+        datasets,
+        dataset_class = "LandcoverToLandcover",
+        to_one_hot=True,
+        pos_enc=False,
+        ampli=True,
+        num_workers=4,
+    ):
+        """
+        :param config:
+        """
+        self.config = config
+        self.datadir = os.path.join(config.paths.data_dir, "hdf5_data")
+        self.device = "cuda" if config.cuda else "cpu"
+        self.datasets = [rmsuffix(dataset) for dataset in datasets]
+        
+        full_path_datasets = [
+            os.path.join(self.datadir, dataset) for dataset in datasets
+        ]
+        self.input_channels = []
+        self.output_channels = []
+        self.real_patch_sizes = []
+        self.nb_patch_per_dataset = []
+        self.patches_crs = []
+        self.n_classes = {}
+        id_patch_per_dataset = {}
+        for fpds in full_path_datasets:
+            with h5py.File(fpds, "r") as f:
+                self.real_patch_sizes.append(int(f.attrs["patch_size"]))
+                self.input_channels.append(int(f.attrs["numberclasses"]) + 1)
+                self.output_channels.append(int(f.attrs["numberclasses"]) + 1)
+                self.nb_patch_per_dataset.append(len(f.keys()))
+                self.n_classes[rmsuffix(os.path.basename(fpds))] = int(f.attrs["numberclasses"])
+                id_patch_per_dataset[fpds] = list(f.keys())
+            
+        self.couple_patch_per_dataset = {}
+        nested_dict_datasets = {}
+        self.total_couple = 0
+        for fpsrc in full_path_datasets:
+            innerdict_inter = {}
+            innerdict_none = {}
+            for fptrg in full_path_datasets:
+                if fpsrc != fptrg:
+                    inter = list(
+                        set.intersection(
+                            set(id_patch_per_dataset[fpsrc]),
+                            set(id_patch_per_dataset[fptrg]),
+                        )
+                    )
+                    if len(inter) > 0:
+                        innerdict_inter[os.path.basename(fptrg)] = inter
+                        innerdict_none[rmsuffix(os.path.basename(fptrg))] = None
+                        self.total_couple += len(inter)
+                    
+                
+            self.couple_patch_per_dataset[os.path.basename(fpsrc)] = innerdict_inter
+            nested_dict_datasets[rmsuffix(os.path.basename(fpsrc))] = innerdict_none
+        
+        """At this point we have the following:
+        
+        couple_patch_per_dataset = {
+            'ecosg-train.hdf5':
+                {
+                    'esawc-train.hdf5': ['79', '3', ...],
+                    'esgp-train.hdf5': ['79', '3', ...],
+                },
+            'esawc-train.hdf5': 
+                {
+                    'ecosg-train.hdf5': ['79', '3', ...],
+                    'esgp-train.hdf5': ['79', '3', ...],
+                },
+                ...
+        } --> will be used to correctly instanciate the DatasetClasses
+        
+        nested_dict_datasets = {
+            'ecosg.hdf5':
+                {
+                    'esawc.hdf5': None,
+                    'esgp.hdf5': None,
+                },
+            'esawc.hdf5': 
+                {
+                    'ecosg.hdf5': None,
+                    'esgp.hdf5': None,
+                },
+                ...
+        } --> will be used to loop on the datasets
+        """
+        self.nb_patch_per_dataset = np.array(self.nb_patch_per_dataset)
+        self.nb_patch_per_dataset = (
+            self.nb_patch_per_dataset / self.nb_patch_per_dataset.sum()
+        )
+        
+        dic_list_transform = {
+            source: {target: [] for target, _ in targetval.items()}
+            for source, targetval in nested_dict_datasets.items()
+        }
+        dic_list_train_transform = {
+            source: {target: [] for target, _ in targetval.items()}
+            for source, targetval in nested_dict_datasets.items()
+        }
+        for source, targetval in nested_dict_datasets.items():
+            for target, _ in targetval.items():
+                if ampli:
+                    dic_list_train_transform[source][target].append(
+                        transforms.FlipTransform()
+                    )
+                    dic_list_train_transform[source][target].append(
+                        transforms.RotationTransform([0, 90, 180, 270])
+                    )
+                if to_one_hot:
+                    dic_list_transform[source][target].append(
+                        transforms.ToOneHot(self.n_classes)
+                    )
+                if pos_enc:
+                    # dic_list_transform[source][target].append(
+                        # transforms.ToLonLat(source_crs = "EPSG:2154")
+                    # )
+                    dic_list_transform[source][target].append(
+                        transforms.GeolocEncoder()
+                    )
+                
+                dic_list_train_transform[source][target] = Compose(
+                    dic_list_train_transform[source][target]
+                    + dic_list_transform[source][target]
+                )
+                dic_list_transform[source][target] = Compose(
+                    dic_list_transform[source][target]
+                )
+        DatasetClass = eval(dataset_class)
+        self.train = {
+            rmsuffix(source): {
+                rmsuffix(target): DatasetClass(
+                    self.datadir,
+                    source,
+                    target,
+                    val,
+                    mode="train",
+                    transform=dic_list_train_transform[rmsuffix(source)][rmsuffix(target)],
+                    device=self.device,
+                )
+                for target, val in targetval.items()
+            }
+            for source, targetval in self.couple_patch_per_dataset.items()
+        }
+
+        self.valid = {
+            rmsuffix(source): {
+                rmsuffix(target): DatasetClass(
+                    self.datadir,
+                    source,
+                    target,
+                    val,
+                    mode="validation",
+                    transform=dic_list_transform[rmsuffix(source)][rmsuffix(target)],
+                    device=self.device,
+                )
+                for target, val in targetval.items()
+            }
+            for source, targetval in self.couple_patch_per_dataset.items()
+        }
+        self.test = {
+            rmsuffix(source): {
+                rmsuffix(target): DatasetClass(
+                    self.datadir,
+                    source,
+                    target,
+                    val,
+                    mode="test",
+                    transform=dic_list_transform[rmsuffix(source)][rmsuffix(target)],
+                    device=self.device,
+                )
+                for target, val in targetval.items()
+            }
+            for source, targetval in self.couple_patch_per_dataset.items()
+        }
+        
+        if self.device == "cpu":
+            pin_memory = True
+        else:
+            pin_memory = False
+        
+        self.train_loader = {
+            source: {
+                target: DataLoader(
+                    val,
+                    batch_size=self.config.training.batch_size,
+                    shuffle=True,
+                    num_workers=num_workers,
+                    pin_memory=pin_memory,
+                    persistent_workers = num_workers>0,
+                )
+                for target, val in targetval.items()
+            }
+            for source, targetval in self.train.items()
+        }
+        self.valid_loader = {
+            source: {
+                target: DataLoader(
+                    val,
+                    batch_size=self.config.training.batch_size,
+                    shuffle=True,
+                    num_workers=num_workers,
+                    pin_memory=pin_memory,
+                    persistent_workers = num_workers>0,
+                )
+                for target, val in targetval.items()
+            }
+            for source, targetval in self.valid.items()
+        }
+        self.test_loader = {
+            source: {
+                target: DataLoader(
+                    val,
+                    batch_size=self.config.training.batch_size,
+                    shuffle=True,
+                    num_workers=num_workers,
+                    pin_memory=pin_memory,
+                    persistent_workers = num_workers>0,
+                )
+                for target, val in targetval.items()
+            }
+            for source, targetval in self.test.items()
+        }
 # EOF

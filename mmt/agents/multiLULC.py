@@ -15,6 +15,7 @@ import torch.optim as optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from mmt.agents import base
+from mmt.graphs.models import position_encoding
 from mmt.graphs.models import universal_embedding
 from mmt.graphs.models import transformer_embedding
 from mmt.graphs.models import attention_autoencoder
@@ -84,12 +85,15 @@ class MultiLULCAgent(base.BaseAgent):
                 input_channels, output_channels, resizes
             )
         ]
-        self.coord_model = nn.Sequential(
-            nn.Linear(128, 300),
-            nn.ReLU(inplace=True),
-            nn.Linear(300, self.config.dimensions.n_channels_embedding),
-            nn.ReLU(inplace=True),
+        self.coord_model = position_encoding.PositionEncoder(
+            n_channels_embedding = self.config.dimensions.n_channels_embedding
         )
+        # self.coord_model = nn.Sequential(
+            # nn.Linear(128, 300),
+            # nn.ReLU(inplace=True),
+            # nn.Linear(300, self.config.dimensions.n_channels_embedding),
+            # nn.ReLU(inplace=True),
+        # )
         
         # Define optimizer
         optim_class = getattr(optim, self.config.optimizer.type)
@@ -153,8 +157,8 @@ class MultiLULCAgent(base.BaseAgent):
             for i, d in enumerate(self.datasets):
                 self.models[i].load_state_dict(checkpoint["encoder_state_dict_" + d])
                 self.optimizers[i].load_state_dict(checkpoint["encoder_optimizer_" + d])
-                self.coord_model.load_state_dict(checkpoint["image_state_dict_" + d])
-                self.coord_optimizer.load_state_dict(checkpoint["coord_optimizer_" + d])
+                # self.coord_model.load_state_dict(checkpoint["image_state_dict_" + d])
+                # self.coord_optimizer.load_state_dict(checkpoint["coord_optimizer_" + d])
                 if self.cuda and torch.cuda.device_count() > 1:
                     print("Let's use", torch.cuda.device_count(), "GPUs!")
                     # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
