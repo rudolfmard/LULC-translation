@@ -70,7 +70,7 @@ def ccrop_and_split(x, n_px):
 #============
 usegpu = True
 domainname = "eurat"
-n_patches = 200
+n_patches = 3000
 quality_threshold = 0.7
 
 print(f"Executing program {sys.argv[0]} in {os.getcwd()}")
@@ -82,7 +82,7 @@ config = utilconf.get_config(
         "new_config_template.yaml"
     )
 )
-dump_dir = os.path.join(config.paths.data_dir, "large-domain-200")
+dump_dir = os.path.join(config.paths.data_dir, "large-domain-hdf5")
 
 
 # Land cover loading
@@ -192,6 +192,7 @@ for subset in subsets:
         h5f[subset][lcname].attrs["year"] = 2023
         h5f[subset][lcname].attrs["type"] = "raster"
         h5f[subset][lcname].attrs["resolution"] = lcmaps[lcname].res
+        h5f[subset][lcname].attrs["crs"] = lcmaps[lcname].crs.to_string()
         h5f[subset][lcname].attrs["patch_size"] = n_pxs[lcname]
         h5f[subset][lcname].attrs["n_channels"] = 1
         h5f[subset][lcname].attrs["numberclasses"] = lcmaps[lcname].n_labels

@@ -2,4 +2,6 @@
 .idea/**
 data/*
 experiments/*
+configs/*
+*.onnx
 *.egg-info/

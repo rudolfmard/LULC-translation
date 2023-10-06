@@ -46,7 +46,7 @@ device = "cuda" if usegpu else "cpu"
 
 print(f"Executing program {sys.argv[0]} in {os.getcwd()}")
 
-xp_name = "vanilla_no0"
+xp_name = "vanilla"
 domainname = "eurat"
 
 config = utilconf.get_config(
@@ -67,19 +67,20 @@ model1 = model1.to(device)
 model2 = io.load_pytorch_model(xp_name, "esgp", "esgp")
 model2 = model2.to(device)
 
-toh1 = mmt_transforms.OneHot(12, device = device)
+toh1 = mmt_transforms.OneHot(13, device = device)
 toh2 = mmt_transforms.OneHot(35, device = device)
 to_tensor = lambda x: torch.Tensor(x[:]).long()
 
 # VALIDATION DOMAINS
 #====================
-ldom_data_dir = os.path.join(config.paths.data_dir, "large-domain-200")
+# ldom_data_dir = os.path.join(config.paths.data_dir, "large-domain-200")
+ldom_data_dir = os.path.join(config.paths.data_dir, "hdf5_data")
 subset = "test"
 lcnames = ["esawc", "ecosg", "esgp"]
 h5_path = {}
 h5f = {}
 for lcname in lcnames:
-    h5_path[lcname] = os.path.join(ldom_data_dir, f"{lcname}-{domainname}-{subset}.hdf5")
+    h5_path[lcname] = os.path.join(ldom_data_dir, f"{lcname}-{subset}.hdf5")
     assert os.path.isfile(h5_path[lcname]), f"File {h5_path[lcname]} does not exist"
     h5f[lcname] = h5py.File(h5_path[lcname], "r", libver='latest')
 

@@ -31,7 +31,7 @@ device = "cuda" if usegpu else "cpu"
 
 print(f"Executing program {sys.argv[0]} in {os.getcwd()}")
 
-xp_name = "vanilla_eurat"
+xp_name = "vanilla"
 val_domains = ["snaefell_glacier", "dublin_city", "iso_kihdinluoto", "portugese_crops"]
 
 
