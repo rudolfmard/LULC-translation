@@ -20,6 +20,7 @@ from mmt.graphs.models import universal_embedding
 from mmt.graphs.models import transformer_embedding
 from mmt.graphs.models import attention_autoencoder
 from mmt.datasets import landcover_to_landcover
+from mmt.inference import io
 from mmt.utils import misc
 from mmt.utils import plt_utils
 from mmt.utils import tensorboardx_utils
@@ -280,6 +281,12 @@ class MultiLULCAgent(base.BaseAgent):
                     self.logger.info("Best model for now  : saved ")
                     loss_ref = vl
                     self.save_checkpoint(is_best=1)
+                    io.export_autoencoder_to_onnx(self.config.xp_name, lc_in = "esawc", lc_out = "encoder", onnxfilename = "best_[default].onnx")
+                    io.export_autoencoder_to_onnx(self.config.xp_name, lc_in = "ecosg", lc_out = "encoder", onnxfilename = "best_[default].onnx")
+                    io.export_autoencoder_to_onnx(self.config.xp_name, lc_in = "esgp", lc_out = "encoder", onnxfilename = "best_[default].onnx")
+                    io.export_autoencoder_to_onnx(self.config.xp_name, lc_in = "esgp", lc_out = "decoder", onnxfilename = "best_[default].onnx")
+                    io.export_autoencoder_to_onnx(self.config.xp_name, lc_in = "esawc", lc_out = "esgp", onnxfilename = "best_[default].onnx")
+                    io.export_position_encoder_to_onnx(self.config.xp_name, onnxfilename = "best_[default].onnx")
                 
                 torch.cuda.empty_cache()
                 # if self.config.use_scheduler:
