@@ -194,7 +194,7 @@ def load_old_pytorch_model(xp_name, lc_in="esawc", lc_out="esgp"):
     
     return model
     
-def load_pytorch_model(xp_name, lc_in="esawc", lc_out="esgp"):
+def load_pytorch_model(xp_name, lc_in="esawc", lc_out="esgp", train_mode = False):
     """Return the pre-trained Pytorch model from the experiment `xp_name`"""
     try:
         config = utilconf.get_config(
@@ -278,8 +278,57 @@ def load_pytorch_model(xp_name, lc_in="esawc", lc_out="esgp"):
             autoenc_out.decoder
         )
     
+    model.train(mode=train_mode)
     return model
 
+def load_pytorch_posenc(xp_name, lc_name = "esawc", train_mode = False):
+    
+    try:
+        config = utilconf.get_config(
+            os.path.join(
+                mmt_repopath,
+                "experiments",
+                xp_name,
+                "logs",
+                "config.yaml",
+            )
+        )
+    except:
+        print("Loading old JSON config")
+        config = utilconf.get_config(
+            os.path.join(
+                mmt_repopath,
+                "experiments",
+                xp_name,
+                "logs",
+                "config.json",
+            )
+        )
+    
+    checkpoint_path = os.path.join(
+        mmt_repopath,
+        "experiments",
+        xp_name,
+        "checkpoints",
+        "model_best.pth.tar",
+    )
+    assert os.path.isfile(checkpoint_path), f"No checkpoint found at {checkpoint_path}"
+    
+    model = position_encoding.PositionEncoder(
+        n_channels_embedding = config.dimensions.n_channels_embedding
+    )
+    checkpoint = torch.load(checkpoint_path)
+    
+    try:
+        model.load_state_dict(checkpoint[f"image_state_dict_{lc_name}.hdf5"])
+    except RuntimeError:
+        print(f"<{__name__}> Warning: keys mismatch in state_dict. Trying auto-correction")
+        model.load_state_dict({"pos_encoder."+k: v for k,v in checkpoint[f"image_state_dict_{lc_name}.hdf5"].items()})
+        
+    model.train(mode=train_mode)
+    
+    return model
+    
 def export_position_encoder_to_onnx(xp_name, lc_name = "esawc", onnxfilename = "[default].onnx"):
     """Load the Pytorch model and export it to the ONNX format"""
     
