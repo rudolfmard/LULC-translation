@@ -428,6 +428,8 @@ bigearthnet_fulldom = GeoRectangle((-9.00023345437725, 36.956956702083396, 31.59
 burren = GeoRectangle([-9.15985, -9.0469, 53.0871, 53.1504])
 waterville_kerry = GeoRectangle([-10.2018, -10.1518, 51.8020, 51.8466])
 waterville_kerry_124x133 = GeoRectangle([-10.16, -10.141, 51.83, 51.841])
+montpellier_agglo = GeoRectangle([3.63, 4.14, 43.38, 43.82]) # Sea artefact
+rhone_avignon = GeoRectangle([4.64, 4.95, 43.82, 44.11]) # Stitching artefact
 
 # Mangroves
 florida_mangrove = GeoRectangle([-81.5995, -81.5664, 25.9753, 26.0097])
