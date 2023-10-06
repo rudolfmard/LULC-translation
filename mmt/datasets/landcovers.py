@@ -207,7 +207,7 @@ class TorchgeoLandcover(tgd.RasterDataset):
         
         cmap = ListedColormap(np.array(self.cmap)/255)
         if figax is None:
-            fig, ax = plt.subplots(1, 1)
+            fig, ax = plt.subplots(1, 1, figsize=(12,12))
         else:
             fig, ax = figax
         
@@ -230,6 +230,7 @@ class TorchgeoLandcover(tgd.RasterDataset):
         if suptitle is not None:
             plt.suptitle(suptitle)
         
+        plt.tight_layout()
         return fig, ax
 
 
@@ -296,3 +297,14 @@ class QualityFlagsECOSGplus(EcoclimapSGplus):
     ]
     cmap = [(0, 0, 0), (134, 218, 134), (60, 182, 60), (255, 191, 191), (255, 127, 127), (255, 64, 64), (255, 0, 0)]
     
+
+class InferenceResults(EcoclimapSGplus):
+    
+    def __init__(self, path, crs = None, res = None, transforms = None, tgeo_init = True):
+        self.path = path
+        self.n_labels = len(self.labels)
+        super().__init__(crs = crs, res = res, transforms = transforms, tgeo_init = tgeo_init)
+
+class MergedMap(InferenceResults):
+    pass
+
