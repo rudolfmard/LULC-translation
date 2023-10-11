@@ -30,8 +30,8 @@ from wopt.ml import graphics
 #------------
 xp_name = "vanilla"
 
-device = torch.device("cpu")
-domainname = "montpellier_agglo"
+device = torch.device("cuda")
+domainname = "ireland"
 
 config = utilconf.get_config(
     os.path.join(
@@ -42,7 +42,7 @@ config = utilconf.get_config(
         "config.yaml",
     )
 )
-inference_dump_dir = os.path.join(config.paths.data_dir, "outputs", f"{xp_name}_{domainname}_esawc_esgp")
+inference_dump_dir = os.path.join(config.paths.data_dir, "outputs", f"Inference_{xp_name}_{domainname}_esawc_esgp")
 mergedmap_dump_dir = os.path.join(config.paths.data_dir, "outputs", f"Merged_{xp_name}_{domainname}_esawc_esgp")
 
 if not os.path.exists(inference_dump_dir):
@@ -88,25 +88,32 @@ esgp_encoder = io.load_pytorch_model(xp_name, lc_in = "esgp", lc_out = "encoder"
 position_encoder = io.load_pytorch_posenc(xp_name)
 esgp_decoder = io.load_pytorch_model(xp_name, lc_in = "esgp", lc_out = "decoder")
 
+esawc_encoder.to(device)
+esgp_decoder.to(device)
+
 esawc_transform = mmt_transforms.OneHot(esawc.n_labels + 1, device = device)
 pos_transform = mmt_transforms.GeolocEncoder()
 
 # Tiling query domain
 #----------------
 margin = 120
-n_px_max = config.dimensions.n_px_embedding
+n_px_max = 4500
 sampler = samplers.GridGeoSampler(esawc, size=n_px_max, stride = n_px_max - margin, roi = qb)
 
 patches = []
 for iqb in sampler:
     patches.append(domains.GeoRectangle(iqb, fmt = "tgbox"))
 
-# graphics.patches_over_domain(qdomain, patches, background="osm", zoomout=0.2, details=10)
-
+# exit("Intentional stop")
+# graphics.patches_over_domain(qdomain, patches, background="osm", zoomout=0.2, details=2)
 
 # Perform inference on each tile
 #----------------
 for iqb in tqdm(sampler, desc = f"Inference over {len(sampler)} patches"):
+    
+    tifpatchname = f"N{iqb.minx}_E{iqb.maxy}.tif"
+    if os.path.exists(os.path.join(inference_dump_dir, tifpatchname)):
+        continue
     
     # Inference
     # - - - - -
@@ -121,9 +128,8 @@ for iqb in tqdm(sampler, desc = f"Inference over {len(sampler)} patches"):
         # emb += position_encoder(torch.Tensor(pos_enc["coordenc"])).unsqueeze(0).unsqueeze(2).unsqueeze(3)
         y_esgp = esgp_decoder(emb)
     
-    y_esgp = y_esgp.argmax(1).squeeze().numpy()
+    y_esgp = y_esgp.argmax(1).squeeze().cpu().numpy()
     
-    tifpatchname = f"N{iqb.minx}_E{iqb.maxy}.tif"
     width, height = y_esgp.shape
     transform = rasterio.transform.from_bounds(
         iqb.minx, iqb.miny, iqb.maxx, iqb.maxy, width, height
@@ -155,7 +161,7 @@ for iqb in tqdm(sampler, desc = f"Merging maps over {len(sampler)} patches"):
     x_esgp = esgp[iqb]
     
     x_merge = deepcopy(x_esgp["mask"])
-    w_infres = x_qflags["mask"] > 2
+    w_infres = torch.logical_and(x_qflags["mask"] > 2, x_esgp["mask"] != 1)
     x_merge[w_infres] = x_infres["mask"][w_infres]
     x_merge = x_merge.squeeze().numpy()
     
@@ -186,23 +192,23 @@ print("Merging complete.")
 infres = landcovers.InferenceResults(path = inference_dump_dir, res = esgp.res)
 infres.res = esgp.res
 
-x_infres = infres[qb]
-fig, ax = infres.plot(x_infres)
-fig.savefig(os.path.join(inference_dump_dir, f"{domainname}_infres.png"))
-fig.show()
+# x_infres = infres[qb]
+# fig, ax = infres.plot(x_infres)
+# fig.savefig(os.path.join(inference_dump_dir, f"{domainname}_infres.png"))
+# fig.show()
 
-merged = landcovers.MergedMap(path = mergedmap_dump_dir, res = esgp.res)
-merged.res = esgp.res
+# merged = landcovers.MergedMap(path = mergedmap_dump_dir, res = esgp.res)
+# merged.res = esgp.res
 
-x_merged = merged[qb]
-fig, ax = merged.plot(x_merged)
-fig.savefig(os.path.join(mergedmap_dump_dir, f"{domainname}_merged.png"))
-fig.show()
+# x_merged = merged[qb]
+# fig, ax = merged.plot(x_merged)
+# fig.savefig(os.path.join(mergedmap_dump_dir, f"{domainname}_merged.png"))
+# fig.show()
 
-x_esgp = esgp[qb]
-fig, ax = esgp.plot(x_esgp)
-# fig.savefig(os.path.join(mergedmap_dump_dir, f"{domainname}_esgp.png"))
-fig.show()
+# x_esgp = esgp[qb]
+# fig, ax = esgp.plot(x_esgp)
+# # fig.savefig(os.path.join(mergedmap_dump_dir, f"{domainname}_esgp.png"))
+# fig.show()
 
 
 
