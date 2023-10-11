@@ -282,7 +282,46 @@ class EcoclimapSGplus(TorchgeoLandcover):
             for l in f.readlines():
                 if "version=" in l:
                     return l.split('"')[1]
-
+                
+    def export_to_dirhdr(self, sample, ofn_dir = None):
+        """Export a sample to the SURFEX-readable format DIR/HDR
+        """
+        if ofn_dir is None:
+            ofn_dir = os.path.join(self.path, f"COVER_{self.__class__.__name__}_2023_v{self.get_version()}.dir")
+            
+        # HDR file
+        ofn_hdr = ofn_dir.replace(".dir", ".hdr")
+        hdr_dict = {
+            "nodata":0,
+            "north":sample["bbox"].maxy,
+            "south":sample["bbox"].miny,
+            "west":sample["bbox"].maxx,
+            "east":sample["bbox"].minx,
+            "rows":sample["mask"].shape[-2],
+            "cols":sample["mask"].shape[-1],
+            "recordtype": "integer 8 bits",
+        }
+        with open(ofn_hdr, "w") as hdr:
+            hdr.write(os.path.basename(ofn_dir).split(".")[0] + "\n")
+            for k,v in hdr_dict.items():
+                hdr.write(f"{k}: {v}\n")
+            
+        
+        # DIR file
+        kwargs = {
+            "driver": "gTiff",
+            "count": 1,
+            "dtype": np.uint8,
+            "crs": sample["crs"],
+            "width": sample["mask"].shape[-1],
+            "height": sample["mask"].shape[-2],
+        }
+        
+        with rasterio.open(ofn_dir, "w", **kwargs) as dst:
+            dst.write(sample["mask"].squeeze().numpy(), 1)
+        
+        return ofn_dir, ofn_hdr
+    
 
 class QualityFlagsECOSGplus(EcoclimapSGplus):
     path = os.path.join(config.paths.data_dir, "tiff_data", "ECOCLIMAP-SG-plus", f"ecosgp-qflags-v{config.versions.ecosgplus}")
