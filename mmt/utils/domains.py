@@ -413,6 +413,8 @@ def enlarge_domain(domain, factor = 1):
 #=====================
 # Easily draw geoJson: https://geojson.io/
 ireland = GeoRectangle([-11.1, -4.8, 50.9, 55.6])
+irl750 = GeoRectangle([-15.5, -5, 49.5, 57.5])
+ireland25 = GeoRectangle([-16, 4, 45, 61])
 dublin_city = GeoRectangle([-6.3139, -6.2209, 53.3321, 53.3784])
 toulouse = GeoRectangle([1.336, 1.508, 43.554, 43.674])
 nanterre = GeoRectangle([2.166, 2.272, 48.861, 48.936])
@@ -420,6 +422,7 @@ dublin_county = GeoRectangle(
     '{"type": "Polygon", "coordinates": [[[-6.5468919, 53.1782636], [-6.0439503, 53.1782636], [-6.0439503, 53.509983], [-6.5468919, 53.509983], [-6.5468919, 53.1782636]]]}',
     fmt="json"
 )
+alps_and_carpates = GeoRectangle([2, 27, 41.3, 51])
 europe = GeoRectangle([-20, 30, 32, 70])
 eurat = GeoRectangle([-32, 42, 20, 72])
 freastern_eurat = GeoRectangle([8.24, 42, 20, 72])
