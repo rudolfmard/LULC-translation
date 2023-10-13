@@ -28,10 +28,10 @@ from wopt.ml import graphics
 
 # Configs
 #------------
-xp_name = "vanilla"
+xp_name = "vanilla_eurat"
 
 device = torch.device("cuda")
-domainname = "ireland"
+domainname = "eurat"
 
 config = utilconf.get_config(
     os.path.join(
@@ -97,7 +97,7 @@ pos_transform = mmt_transforms.GeolocEncoder()
 # Tiling query domain
 #----------------
 margin = 120
-n_px_max = 4500
+n_px_max = 5400
 sampler = samplers.GridGeoSampler(esawc, size=n_px_max, stride = n_px_max - margin, roi = qb)
 
 patches = []
@@ -184,13 +184,14 @@ for iqb in tqdm(sampler, desc = f"Merging maps over {len(sampler)} patches"):
         f.write(x_merge, 1)
     
 print("Merging complete.")
-
+print("inference_dump_dir=", inference_dump_dir)
+print("mergedmap_dump_dir=", mergedmap_dump_dir)
 
 # View results
 #----------------
 
-infres = landcovers.InferenceResults(path = inference_dump_dir, res = esgp.res)
-infres.res = esgp.res
+# infres = landcovers.InferenceResults(path = inference_dump_dir, res = esgp.res)
+# infres.res = esgp.res
 
 # x_infres = infres[qb]
 # fig, ax = infres.plot(x_infres)
