@@ -499,6 +499,39 @@ resolution_dict = { # Official geometric accuracy in metres
     # }
 # )
 
+class EEEmapsDataset(Dataset):
+    """Dataset providing ESAWorldCover, EcoclimapSG and EcoclimapSGplus patches (EEE)"""
+    def __init__(self, path, mode = "train", transform = None):
+        self.path = path
+        self.mode = mode
+        self.transform = transform
+        self.h5f = {
+            lc: h5py.File(
+                os.path.join(path, f"{lc}-{mode}.hdf5"), "r", swmr=True, libver="latest"
+            )
+            for lc in ["esawc", "esgp", "ecosg"]
+        }
+    
+    def __len__(self):
+        return len(self.h5f["esawc"])
+    
+    def __getitem__(self, idx):
+        idx = str(idx)
+        sample = {
+            lc: torch.Tensor(self.h5f[lc][idx][:]).long() for lc in ["esawc", "esgp", "ecosg"]
+        }
+        sample["coordinate"] = (
+            self.h5f["esgp"][idx].attrs["x_coor"],
+            self.h5f["esgp"][idx].attrs["y_coor"]
+        )
+        if self.transform:
+            sample = self.transform(sample)
+            
+        return sample
+    
+    def close_hdf5(self):
+        for lc in ["esawc", "esgp", "ecosg"]:
+            self.h5f[lc].close()
 
 class LandcoverToLandcover(Dataset):
     def __init__(

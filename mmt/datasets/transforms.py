@@ -130,7 +130,7 @@ class GeolocEncoder:
     
     Assume lon/lat coordinates are stored in degrees (as in EPSG:4326).
     Default value adapted to better represent variability over the globe
-    (n = 400 instead of 10000)"""
+    (n = 360 instead of 10000)"""
     def __init__(self, d = 128, n = 360):
         self.d = int(d / 2)
         self.d_i = np.arange(0, self.d / 2)
@@ -143,6 +143,42 @@ class GeolocEncoder:
         enc[1 : self.d : 2] = np.cos(x * self.freq)
         enc[self.d :: 2] = np.sin(y * self.freq)
         enc[self.d + 1 :: 2] = np.cos(y * self.freq)
+        sample["coordenc"] = enc
+        return sample
+
+class GeolocEncoderPxwise(GeolocEncoder):
+    """Encode lon/lat coordinates, as per Vaswani et al. (2017).
+    
+    Assume lon/lat coordinates are stored in degrees (as in EPSG:4326) and
+    locate the upper-left corner of an image of shape `imshape`. The returned
+    tensor will be of shape (d, imshape).
+    Default value adapted to better represent variability over the globe
+    (n = 360 instead of 10000)"""
+    def __init__(self, imshape, res, d = 128, n = 360):
+        super().__init__(d=d, n=n)
+        
+        if hasattr(res, "__len__"):
+            self.imshape = imshape
+        else:
+            self.imshape = (imshape, imshape)
+            
+        if hasattr(res, "__len__"):
+            self.res = res
+        else:
+            self.res = (res, res)
+    
+    def __call__(self, sample):
+        ulx, uly = sample["coordinate"]
+        xs = np.linspace(ulx, ulx + self.imshape[0] * self.res[0], self.imshape[0])
+        ys = np.linspace(uly, uly - self.imshape[1] * self.res[1], self.imshape[1])
+        x, y = np.meshgrid(xs, ys)
+        xf = np.expand_dims(x, axis= 0) * np.expand_dims(self.freq, axis= [1,2])
+        yf = np.expand_dims(y, axis= 0) * np.expand_dims(self.freq, axis= [1,2])
+        enc = np.zeros((self.d * 2, self.imshape[0], self.imshape[1]))
+        enc[0 : self.d : 2, ::] = np.sin(xf)
+        enc[1 : self.d : 2, ::] = np.cos(xf)
+        enc[self.d :: 2, ::] = np.sin(yf)
+        enc[self.d + 1 :: 2, ::] = np.cos(yf)
         sample["coordenc"] = enc
         return sample
 

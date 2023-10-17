@@ -13,6 +13,7 @@ from mmt.graphs.models import (
     universal_embedding,
     position_encoding,
     transformer_embedding,
+    embedding_mixer,
     attention_autoencoder
 )
 from mmt.datasets import landcover_to_landcover
@@ -329,6 +330,34 @@ def load_pytorch_posenc(xp_name, lc_name = "esawc", train_mode = False):
     
     return model
     
+def load_pytorch_embmix(xp_name, h_channels = 64):
+    """Load models mixing the embeddings of ESAWC and ECOSG"""
+    
+    config = utilconf.get_config(
+        os.path.join(
+            mmt_repopath,
+            "experiments",
+            xp_name,
+            "logs",
+            "config.yaml",
+        )
+    )
+    checkpoint_path = os.path.join(
+        mmt_repopath,
+        "experiments",
+        xp_name,
+        "checkpoints",
+        "emb_mixer_state_dict.pt",
+    )
+    assert os.path.isfile(checkpoint_path), f"No checkpoint found at {checkpoint_path}"
+    
+    emb_mixer = embedding_mixer.MLP(n_channels_embedding = config.dimensions.n_channels_embedding, h_channels = h_channels)
+    checkpoint = torch.load(checkpoint_path)
+    emb_mixer.load_state_dict(checkpoint)
+    
+    return emb_mixer
+
+
 def export_position_encoder_to_onnx(xp_name, lc_name = "esawc", onnxfilename = "[default].onnx"):
     """Load the Pytorch model and export it to the ONNX format"""
     

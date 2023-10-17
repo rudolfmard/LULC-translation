@@ -28,10 +28,10 @@ from wopt.ml import graphics
 
 # Configs
 #------------
-xp_name = "vanilla_eurat"
+xp_name = "vanilla"
 
 device = torch.device("cuda")
-domainname = "eurat"
+domainname = "elmenia_algeria"
 
 config = utilconf.get_config(
     os.path.join(
@@ -42,8 +42,8 @@ config = utilconf.get_config(
         "config.yaml",
     )
 )
-inference_dump_dir = os.path.join(config.paths.data_dir, "outputs", f"Inference_{xp_name}_{domainname}_esawc_esgp")
-mergedmap_dump_dir = os.path.join(config.paths.data_dir, "outputs", f"Merged_{xp_name}_{domainname}_esawc_esgp")
+inference_dump_dir = os.path.join(config.paths.data_dir, "outputs", f"Inference_embmix_{xp_name}_{domainname}_esawc_esgp")
+mergedmap_dump_dir = os.path.join(config.paths.data_dir, "outputs", f"Merged_embmix_{xp_name}_{domainname}_esawc_esgp")
 
 if not os.path.exists(inference_dump_dir):
     os.makedirs(inference_dump_dir)
@@ -86,18 +86,22 @@ esawc_encoder = io.load_pytorch_model(xp_name, lc_in = "esawc", lc_out = "encode
 ecosg_encoder = io.load_pytorch_model(xp_name, lc_in = "ecosg", lc_out = "encoder")
 esgp_encoder = io.load_pytorch_model(xp_name, lc_in = "esgp", lc_out = "encoder")
 position_encoder = io.load_pytorch_posenc(xp_name)
+emb_mixer = io.load_pytorch_embmix(xp_name)
 esgp_decoder = io.load_pytorch_model(xp_name, lc_in = "esgp", lc_out = "decoder")
 
 esawc_encoder.to(device)
+ecosg_encoder.to(device)
 esgp_decoder.to(device)
+emb_mixer.to(device)
 
 esawc_transform = mmt_transforms.OneHot(esawc.n_labels + 1, device = device)
+ecosg_transform = mmt_transforms.OneHot(ecosg.n_labels + 1, device = device)
 pos_transform = mmt_transforms.GeolocEncoder()
 
 # Tiling query domain
 #----------------
 margin = 120
-n_px_max = 5400
+n_px_max = 600
 sampler = samplers.GridGeoSampler(esawc, size=n_px_max, stride = n_px_max - margin, roi = qb)
 
 patches = []
@@ -119,13 +123,18 @@ for iqb in tqdm(sampler, desc = f"Inference over {len(sampler)} patches"):
     # - - - - -
     x_esawc = esawc[iqb]
     x_esawc = esawc_transform(x_esawc["mask"])
+    x_ecosg = ecosg[iqb]
+    x_ecosg = ecosg_transform(x_ecosg["mask"])
     
     geoloc = {"coordinate": (iqb.minx, iqb.maxy)}
     pos_enc = pos_transform(geoloc)
     
     with torch.no_grad():
-        emb = esawc_encoder(x_esawc.float())
+        emba = esawc_encoder(x_esawc.float())
+        embo = ecosg_encoder(x_ecosg.float())
+        # emb = emb_mixer(torch.cat([emba, torch.nn.functional.interpolate(embo, emba.shape[-2:], mode="bicubic")], dim=1))
         # emb += position_encoder(torch.Tensor(pos_enc["coordenc"])).unsqueeze(0).unsqueeze(2).unsqueeze(3)
+        emb = emba
         y_esgp = esgp_decoder(emb)
     
     y_esgp = y_esgp.argmax(1).squeeze().cpu().numpy()
@@ -190,13 +199,13 @@ print("mergedmap_dump_dir=", mergedmap_dump_dir)
 # View results
 #----------------
 
-# infres = landcovers.InferenceResults(path = inference_dump_dir, res = esgp.res)
-# infres.res = esgp.res
+infres = landcovers.InferenceResults(path = inference_dump_dir, res = esgp.res)
+infres.res = esgp.res
 
-# x_infres = infres[qb]
-# fig, ax = infres.plot(x_infres)
-# fig.savefig(os.path.join(inference_dump_dir, f"{domainname}_infres.png"))
-# fig.show()
+x_infres = infres[qb]
+fig, ax = infres.plot(x_infres)
+fig.savefig(os.path.join(inference_dump_dir, f"{domainname}_infres.png"))
+fig.show()
 
 # merged = landcovers.MergedMap(path = mergedmap_dump_dir, res = esgp.res)
 # merged.res = esgp.res
@@ -210,33 +219,3 @@ print("mergedmap_dump_dir=", mergedmap_dump_dir)
 # fig, ax = esgp.plot(x_esgp)
 # # fig.savefig(os.path.join(mergedmap_dump_dir, f"{domainname}_esgp.png"))
 # fig.show()
-
-
-
-# # Merge where qflags are bad
-# #----------------
-
-# x_qflags = qflags[qb]
-# x_esgp = esgp[qb]
-
-# fig, ax = qflags.plot(x_qflags)
-# fig.savefig(os.path.join(inference_dump_dir, f"{domainname}_qflags.png"))
-# # fig.show()
-
-# w_infres = qflags[qb]["mask"] > 2
-# print(f"{w_infres.sum().item()} ({100*w_infres.sum().item()/w_infres.nelement()} %) pixels with qflag > 2")
-
-# x_merge = deepcopy(x_esgp["mask"])
-# x_merge[w_infres] = x_infres["mask"][w_infres]
-
-# fig, ax = infres.plot({"mask":x_merge}, suptitle = "Merge of inference and ECOSG+")
-# fig.savefig(os.path.join(inference_dump_dir, f"{domainname}_merge.png"))
-# # fig.show()
-
-# fig, ax = esgp.plot(x_esgp)
-# fig.savefig(os.path.join(inference_dump_dir, f"{domainname}_esgp.png"))
-# # fig.show()
-
-# x_diff = x_esgp["mask"] != x_merge
-# print(f"{x_diff.sum().item()} ({100*x_diff.sum().item()/x_diff.nelement()} %) modified pixels in merge")
-# # x_diff = x_esgp["mask"] - x_infres["mask"]
