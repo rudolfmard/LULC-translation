@@ -28,14 +28,6 @@ from pprint import pprint
 from sklearn import metrics
 from wopt.ml import graphics
 
-# import wopt.ml.utils
-# from wopt.ml import (
-    # landcovers,
-    # transforms,
-    # graphics,
-    # domains,
-# )
-
 from mmt import _repopath_ as mmt_repopath
 from mmt.graphs.models import universal_embedding
 from mmt.datasets import landcover_to_landcover
@@ -57,20 +49,34 @@ def qscore_from_qflags(qflags):
         return (qflags < 3).sum()/qflags.size
 
 def ccrop_and_split(x, n_px):
-    """Center-crop and split into four patches"""
+    """Center-crop and split into four patches
+    
+    Params
+    ------
+    x: torch.Tensor or dict
+        Data to be cropped and split
+    
+    n_px: int
+        Number of pixels in the split patches
+    """
     ccrop = tvt.CenterCrop(2 * n_px)
-    x = ccrop(x["mask"]).squeeze()
+    try:
+        x = ccrop(x["mask"]).squeeze()
+    except:
+        x = ccrop(x).squeeze()
+        
     x_train1 =  x[:n_px, :n_px]
     x_train2 =  x[n_px:, :n_px]
     x_test =    x[:n_px, n_px:]
     x_val =     x[n_px:, n_px:]
+    
     return {"train1":x_train1, "train2":x_train2, "test":x_test, "val":x_val}
 
 # PARAMETERS
 #============
 usegpu = True
 domainname = "eurat"
-n_patches = 3000
+n_patches = 4000
 quality_threshold = 0.7
 
 print(f"Executing program {sys.argv[0]} in {os.getcwd()}")
@@ -82,7 +88,7 @@ config = utilconf.get_config(
         "new_config_template.yaml"
     )
 )
-dump_dir = os.path.join(config.paths.data_dir, "large-domain-hdf5")
+dump_dir = os.path.join(config.paths.data_dir, "new-large-domain-hdf5")
 
 
 # Land cover loading
@@ -93,6 +99,9 @@ esawc = landcovers.ESAWorldCover(transforms=transforms.EsawcTransform)
 esgp = landcovers.EcoclimapSGplus()
 ecosg = landcovers.EcoclimapSG()
 
+lc = esawc & esgp & ecosg & qflag
+
+lcnames = ["esawc", "esgp", "ecosg", "qflag"]
 lcmaps = {"qflag":qflag, "esawc":esawc, "esgp":esgp, "ecosg":ecosg}
 
 # Sampler definition
@@ -101,9 +110,10 @@ subsets = ["train1", "train2", "test", "val"]
 
 margin = 200
 n_px_max = 2 * config.dimensions.n_px_embedding + margin
+n_px_emb = config.dimensions.n_px_embedding
 sampler_length = 20 * n_patches
 val_domain = getattr(domains, domainname).to_tgbox(esawc.crs)
-sampler = samplers.RandomGeoSampler(esawc, size=n_px_max, length = sampler_length, roi = val_domain)
+sampler = samplers.RandomGeoSampler(lc, size=n_px_max, length = sampler_length, roi = val_domain)
 
 n_pxs = {"qflag":100, "esawc":600, "esgp":100, "ecosg":20}
 
@@ -114,18 +124,19 @@ h5f = dict()
 for subset in subsets:
     h5_path[subset] = dict()
     h5f[subset] = dict()
-    for lcname in lcmaps.keys():
+    for lcname in lcnames:
         h5_path[subset][lcname] = os.path.join(
             dump_dir,
-            "-".join([lcname, domainname, subset, f"{n_patches}patches", f"{quality_threshold}qthresh"]) + ".hdf5"
+            # "-".join([lcname, domainname, subset, f"{n_patches}patches", f"{quality_threshold}qthresh"]) + ".hdf5"
+            f"{lcname}-{subset}.hdf5"
         )
         h5f[subset][lcname] = h5py.File(h5_path[subset][lcname], "w", libver='latest')
     
 
 # INIT MAIN LOOP
 #================
-i = 0
-j = 0
+i = 0   # Valid patches counter
+j = 0   # All patches counter
 selected_bboxes = []
 missing = {k:0 for k in lcmaps.keys()}
 add_another_patch =True
@@ -141,17 +152,17 @@ while add_another_patch:
         print(f"No more patch in sampler (size={sampler_length}). i={i}/{n_patches}, j={j}/{sampler_length}")
         break
     
+    # Get the data from all maps
+    #-----------------
+    x_lc = lc[qb]
+    
     # Quality control
     #-----------------
-    try:
-        x_qflag = qflag[qb]
-    except:
-        missing["qflag"] += 1
-        continue
+    x_qflag = x_lc["mask"][-1].unsqueeze(0)
     
-    tttv_qflag = ccrop_and_split(x_qflag, n_pxs["qflag"])
+    tttv_qflag = ccrop_and_split(x_qflag, n_px_emb)
     
-    qscore = qscore_from_qflags(x_qflag["mask"])
+    qscore = qscore_from_qflags(x_qflag)
     unmet_qscore = [qscore_from_qflags(x) < quality_threshold for x in tttv_qflag.values()]
     if any(unmet_qscore):
         # print(f"[-] Unmet quality criterion: all-patch qscore={qscore}. Move to next patch")
@@ -159,20 +170,19 @@ while add_another_patch:
     
     # If passed, write in file
     #--------------------------
-    for lcname, lc in lcmaps.items():
-        try:
-            x = lc[qb]
-        except:
-            missing[lcname] += 1
-            continue
+    for i_lc, lcname in enumerate(lcnames):
+        x = x_lc["mask"][i_lc].unsqueeze(0)
         
-        tttv = ccrop_and_split(x, n_pxs[lcname])
+        tttv = ccrop_and_split(x, n_px_emb)
+        rsz = tvt.Resize(n_pxs[lcname], interpolation = tvt.functional.InterpolationMode.NEAREST)
         
         for subset in subsets:
-            h5f[subset][lcname].create_dataset(str(i), data=tttv[subset].detach().cpu().numpy())
+            patch = rsz(tttv[subset].unsqueeze(0)).squeeze().detach().cpu().numpy()
+            h5f[subset][lcname].create_dataset(str(i), data = patch)
             rd = h5f[subset][lcname].get(str(i))
-            rd.attrs["x_coor"] = qb.minx
-            rd.attrs["y_coor"] = qb.maxy
+            lon, lat = domains.GeoRectangle(qb, fmt = "tgbox").central_point()
+            rd.attrs["x_coor"] = lon
+            rd.attrs["y_coor"] = lat
     
     selected_bboxes.append(domains.GeoRectangle(qb, fmt = "tgbox"))
     if i % int(n_patches/10) == 0:
@@ -187,7 +197,7 @@ while add_another_patch:
 # Close HDF5 files
 #-----------------
 for subset in subsets:
-    for lcname in lcmaps.keys():
+    for lcname in lcnames:
         h5f[subset][lcname].attrs["name"] = lcname
         h5f[subset][lcname].attrs["year"] = 2023
         h5f[subset][lcname].attrs["type"] = "raster"
@@ -214,5 +224,5 @@ qdom = getattr(domains, domainname)
 figname = "patchloc-" + "-".join([domainname, f"{n_patches}patches", f"{quality_threshold}qthresh"])
 graphics.storeImages = True
 graphics.figureDir = dump_dir
-graphics.patches_over_domain(qdom, selected_bboxes, background="terrain", zoomout=0, details=3, figname = figname)
+graphics.patches_over_domain(qdom, selected_bboxes, background="osm", zoomout=0, details=4, figname = figname)
 # EOF
