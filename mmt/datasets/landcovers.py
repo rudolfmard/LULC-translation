@@ -10,6 +10,8 @@ import rasterio
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
+import cartopy.crs as ccrs
+import cartopy.io.img_tiles as cimgt
 import torchgeo.datasets as tgd
 from typing import Any, Dict, Optional
 
@@ -230,7 +232,7 @@ class TorchgeoLandcover(tgd.RasterDataset):
         if suptitle is not None:
             plt.suptitle(suptitle)
         
-        plt.tight_layout()
+        fig.tight_layout()
         return fig, ax
 
 
@@ -302,12 +304,20 @@ class EcoclimapSGplus(TorchgeoLandcover):
             "recordtype": "integer 8 bits",
         }
         with open(ofn_hdr, "w") as hdr:
-            hdr.write(os.path.basename(ofn_dir).split(".")[0] + "\n")
+            hdr.write(os.path.basename(ofn_dir)[:-4] + "\n")
             for k,v in hdr_dict.items():
                 hdr.write(f"{k}: {v}\n")
             
         
         # DIR file
+        trans = rasterio.transform.from_bounds(
+            sample["bbox"].minx,
+            sample["bbox"].miny,
+            sample["bbox"].maxx,
+            sample["bbox"].maxy,
+            sample["mask"].shape[-1],
+            sample["mask"].shape[-2],
+        )
         kwargs = {
             "driver": "gTiff",
             "count": 1,
@@ -315,6 +325,7 @@ class EcoclimapSGplus(TorchgeoLandcover):
             "crs": sample["crs"],
             "width": sample["mask"].shape[-1],
             "height": sample["mask"].shape[-2],
+            "transform": trans,
         }
         
         with rasterio.open(ofn_dir, "w", **kwargs) as dst:
@@ -347,3 +358,57 @@ class InferenceResults(EcoclimapSGplus):
 class MergedMap(InferenceResults):
     pass
 
+class OpenStreetMap:
+    def __init__(self, details = 3, default_patch_size = 0.05):
+        self.details = details
+        self.default_patch_size = default_patch_size
+        self.background_image = cimgt.OSM()
+    
+    def plot(
+        self,
+        sample: Dict[str, Any],
+        patch_size: Optional[float] = None,
+        show_titles: bool = True,
+        figax = None,
+        rowcolidx = 111
+    ):
+        
+        if figax is None:
+            fig, ax = plt.subplots(1, 1, figsize=(12,12))
+        else:
+            fig, ax = figax
+            ax.set_axis_off()
+        
+        if patch_size is None:
+            patch_size = self.default_patch_size
+        
+        if "bbox" in sample.keys():
+            minx = sample["bbox"].minx
+            miny = sample["bbox"].miny
+            maxx = sample["bbox"].maxx
+            maxy = sample["bbox"].maxy
+        elif "coordinate" in sample.keys():
+            # Assume they correspond to the upper-left corner (image convention)
+            minx, maxy = sample["coordinate"]
+            maxx = minx + patch_size
+            miny = maxy - patch_size
+        else:
+            raise ValueError("Sample does not have geographical info")
+        
+        locextent = [minx, maxx, miny, maxy]
+        xticks = np.linspace(locextent[0], locextent[1], 5)
+        yticks = np.linspace(locextent[2], locextent[3], 5)
+        
+        ax0 = fig.add_subplot(rowcolidx, projection=self.background_image.crs)
+        ax0.set_extent(locextent)
+        ax0.add_image(self.background_image, self.details)
+        ax0.set_xticks(xticks, crs = ccrs.PlateCarree())
+        ax0.set_yticks(yticks, crs = ccrs.PlateCarree())
+        ax0.set_xticklabels(np.round(xticks,3))
+        ax0.set_yticklabels(np.round(yticks,3))
+        if show_titles:
+            ax0.set_title(self.__class__.__name__)
+        
+        
+        return fig, ax0
+    
