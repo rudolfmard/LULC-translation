@@ -219,14 +219,19 @@ def load_pytorch_model(xp_name, lc_in="esawc", lc_out="esgp", train_mode = False
             )
         )
         
-    checkpoint_path = os.path.join(
-        mmt_repopath,
-        "experiments",
-        xp_name,
-        "checkpoints",
-        "model_best.pth.tar",
-    )
-    assert os.path.isfile(checkpoint_path), f"No checkpoint found at {checkpoint_path}"
+    if os.path.isabs(xp_name):
+        checkpoint_path = xp_name
+    else:
+        checkpoint_path = os.path.join(
+            mmt_repopath,
+            "experiments",
+            xp_name,
+            "checkpoints",
+            "model_best.pth.tar",
+        )
+    
+    assert os.path.isfile(checkpoint_path), f"No checkpoint found at {checkpoint_path}"#
+    
     checkpoint = torch.load(checkpoint_path)
     
     if config.model.type == "transformer_embedding":
@@ -281,6 +286,48 @@ def load_pytorch_model(xp_name, lc_in="esawc", lc_out="esgp", train_mode = False
     
     model.train(mode=train_mode)
     return model
+
+def get_epoch_of_best_model(xp_name, return_iteration = False):
+    """Read the value of epoch recorded in the best model checkpoint.
+    
+    If return_iteration = True, returns a tuple (epoch, iteration)."""
+    try:
+        config = utilconf.get_config(
+            os.path.join(
+                mmt_repopath,
+                "experiments",
+                xp_name,
+                "logs",
+                "config.yaml",
+            )
+        )
+    except:
+        print("Loading old JSON config")
+        config = utilconf.get_config(
+            os.path.join(
+                mmt_repopath,
+                "experiments",
+                xp_name,
+                "logs",
+                "config.json",
+            )
+        )
+        
+    checkpoint_path = os.path.join(
+        mmt_repopath,
+        "experiments",
+        xp_name,
+        "checkpoints",
+        "model_best.pth.tar",
+    )
+    assert os.path.isfile(checkpoint_path), f"No checkpoint found at {checkpoint_path}"
+    checkpoint = torch.load(checkpoint_path)
+    
+    if return_iteration:
+        return checkpoint['epoch'], checkpoint['iteration']
+    else:
+        return checkpoint['epoch']
+
 
 def load_pytorch_posenc(xp_name, lc_name = "esawc", train_mode = False):
     
