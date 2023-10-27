@@ -34,7 +34,7 @@ config = utilconf.get_config(
 
 # Loading models
 #----------------
-xp_name = "vanilla"
+xp_name = "vanilla_eurat3"
 
 # Pytorch
 esawc_encoder = io.load_pytorch_model(xp_name, lc_in = "esawc", lc_out = "encoder")

@@ -31,7 +31,7 @@ from wopt.ml import graphics
 xp_name = "vanilla"
 
 device = torch.device("cuda")
-domainname = "elmenia_algeria"
+domainname = "montpellier_agglo"
 
 config = utilconf.get_config(
     os.path.join(
@@ -42,8 +42,8 @@ config = utilconf.get_config(
         "config.yaml",
     )
 )
-inference_dump_dir = os.path.join(config.paths.data_dir, "outputs", f"Inference_embmix_{xp_name}_{domainname}_esawc_esgp")
-mergedmap_dump_dir = os.path.join(config.paths.data_dir, "outputs", f"Merged_embmix_{xp_name}_{domainname}_esawc_esgp")
+inference_dump_dir = os.path.join(config.paths.data_dir, "outputs", f"Inference_posembmix_{xp_name}_{domainname}_esawc_esgp")
+mergedmap_dump_dir = os.path.join(config.paths.data_dir, "outputs", f"Merged_posembmix_{xp_name}_{domainname}_esawc_esgp")
 
 if not os.path.exists(inference_dump_dir):
     os.makedirs(inference_dump_dir)
@@ -93,6 +93,7 @@ esawc_encoder.to(device)
 ecosg_encoder.to(device)
 esgp_decoder.to(device)
 emb_mixer.to(device)
+position_encoder.to(device)
 
 esawc_transform = mmt_transforms.OneHot(esawc.n_labels + 1, device = device)
 ecosg_transform = mmt_transforms.OneHot(ecosg.n_labels + 1, device = device)
@@ -100,8 +101,8 @@ pos_transform = mmt_transforms.GeolocEncoder()
 
 # Tiling query domain
 #----------------
-margin = 120
 n_px_max = 600
+margin = n_px_max // 6
 sampler = samplers.GridGeoSampler(esawc, size=n_px_max, stride = n_px_max - margin, roi = qb)
 
 patches = []
@@ -132,9 +133,9 @@ for iqb in tqdm(sampler, desc = f"Inference over {len(sampler)} patches"):
     with torch.no_grad():
         emba = esawc_encoder(x_esawc.float())
         embo = ecosg_encoder(x_ecosg.float())
-        # emb = emb_mixer(torch.cat([emba, torch.nn.functional.interpolate(embo, emba.shape[-2:], mode="bicubic")], dim=1))
-        # emb += position_encoder(torch.Tensor(pos_enc["coordenc"])).unsqueeze(0).unsqueeze(2).unsqueeze(3)
-        emb = emba
+        # emb = emba
+        emb = emb_mixer(torch.cat([emba, torch.nn.functional.interpolate(embo, emba.shape[-2:], mode="bicubic")], dim=1))
+        # emb += position_encoder(torch.Tensor(pos_enc["coordenc"]).to(device)).unsqueeze(0).unsqueeze(2).unsqueeze(3)
         y_esgp = esgp_decoder(emb)
     
     y_esgp = y_esgp.argmax(1).squeeze().cpu().numpy()
@@ -207,13 +208,13 @@ fig, ax = infres.plot(x_infres)
 fig.savefig(os.path.join(inference_dump_dir, f"{domainname}_infres.png"))
 fig.show()
 
-# merged = landcovers.MergedMap(path = mergedmap_dump_dir, res = esgp.res)
-# merged.res = esgp.res
+merged = landcovers.MergedMap(path = mergedmap_dump_dir, res = esgp.res)
+merged.res = esgp.res
 
-# x_merged = merged[qb]
-# fig, ax = merged.plot(x_merged)
-# fig.savefig(os.path.join(mergedmap_dump_dir, f"{domainname}_merged.png"))
-# fig.show()
+x_merged = merged[qb]
+fig, ax = merged.plot(x_merged)
+fig.savefig(os.path.join(mergedmap_dump_dir, f"{domainname}_merged.png"))
+fig.show()
 
 # x_esgp = esgp[qb]
 # fig, ax = esgp.plot(x_esgp)

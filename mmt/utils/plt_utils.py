@@ -4,7 +4,7 @@ import matplotlib.cm as cm
 import seaborn as sns
 from torch.nn import Softmax2d
 import torch
-from os.path import basename
+import os
 
 coloring = {
     "esawc.hdf5": cm.Set1.colors[0],
@@ -126,8 +126,8 @@ class PltPerClassMetrics(object):
     ):
         for source, target_data in conf_matrix.items():
             for target, cm in target_data.items():
-                source = basename(source)
-                target = basename(target)
+                source = os.path.basename(source)
+                target = os.path.basename(target)
                 TP = np.diag(cm)
                 FP = np.sum(cm, axis=0) - TP
                 FN = np.sum(cm, axis=1) - TP

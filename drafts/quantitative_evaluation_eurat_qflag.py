@@ -46,7 +46,7 @@ device = "cuda" if usegpu else "cpu"
 
 print(f"Executing program {sys.argv[0]} in {os.getcwd()}")
 
-xp_name = "vanilla"
+xp_name = "vanilla_eurat3"
 domainname = "eurat"
 
 config = utilconf.get_config(
@@ -64,8 +64,9 @@ config = utilconf.get_config(
 print(f"Loading auto-encoders from {xp_name}")
 model1 = io.load_pytorch_model(xp_name, "esawc", "esgp")
 model1 = model1.to(device)
-model2 = io.load_pytorch_model(xp_name, "esgp", "esgp")
+model2 = io.load_pytorch_model(xp_name, "ecosg", "esgp")
 model2 = model2.to(device)
+epoch = io.get_epoch_of_best_model(xp_name)
 
 toh1 = mmt_transforms.OneHot(13, device = device)
 toh2 = mmt_transforms.OneHot(35, device = device)
@@ -92,9 +93,10 @@ cmx_esgp2esgp_esgp = np.zeros((n_labels, n_labels), dtype = np.int32)
 cmx_ecosg_esgp = np.zeros((n_labels, n_labels), dtype = np.int32)
 
 print("Computing confusion matrices...")
-for i in tqdm(h5f["esawc"].keys()):
+items = list(h5f["esawc"].keys())
+for i in tqdm(items):
     x1 = to_tensor(h5f["esawc"].get(i))
-    x2 = to_tensor(h5f["esgp"].get(i))
+    x2 = to_tensor(h5f["ecosg"].get(i))
     x3 = h5f["ecosg"].get(i)
     y_true = h5f["esgp"].get(i)
     with torch.no_grad():
@@ -109,18 +111,26 @@ for i in tqdm(h5f["esawc"].keys()):
 
 
 print(f"Bulk total overall accuracy (ESAWC -> ECOSG+): {accuracy(cmx_esawc2esgp_esgp)}")
-print(f"Bulk total overall accuracy (ECOSG+ -> ECOSG+): {accuracy(cmx_esgp2esgp_esgp)}")
+print(f"Bulk total overall accuracy (ECOSG -> ECOSG+): {accuracy(cmx_esgp2esgp_esgp)}")
 print(f"Bulk total overall accuracy (ECOSG): {accuracy(cmx_ecosg_esgp)}")
 
 lh = landcovers.ecoclimapsg_label_hierarchy
 n_priml = len(lh.keys())
 oap = {}
 oat = {}
+plt_utils.figureDir = os.path.join(
+    mmt_repopath,
+    "experiments",
+    xp_name,
+    "out"
+)
+plt_utils.fmtImages = ".svg"
+plt_utils.storeImages = True
 print("Drawing confusion matrices...")
 for cmx, method, shortmet in zip(
         [cmx_esawc2esgp_esgp, cmx_esgp2esgp_esgp, cmx_ecosg_esgp],
-        ["ESAWC -> ECOSG+", "ECOSG+ -> ECOSG+", "ECOSG"],
-        ["esawc2esgp", "esgp2esgp", "ecosg"],
+        ["ESAWC -> ECOSG+", "ECOSG -> ECOSG+", "ECOSG"],
+        ["esawc2esgp", "ecosg2esgp", "ecosg"],
     ):
     print(f"Method = {method}")
     
@@ -160,7 +170,7 @@ for cmx, method, shortmet in zip(
     plt_utils.plot_confusion_matrix(
         dfkcmx,
         figtitle = f"Unnormed confusion matrix {method}",
-        figname = f"cmx_{domainname}_{shortmet}",
+        figname = f"cmx_{domainname}_{shortmet}_ep{epoch}",
         accuracy_in_corner = True
     )
     oat[shortmet] = np.round(accuracy(kcmx), 3)
@@ -172,7 +182,7 @@ for cmx, method, shortmet in zip(
     plt_utils.plot_confusion_matrix(
         pd.DataFrame(data=reccmx, index = dfkcmx.index, columns = dfkcmx.columns),
         figtitle = f"Recall matrix (normed by reference) {method}",
-        figname = f"reccmx_{domainname}_{shortmet}"
+        figname = f"reccmx_{domainname}_{shortmet}_ep{epoch}"
     )
     # # Normalization by predicted amounts -> Precision matrix
     # #--------------------------------
@@ -189,7 +199,7 @@ print(f"""Recap of overall accuracies over {domainname}:
 +------------+----------------+--------------+
 | ECOSG      | {oap['ecosg']}          | {oat['ecosg']}        |
 | ESA trans  | {oap['esawc2esgp']}          | {oat['esawc2esgp']}        |
-| ESG+ trans | {oap['esgp2esgp']}          | {oat['esgp2esgp']}        |
+| ESG trans  | {oap['ecosg2esgp']}          | {oat['ecosg2esgp']}        |
 +------------+----------------+--------------+
 """)
 # EOF

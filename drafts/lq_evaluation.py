@@ -31,8 +31,8 @@ device = "cuda" if usegpu else "cpu"
 
 print(f"Executing program {sys.argv[0]} in {os.getcwd()}")
 
-xp_name = "vanilla"
-val_domains = ["snaefell_glacier", "dublin_city", "iso_kihdinluoto", "portugese_crops"]
+xp_name = "vanilla_eurat3"
+val_domains = ["snaefell_glacier", "dublin_city", "iso_kihdinluoto", "elmenia_algeria"]
 
 
 # Land cover loading
@@ -51,7 +51,7 @@ model2 = io.load_pytorch_model(xp_name, "ecosg", "esgp")
 model2 = model2.to(device)
 
 toh1 = mmt_transforms.OneHot(esawc.n_labels + 1, device = device)
-toh2 = mmt_transforms.OneHot(esgp.n_labels + 1, device = device)
+toh2 = mmt_transforms.OneHot(ecosg.n_labels + 1, device = device)
 
 # Inference
 #----------------
