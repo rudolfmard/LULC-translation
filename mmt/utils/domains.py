@@ -413,8 +413,6 @@ def enlarge_domain(domain, factor = 1):
 #=====================
 # Easily draw geoJson: https://geojson.io/
 ireland = GeoRectangle([-11.1, -4.8, 50.9, 55.6])
-irl750 = GeoRectangle([-15.5, -5, 49.5, 57.5])
-ireland25 = GeoRectangle([-16, 4, 45, 61])
 dublin_city = GeoRectangle([-6.3139, -6.2209, 53.3321, 53.3784])
 toulouse = GeoRectangle([1.336, 1.508, 43.554, 43.674])
 nanterre = GeoRectangle([2.166, 2.272, 48.861, 48.936])
@@ -424,7 +422,6 @@ dublin_county = GeoRectangle(
 )
 alps_and_carpates = GeoRectangle([2, 27, 41.3, 51])
 europe = GeoRectangle([-20, 30, 32, 70])
-eurat = GeoRectangle([-32, 42, 20, 72])
 freastern_eurat = GeoRectangle([8.24, 42, 20, 72])
 reunion_island = GeoRectangle([55.1958, 55.8723, -21.4286, -20.8180])
 bigearthnet_fulldom = GeoRectangle((-9.00023345437725, 36.956956702083396, 31.598439091981028, 68.02168200047284))
@@ -434,6 +431,14 @@ waterville_kerry_124x133 = GeoRectangle([-10.16, -10.141, 51.83, 51.841])
 montpellier_agglo = GeoRectangle([3.63, 4.14, 43.38, 43.82]) # Sea artefact
 rhone_avignon = GeoRectangle([4.64, 4.95, 43.82, 44.11]) # Stitching artefact
 
+# NWP domains
+irl750 = GeoRectangle([-15.5, -5, 49.5, 57.5])
+ireland25 = GeoRectangle([-16, 4, 45, 61])
+eurat = GeoRectangle([-32, 42, 20, 72])
+fin_south_deode = GeoRectangle([15.5, 32, 57, 65]) # forecast domain = [16.33, 31.03, 57.59, 64.07]
+
+# Sahara small town and lake
+elmenia_algeria = GeoRectangle([2.44, 3.46, 30.01, 30.97])
 # Mangroves
 florida_mangrove = GeoRectangle([-81.5995, -81.5664, 25.9753, 26.0097])
 # Ice, moss and lichen
