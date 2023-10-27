@@ -46,6 +46,44 @@ def print_cuda_statistics():
     logger.info("Available devices  {}".format(torch.cuda.device_count()))
     logger.info("Current cuda device  {}".format(torch.cuda.current_device()))
 
+def get_bbox_from_coord(x_coor, y_coor, patch_size, location="upper-left"):
+    """Return a bounding box (xmin, ymin, xmax, ymax) from a single point coordinate.
+    
+    
+    Parameters
+    ----------
+    x_coor: float
+        Easting coordinate of the single point
+    
+    y_coor: float
+        Northing coordinate of the single point
+    
+    patch_size: float
+        Size of the bounding box, expressed as a difference of coordinate (xmax -xmin)
+    
+    location: {'lower-left', 'center', 'upper-right', 'upper-left'}
+        Indicator to locate the single point coordinate w.r.t the bounding box.
+        For example, if location='upper-left' (default), the single point is assumed
+        to be located in the upper left corner of the bounding box that will be returned.
+    
+    
+    Returns
+    --------
+    xmin, ymin, xmax, ymax: 4-tuple of float
+        Bounding box (left, bottom, right, top)
+    """
+    if location == "lower-left":
+        xmin, ymin, xmax, ymax = x_coor, y_coor, x_coor + patch_size, y_coor + patch_size
+    elif location == "center":
+        xmin, ymin, xmax, ymax = x_coor - patch_size/2, y_coor - patch_size/2, x_coor + patch_size/2, y_coor + patch_size/2
+    elif location == "upper-right":
+        xmin, ymin, xmax, ymax = x_coor - patch_size, y_coor - patch_size, x_coor, y_coor
+    elif location == "upper-left":
+        xmin, ymin, xmax, ymax = x_coor, y_coor - patch_size, x_coor + patch_size, y_coor
+    else:
+        raise ValueError(f"Unsupported location key: {location}. Supported keys are 'lower-left', 'center', 'upper-right', 'upper-left'.")
+    
+    return xmin, ymin, xmax, ymax
 
 class InfiniIterTool:
     def __init__(self, start):
