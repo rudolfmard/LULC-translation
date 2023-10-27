@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """Multiple land-cover/land-use Maps Translation (MMT)
 
-Global land cover maps
+Land cover maps
 """
 import os
 import numpy as np
@@ -232,7 +232,7 @@ class TorchgeoLandcover(tgd.RasterDataset):
         if suptitle is not None:
             plt.suptitle(suptitle)
         
-        fig.tight_layout()
+        # fig.tight_layout()
         return fig, ax
 
 
@@ -359,6 +359,21 @@ class MergedMap(InferenceResults):
     pass
 
 class OpenStreetMap:
+    """OpenStreetMap land cover from Cartopy (for plot only).
+    
+    The class is init with a level of details and a patch size. It is then
+    used to produce Cartopy plots of OSM land cover at given coordinates +/- patch size.
+    Coordinates and patch size are expected to be in lon/lon format (EPSG:4326).
+    
+    
+    Parameters
+    ----------
+    details: int, default=3
+        Level of details in the map. The higher, the more detailled but the heavier to load
+        
+    default_patch_size: float, default=0.05
+        Patch size in lon/lat degrees. Overwritten by plot argument, if provided.
+    """
     def __init__(self, details = 3, default_patch_size = 0.05):
         self.details = details
         self.default_patch_size = default_patch_size
@@ -372,6 +387,24 @@ class OpenStreetMap:
         figax = None,
         rowcolidx = 111
     ):
+        """Plot the OpenStreetMap land cover
+        
+        
+        Parameters
+        ----------
+        sample: dict
+            Sample with a 'coordinate' or 'bbox' key that will be used to
+            specify the location.
+            The 'bbox' must have [minx, ..., maxy] attributes
+            The 'coordinate' is assumed to point to the upper-left corner and will be completed by `patch_size`
+            All location information are expected to be in lon/lat degrees
+        
+        patch_size: int, optional
+            Patch size to use when the sample only has a 'coordinate' key.
+            If not provided, the default patch size set in init is used.
+        
+        
+        """
         
         if figax is None:
             fig, ax = plt.subplots(1, 1, figsize=(12,12))
@@ -408,7 +441,6 @@ class OpenStreetMap:
         ax0.set_yticklabels(np.round(yticks,3))
         if show_titles:
             ax0.set_title(self.__class__.__name__)
-        
         
         return fig, ax0
     
