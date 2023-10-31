@@ -6,8 +6,10 @@ Module to load and export pretrained models for inference
 """
 
 import os
+import rasterio
 import torch
 from torch import nn
+from torchgeo.datasets.utils import BoundingBox as TgeoBoundingBox
 from mmt import _repopath_ as mmt_repopath
 from mmt.graphs.models import (
     universal_embedding,
@@ -404,6 +406,46 @@ def load_pytorch_embmix(xp_name, h_channels = 64):
     
     return emb_mixer
 
+def dump_labels_in_tif(labels, domain, crs, tifpath):
+    """Write land cover labels in a GeoTIFF file.
+    
+    
+    Parameters
+    ----------
+    labels: ndarray
+        Matrix of land cover labels
+    
+    domain: `torchgeo.datasets.utils.BoundingBox` or `mmt.utils.domains.GeoRectangle`
+        Domain covered by the labels
+    
+    crs: `rasterio.crs.CRS`
+        Coordinate reference system
+    
+    tifpath: str
+        Path of the file to be written
+    """
+    
+    if not isinstance(domain, TgeoBoundingBox):
+        domain = domain.to_tgbox(crs)
+    
+    width, height = labels.shape
+    transform = rasterio.transform.from_bounds(
+        domain.minx, domain.miny, domain.maxx, domain.maxy, width, height
+    )
+    kwargs = {
+        "driver": "gTiff",
+        "dtype": "int16",
+        "nodata": 0,
+        "count": 1,
+        "crs": crs,
+        "transform": transform,
+        "width": width,
+        "height": height,
+    }
+    with rasterio.open(tifpath, "w", **kwargs) as f:
+        f.write(labels, 1)
+        
+    return f
 
 def export_position_encoder_to_onnx(xp_name, lc_name = "esawc", onnxfilename = "[default].onnx"):
     """Load the Pytorch model and export it to the ONNX format"""

@@ -42,8 +42,8 @@ config = utilconf.get_config(
         "config.yaml",
     )
 )
-inference_dump_dir = os.path.join(config.paths.data_dir, "outputs", f"Inference_posembmix_{xp_name}_{domainname}_esawc_esgp")
-mergedmap_dump_dir = os.path.join(config.paths.data_dir, "outputs", f"Merged_posembmix_{xp_name}_{domainname}_esawc_esgp")
+inference_dump_dir = os.path.join(config.paths.data_dir, "outputs", f"Inference_c54asd_{xp_name}_{domainname}_esawc_esgp")
+mergedmap_dump_dir = os.path.join(config.paths.data_dir, "outputs", f"Merged_c54asd_{xp_name}_{domainname}_esawc_esgp")
 
 if not os.path.exists(inference_dump_dir):
     os.makedirs(inference_dump_dir)
@@ -140,22 +140,9 @@ for iqb in tqdm(sampler, desc = f"Inference over {len(sampler)} patches"):
     
     y_esgp = y_esgp.argmax(1).squeeze().cpu().numpy()
     
-    width, height = y_esgp.shape
-    transform = rasterio.transform.from_bounds(
-        iqb.minx, iqb.miny, iqb.maxx, iqb.maxy, width, height
+    io.dump_labels_in_tif(
+        y_esgp, iqb, esawc.crs, os.path.join(inference_dump_dir, tifpatchname)
     )
-    kwargs = {
-        "driver": "gTiff",
-        "dtype": "int16",
-        "nodata": 0,
-        "count": 1,
-        "crs": esawc.crs,
-        "transform": transform,
-        "width": width,
-        "height": height,
-    }
-    with rasterio.open(os.path.join(inference_dump_dir, tifpatchname), "w", **kwargs) as f:
-        f.write(y_esgp, 1)
     
 print("Inference complete.")
 
@@ -176,22 +163,9 @@ for iqb in tqdm(sampler, desc = f"Merging maps over {len(sampler)} patches"):
     x_merge = x_merge.squeeze().numpy()
     
     tifpatchname = f"N{iqb.minx}_E{iqb.maxy}.tif"
-    width, height = x_merge.shape
-    transform = rasterio.transform.from_bounds(
-        iqb.minx, iqb.miny, iqb.maxx, iqb.maxy, width, height
+    io.dump_labels_in_tif(
+        x_merge, iqb, esawc.crs, os.path.join(mergedmap_dump_dir, tifpatchname)
     )
-    kwargs = {
-        "driver": "gTiff",
-        "dtype": "int16",
-        "nodata": 0,
-        "count": 1,
-        "crs": esawc.crs,
-        "transform": transform,
-        "width": width,
-        "height": height,
-    }
-    with rasterio.open(os.path.join(mergedmap_dump_dir, tifpatchname), "w", **kwargs) as f:
-        f.write(x_merge, 1)
     
 print("Merging complete.")
 print("inference_dump_dir=", inference_dump_dir)
