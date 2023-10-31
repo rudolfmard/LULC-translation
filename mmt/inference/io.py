@@ -6,9 +6,10 @@ Module to load and export pretrained models for inference
 """
 
 import os
+import numpy as np
+from scipy.cluster import hierarchy
 import rasterio
 import torch
-from torch import nn
 from torchgeo.datasets.utils import BoundingBox as TgeoBoundingBox
 from mmt import _repopath_ as mmt_repopath
 from mmt.graphs.models import (
@@ -190,7 +191,7 @@ def load_old_pytorch_model(xp_name, lc_in="esawc", lc_out="esgp"):
     autoenc_in.load_state_dict(checkpoint[f"encoder_state_dict_{lc_in}.hdf5"])
     autoenc_out.load_state_dict(checkpoint[f"encoder_state_dict_{lc_out}.hdf5"])
     
-    model = nn.Sequential(
+    model = torch.nn.Sequential(
         autoenc_in.encoder,
         autoenc_out.decoder
     )
@@ -281,7 +282,7 @@ def load_pytorch_model(xp_name, lc_in="esawc", lc_out="esgp", train_mode = False
     elif lc_out == "decoder":
         model = autoenc_in.decoder
     else:
-        model = nn.Sequential(
+        model = torch.nn.Sequential(
             autoenc_in.encoder,
             autoenc_out.decoder
         )
@@ -446,6 +447,73 @@ def dump_labels_in_tif(labels, domain, crs, tifpath):
         f.write(labels, 1)
         
     return f
+
+def stitch_tif_files(input_dir, output_dir, n_max_files = 200, prefix = "merged", verbose = True):
+    """Merge a large number of TIF files into a smaller number of TIF files.
+    
+    The files are merged according to the lon-lat coordinates found in their names
+    with hierarchical clustering (centroid linkage).
+    The expected pattern for the names of the TIF files is
+        "N<lat>_E<lon>.tif"
+        Ex: "N4.09_E43.82.tif"
+    
+    
+    Parameters
+    ----------
+    input_dir: str
+        Path to the directory where are stored the input TIF files.
+    
+    output_dir: str
+        Path to the directory where are stored the output TIF files.
+        If it doesn't exists, it is created.
+    
+    n_max_files: int
+        Maximum number of TIF files in the output directory.
+    
+    prefix: str
+        Prefix for the output file names.
+        
+    verbose: bool
+        If False, remove all prints.
+    """
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+    ls = np.array([i for i in os.listdir(input_dir) if i.endswith(".tif")])
+    lats = []
+    lons = []
+    for i in ls:
+        n, e = i.split("_")
+        lats.append(float(n[1:]))
+        lons.append(float(e[1:-4]))
+    
+    X = np.array([lons, lats]).T
+    Z = hierarchy.linkage(X, method = "centroid")
+    if verbose:
+        print(f"Hierarchical clustering done.")
+    
+    idx = hierarchy.fcluster(Z, t = n_max_files, criterion="maxclust")
+    
+    n_files = 0
+    for k in range(1, n_max_files+1):
+        dst_path = os.path.join(output_dir, f"{prefix}_K{k}.tif")
+        if len(ls[idx == k]) > 0:
+            if verbose:
+                print(f"[{k}/{n_max_files}] Merging {len(ls[idx == k])} files into {dst_path}")
+            rasterio.merge.merge(
+                [os.path.join(input_dir, i) for i in ls[idx == k]],
+                dst_path = dst_path
+            )
+            n_files += 1
+        else:
+            if verbose:
+                print(f"[{k}/{n_max_files}] Merging {len(ls[idx == k])} files into {dst_path}. File not created.")
+        
+    
+    if verbose:
+        print(f"Merging into {n_files} files complete. Files are in {output_dir}")
+    
+    return n_files
 
 def export_position_encoder_to_onnx(xp_name, lc_name = "esawc", onnxfilename = "[default].onnx"):
     """Load the Pytorch model and export it to the ONNX format"""
