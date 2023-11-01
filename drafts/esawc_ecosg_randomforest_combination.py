@@ -6,6 +6,7 @@ Testing inference run module
 """
 
 import os
+import pickle
 import rasterio
 import torch
 import h5py
@@ -18,6 +19,8 @@ from tqdm import tqdm
 from torchgeo import samplers
 import torchvision.transforms as tvt
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import AdaBoostClassifier
+from sklearn.tree import DecisionTreeClassifier
 
 from mmt import _repopath_ as mmt_repopath
 from mmt.datasets import landcovers
@@ -99,26 +102,31 @@ pos_transform = mmt_transforms.GeolocEncoder()
 
 # Find balanced dataset
 # - - - - -
-lbcount = {k:0 for k in range(ecosg.n_labels + 1)}
-first_patch_to_have_it = {k:None for k in range(ecosg.n_labels + 1)}
+# lbcount = {k:0 for k in range(ecosg.n_labels + 1)}
+# first_patch_to_have_it = {k:None for k in range(ecosg.n_labels + 1)}
 
-for it in h5f["esawc"].keys():
-    x_esawc = h5f["esawc"][it]
-    x_ecosg = h5f["ecosg"][it]
-    x_esgp = h5f["esgp"][it]
-    geoloc = {"coordinate": (
-        h5f["esgp"][it].attrs["x_coor"],
-        h5f["esgp"][it].attrs["y_coor"]
-    )}
-    for k in range(ecosg.n_labels + 1):
-        if (x_esgp[:] == k).any() and lbcount[k] == 0:
-            lbcount[k] += 1
-            print(f"First patch to have {ecosg.labels[k]}: {it}")
-            first_patch_to_have_it[k] = it
-        
-patches_to_use = np.unique([i for i in first_patch_to_have_it.values() if i is not None])
-# patches_to_use = ['0', '10', '100', '1000', '1001', '1003', '1004', '1032', '1033',
-       # '1046', '107', '1112', '1210']
+# patches_to_use = []
+# while len(patches_to_use) < 20:
+    # for it in np.random.choice(list(h5f["esawc"].keys()), 2000):
+        # x_esawc = h5f["esawc"][it]
+        # x_ecosg = h5f["ecosg"][it]
+        # x_esgp = h5f["esgp"][it]
+        # geoloc = {"coordinate": (
+            # h5f["esgp"][it].attrs["x_coor"],
+            # h5f["esgp"][it].attrs["y_coor"]
+        # )}
+        # for k in range(ecosg.n_labels + 1):
+            # if (x_esgp[:] == k).any() and lbcount[k] == 0:
+                # lbcount[k] += 1
+                # # print(f"First patch to have {ecosg.labels[k]}: {it}")
+                # first_patch_to_have_it[k] = it
+            
+    # balanced_patches = np.unique([i for i in first_patch_to_have_it.values() if i is not None])
+    # patches_to_use = np.unique(np.concatenate([patches_to_use, balanced_patches]))
+patches_to_use = ['0', '10', '100', '1000', '1001', '1003', '1004', '1032', '1033',
+       '1046', '107', '1112', '1210'] + ['1045', '1338', '144', '1459', '1506', '18', '2152', '243', '2696',
+       '316', '3549', '3901', '570'] + ['1859', '2096', '2411', '2569', '2755', '2814', '2912', '3444',
+       '3511', '3777', '3921', '418', '645', '972']
 
 
 # Prepare dataset
@@ -189,10 +197,24 @@ for it in patches_to_use:
 # y = x_esgp.squeeze().cpu().numpy().ravel()
 
 print(f"Shapes: X={X.shape}, y={y.shape}")
-rfc = RandomForestClassifier(n_estimators = 200, verbose=2, n_jobs = 4)
+rfc = RandomForestClassifier(n_estimators = 1000, verbose=2, n_jobs = 4, max_depth=20)
+# rfc = AdaBoostClassifier(
+    # estimator=DecisionTreeClassifier(max_depth=20), n_estimators=200
+# )
 rfc.fit(X, y)
 # y_pred = rfc.predict(X)
 
+# Save/load model
+#------------
+pklfile = os.path.join(mmt_repopath, "saved_models", "rfc_1000trees.pkl")
+with open(pklfile, "wb") as f:
+    pickle.dump(rfc, f)
+    print(f"Model saved at {f.name}")
+
+with open(pklfile, "rb") as f:
+    rfc = pickle.load(f)
+    print(f"Model loaded from {f.name}")
+    
 # Testing on few patches
 #----------------
 patches_to_test = ["546", "2187", "3"]
@@ -234,7 +256,7 @@ print(f"Accuracy: {(y_pred == y_test).sum()/y_test.size}")
 
 # View results
 #----------------
-it = "547"
+it = "100"
 x_esawc = torch.Tensor(h5f["esawc"][it][:]).long()
 x_ecosg = torch.Tensor(h5f["ecosg"][it][:]).long()
 # x_esgp = torch.Tensor(h5f["esgp"][it][:])
@@ -264,3 +286,4 @@ fig.show()
 y_esgp = y_loc.reshape((100, 100))
 fig, ax = esgp.plot({"mask":y_esgp})
 fig.show()
+
