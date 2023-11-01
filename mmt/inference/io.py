@@ -419,7 +419,7 @@ def dump_labels_in_tif(labels, domain, crs, tifpath):
         
     return f
 
-def stitch_tif_files(input_dir, output_dir, n_max_files = 200, prefix = "merged", verbose = True):
+def stitch_tif_files(input_dir, output_dir, n_max_files = 200, prefix = "stitched", verbose = True):
     """Merge a large number of TIF files into a smaller number of TIF files.
     
     The files are merged according to the lon-lat coordinates found in their names
@@ -482,7 +482,7 @@ def stitch_tif_files(input_dir, output_dir, n_max_files = 200, prefix = "merged"
         
     
     if verbose:
-        print(f"Merging into {n_files} files complete. Files are in {output_dir}")
+        print(f"Stitching TIFs into {n_files} files complete. Files are in {output_dir}")
     
     return n_files
 

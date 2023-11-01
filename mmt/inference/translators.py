@@ -9,6 +9,7 @@ import os
 import shutil
 import time
 import numpy as np
+from copy import deepcopy
 from tqdm import tqdm
 import onnx
 import pickle
@@ -25,7 +26,7 @@ from mmt.utils import misc
 
 
 # BASE CLASSES
-# ==============
+# ============
 class OnnxModel:
     """Wrapper for inference from ONNX model"""
 
@@ -55,8 +56,50 @@ class OnnxModel:
 
 
 class MapTranslator:
-    """Apply map translation models in inference mode"""
-
+    """Abstract class to make map translation models in inference mode.
+    
+    Define a set of nested methods that help scaling up the inference area
+    and give a common API for all models (segmentation vs pixelwise).
+    By default, the method `predict_from_domain` is called when a translator
+    is used as a transform.
+    
+    
+    Parameters
+    ----------
+    checkpoint_path: str
+        Path to the Pytorch checkpoint from which are loaded the auto-encoders.
+        For the child class `MapMerger`, this attribute is not used and set to "merger"
+    
+    device: {"cuda", "cpu"}
+        Device on which the inference is done.
+    
+    remove_tmpdirs: bool, default = True
+        If True, temporary directory are erased at the of the function using them.
+    
+    
+    Main attributes
+    ---------------
+    checkpoint_path: str
+        See parameters
+        
+    landcover: `mmt.datasets.landcovers.TorchgeoLandcover`
+        Land cover dataset that will be used to define the sampler and the CRS
+        of the query domain.
+    
+    
+    Main methods
+    ------------
+    predict_from_data:
+        Apply translation to matrices of land cover labels.
+    
+    predict_from_domain:
+        Apply translation to a geographical domain.
+        Calls `predict_from_data`
+        
+    predict_from_large_domain:
+        Apply translation to a large domain in made in tiling the large domain into small patches.
+        Calls `predict_from_domain`
+    """
     def __init__(
         self,
         checkpoint_path=None,
@@ -67,37 +110,141 @@ class MapTranslator:
         self.remove_tmpdirs = remove_tmpdirs
         self.device = torch.device(device)
         self.shortname = self.__class__.__name__ + "." + os.path.basename(checkpoint_path)
-
+        self.landcover = None
+        
+    def __call__(self, qb):
+        return self.predict_from_domain(qb)
+    
+    def __repr__(self):
+        return str(self.__class__) + " checkpoint_path=" + self.checkpoint_path
+        
     def predict_from_data(self, x):
-        """Run the translation from matrices of land cover labels
-        :x: `torch.Tensor` of shape (N, 1, H, W)
+        """Apply translation to matrices of land cover labels.
+        
+        
+        Parameters
+        ----------
+        x: ndarray or `torch.Tensor` of shape (1, H, W)
+            Matrix of land cover labels in a Pytorch tensor with H=height, W=width
+        
+        
+        Returns
+        -------
+        y: ndarray of shape (H, W)
+            Matrix of predicted ECOSG+ land cover labels
         """
         raise NotImplementedError
     
     def predict_from_domain(self, qb):
-        """Run the translation from geographical domain
-        :qb: `torchgeo.datasets.utils.BoundingBox` or `mmt.utils.domains.GeoRectangle`
+        """Apply translation to a geographical domain.
+        
+        
+        Parameters
+        ----------
+        qb: `torchgeo.datasets.utils.BoundingBox` or `mmt.utils.domains.GeoRectangle`
+            Geographical domain
+        
+        
+        Returns
+        -------
+        y: ndarray of shape (H, W)
+            Matrix of predicted ECOSG+ land cover labels
         """
         raise NotImplementedError
     
     def predict_from_large_domain(
         self, qb, output_dir="[id]", tmp_dir="[id]", n_max_files=200, n_px_max=600
     ):
-        """Inference over large domain in made in tiling the large domain into small patches"""
-        raise NotImplementedError
-    
-    def __call__(self, qb):
-        return self.predict_from_domain(qb)
-    
-    def __repr__(self):
-        return str(self.__class__) + " checkpoint_path=" + self.checkpoint_path
+        """Apply translation to a large domain in made in tiling the large domain into small patches.
+        
+        As big domains cannot fit in memory, the inference is done on small patches
+        (of size `n_px_max` pixels). The result of this inference is sotred in TIF files
+        that can be read by Torchgeo. However, as the number of TIF files can be very
+        large, there are stitched together into a smaller number (no more than `n_max_files`).
+        
+        
+        Parameters
+        ----------
+        qb: `torchgeo.datasets.utils.BoundingBox` or `mmt.utils.domains.GeoRectangle`
+            Geographical domain
+        
+        output_dir: str
+            Path to the output directory where the TIF files are stored.
+            If the keyword "[id]" is found, it will be replaced by a 6 random
+            digits and the date (ex: "aa2xzh.01Nov-14h38")
+        
+        tmp_dir: str
+            Path to the temporary directory. Used for the direct inference output (many TIF files)
+            If the keyword "[id]" is found, it will be replaced by a 6 random
+            digits and the date (ex: "aa2xzh.01Nov-14h38").
+            Removed at the end of this function if `remove_tmpdirs=True`
+        
+        n_max_files: int, default=200
+            Maximum number of TIF files created in `output_dir`.
+            If `n_max_files=0`, no stitching is made, `output_dir` is then
+            a copy of `tmp_dir`
+        
+        n_px_max: int, default=600
+            Size (in pixels) of a single patch for inference.
+        
+        
+        Returns
+        -------
+        output_dir: str
+            Path to the output directory where the TIF files are stored (with completion)
+        """
+        if not isinstance(qb, TgeoBoundingBox):
+            qb = qb.to_tgbox(self.landcover.crs)
+        
+        dir_id = misc.id_generator()
+        if "[id]" in output_dir:
+            output_dir = output_dir.replace(
+                "[id]", dir_id + time.strftime(".%d%b-%Hh%M")
+            )
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+
+        if "[id]" in tmp_dir:
+            tmp_dir = tmp_dir.replace(
+                "[id]", "tmp." + dir_id + time.strftime(".%d%b-%Hh%M")
+            )
+        if not os.path.exists(tmp_dir):
+            os.makedirs(tmp_dir)
+
+        margin = n_px_max // 6
+        sampler = samplers.GridGeoSampler(
+            self.landcover, size=n_px_max, stride=n_px_max - margin, roi=qb
+        )
+
+        for iqb in tqdm(sampler, desc=f"Inference over {len(sampler)} patches"):
+            tifpatchname = f"N{iqb.minx}_E{iqb.maxy}.tif"
+            if os.path.exists(os.path.join(tmp_dir, tifpatchname)):
+                continue
+
+            y = self.predict_from_domain(iqb)
+
+            io.dump_labels_in_tif(
+                y, iqb, self.landcover.crs, os.path.join(tmp_dir, tifpatchname)
+            )
+        
+        if n_max_files > 0:
+            io.stitch_tif_files(tmp_dir, output_dir, n_max_files=n_max_files, prefix = self.__class__.__name__, verbose = False)
+        else:
+            shutil.copytree(tmp_dir, output_dir, dirs_exist_ok=True)
+
+        if self.remove_tmpdirs:
+            shutil.rmtree(tmp_dir)
+        else:
+            print(f"Kept: tmp_dir={tmp_dir}")
+
+        return output_dir
 
 
-# PRACTICAL CLASSES
-# =================
+# CHILD CLASSES
+# =============
 
 class EsawcToEsgp(MapTranslator):
-    """Translate from ESA World Cover to ECOCLIMAP-SG+"""
+    """Translate from ESA World Cover to ECOCLIMAP-SG+ with map translation auto-encoders"""
     def __init__(
         self,
         checkpoint_path=os.path.join(mmt_repopath, "saved_models", "vanilla.ckpt"),
@@ -114,6 +261,7 @@ class EsawcToEsgp(MapTranslator):
             checkpoint_path, lc_in="esawc", lc_out="esgp"
         )
         self.encoder_decoder.to(self.device)
+        self.landcover = self.esawc
 
     def predict_from_data(self, x):
         """Run the translation from matrices of land cover labels
@@ -135,55 +283,9 @@ class EsawcToEsgp(MapTranslator):
         x = self.esawc[qb]
         return self.predict_from_data(x["mask"])
 
-    def predict_from_large_domain(
-        self, qb, output_dir="[id]", tmp_dir="[id]", n_max_files=200, n_px_max=600
-    ):
-        """Inference over large domain in made in tiling the large domain into small patches"""
-        if not isinstance(qb, TgeoBoundingBox):
-            qb = qb.to_tgbox(self.esawc.crs)
-        
-        dir_id = misc.id_generator()
-        if "[id]" in output_dir:
-            output_dir = output_dir.replace(
-                "[id]", dir_id + time.strftime(".%d%b-%Hh%M")
-            )
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-
-        if "[id]" in tmp_dir:
-            tmp_dir = tmp_dir.replace(
-                "[id]", "tmp." + dir_id + time.strftime(".%d%b-%Hh%M")
-            )
-        if not os.path.exists(tmp_dir):
-            os.makedirs(tmp_dir)
-
-        margin = n_px_max // 6
-        sampler = samplers.GridGeoSampler(
-            self.esawc, size=n_px_max, stride=n_px_max - margin, roi=qb
-        )
-
-        for iqb in tqdm(sampler, desc=f"Inference over {len(sampler)} patches"):
-            tifpatchname = f"N{iqb.minx}_E{iqb.maxy}.tif"
-            if os.path.exists(os.path.join(tmp_dir, tifpatchname)):
-                continue
-
-            y = self.predict_from_domain(iqb)
-
-            io.dump_labels_in_tif(
-                y, iqb, self.esawc.crs, os.path.join(tmp_dir, tifpatchname)
-            )
-
-        io.stitch_tif_files(tmp_dir, output_dir, n_max_files=16)
-
-        if self.remove_tmpdirs:
-            shutil.rmtree(tmp_dir)
-
-        return output_dir
-
 
 class EsawcEcosgToEsgpRFC(MapTranslator):
-    """Translate from ESA World Cover and ECOCLIMAP-SG to ECOCLIMAP-SG+
-    with a random forest classifer"""
+    """Translate from ESA World Cover and ECOCLIMAP-SG to ECOCLIMAP-SG+ with a random forest classifer"""
     def __init__(
         self,
         checkpoint_path=os.path.join(mmt_repopath, "saved_models", "vanilla.ckpt"),
@@ -266,50 +368,41 @@ class EsawcEcosgToEsgpRFC(MapTranslator):
             
         return self.predict_from_data(x[0].unsqueeze(0), x[1].unsqueeze(0))
 
-    def predict_from_large_domain(
-        self, qb, output_dir="[id]", tmp_dir="[id]", n_max_files=200, n_px_max=600
+
+class MapMerger(MapTranslator):
+    """Merge map with ECOCLIMAP-SG+ according to a quality flag criterion"""
+    
+    def __init__(
+        self,
+        source_map_path,
+        device="cpu",
+        remove_tmpdirs=True,
     ):
-        """Inference over large domain in made in tiling the large domain into small patches"""
-        if not isinstance(qb, TgeoBoundingBox):
-            qb = qb.to_tgbox(self.esawc.crs)
+        super().__init__("merger", device, remove_tmpdirs)
         
-        dir_id = misc.id_generator()
-        if "[id]" in output_dir:
-            output_dir = output_dir.replace(
-                "[id]", dir_id + time.strftime(".%d%b-%Hh%M")
-            )
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-
-        if "[id]" in tmp_dir:
-            tmp_dir = tmp_dir.replace(
-                "[id]", "tmp." + dir_id + time.strftime(".%d%b-%Hh%M")
-            )
-        if not os.path.exists(tmp_dir):
-            os.makedirs(tmp_dir)
-
-        margin = n_px_max // 6
-        sampler = samplers.GridGeoSampler(
-            self.landcover, size=n_px_max, stride=n_px_max - margin, roi=qb
-        )
-
-        for iqb in tqdm(sampler, desc=f"Inference over {len(sampler)} patches"):
-            tifpatchname = f"N{iqb.minx}_E{iqb.maxy}.tif"
-            if os.path.exists(os.path.join(tmp_dir, tifpatchname)):
-                continue
-
-            y = self.predict_from_domain(iqb)
-
-            io.dump_labels_in_tif(
-                y, iqb, self.landcover.crs, os.path.join(tmp_dir, tifpatchname)
-            )
-
-        io.stitch_tif_files(tmp_dir, output_dir, n_max_files=16)
-
-        if self.remove_tmpdirs:
-            shutil.rmtree(tmp_dir)
-
-        return output_dir
+        self.esgp = landcovers.EcoclimapSGplus()
+        self.qflags = landcovers.QualityFlagsECOSGplus(transforms=mmt_transforms.FillMissingWithSea(0,6))
+        self.landcover = landcovers.InferenceResults(path = source_map_path, res = self.esgp.res)
+        self.landcover.res = self.esgp.res
+        
+    def predict_from_domain(self, qb):
+        """Run the translation from geographical domain
+        :qb: `torchgeo.datasets.utils.BoundingBox` or `mmt.utils.domains.GeoRectangle`
+        """
+        if not isinstance(qb, TgeoBoundingBox):
+            qb = qb.to_tgbox(self.landcover.crs)
+        
+        x_infres = self.landcover[qb]
+        x_qflags = self.qflags[qb]
+        x_esgp = self.esgp[qb]
+        
+        x_merge = deepcopy(x_esgp["mask"])
+        where_infres = self.merge_criterion(x_qflags["mask"], x_esgp["mask"])
+        x_merge[where_infres] = x_infres["mask"][where_infres]
+        
+        return x_merge.squeeze().numpy()
     
-    
+    def merge_criterion(self, x_qflags, x_esgp):
+        """Use inference result when quality flag beyond 2 except for sea pixels"""
+        return torch.logical_and(x_qflags > 2, x_esgp != 1)
     
