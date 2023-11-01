@@ -200,30 +200,10 @@ def load_old_pytorch_model(xp_name, lc_in="esawc", lc_out="esgp"):
     
 def load_pytorch_model(xp_name, lc_in="esawc", lc_out="esgp", train_mode = False):
     """Return the pre-trained Pytorch model from the experiment `xp_name`"""
-    try:
-        config = utilconf.get_config(
-            os.path.join(
-                mmt_repopath,
-                "experiments",
-                xp_name,
-                "logs",
-                "config.yaml",
-            )
-        )
-    except:
-        print("Loading old JSON config")
-        config = utilconf.get_config(
-            os.path.join(
-                mmt_repopath,
-                "experiments",
-                xp_name,
-                "logs",
-                "config.json",
-            )
-        )
-        
+    
     if os.path.isabs(xp_name):
         checkpoint_path = xp_name
+        config_path = checkpoint_path.replace("ckpt", "config.yaml")
     else:
         checkpoint_path = os.path.join(
             mmt_repopath,
@@ -232,10 +212,18 @@ def load_pytorch_model(xp_name, lc_in="esawc", lc_out="esgp", train_mode = False
             "checkpoints",
             "model_best.pth.tar",
         )
+        config_path = os.path.join(
+            mmt_repopath,
+            "experiments",
+            xp_name,
+            "logs",
+            "config.yaml",
+        )
     
     assert os.path.isfile(checkpoint_path), f"No checkpoint found at {checkpoint_path}"#
     
     checkpoint = torch.load(checkpoint_path)
+    config = utilconf.get_config(config_path)
     
     if config.model.type == "transformer_embedding":
         EncDec = getattr(transformer_embedding, config.model.name)
