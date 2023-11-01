@@ -44,6 +44,7 @@ config = utilconf.get_config(
 )
 inference_dump_dir = os.path.join(config.paths.data_dir, "outputs", f"Inference_c54asd_{xp_name}_{domainname}_esawc_esgp")
 mergedmap_dump_dir = os.path.join(config.paths.data_dir, "outputs", f"Merged_c54asd_{xp_name}_{domainname}_esawc_esgp")
+stitchmap_dump_dir = os.path.join(config.paths.data_dir, "outputs", f"Stitched_c54asd_{xp_name}_{domainname}_esawc_esgp")
 
 if not os.path.exists(inference_dump_dir):
     os.makedirs(inference_dump_dir)
@@ -168,6 +169,9 @@ for iqb in tqdm(sampler, desc = f"Merging maps over {len(sampler)} patches"):
     )
     
 print("Merging complete.")
+
+io.stitch_tif_files(mergedmap_dump_dir, stitchmap_dump_dir, n_max_files = 16)
+
 print("inference_dump_dir=", inference_dump_dir)
 print("mergedmap_dump_dir=", mergedmap_dump_dir)
 
@@ -182,12 +186,12 @@ fig, ax = infres.plot(x_infres)
 fig.savefig(os.path.join(inference_dump_dir, f"{domainname}_infres.png"))
 fig.show()
 
-merged = landcovers.MergedMap(path = mergedmap_dump_dir, res = esgp.res)
+merged = landcovers.MergedMap(path = stitchmap_dump_dir, res = esgp.res)
 merged.res = esgp.res
 
 x_merged = merged[qb]
 fig, ax = merged.plot(x_merged)
-fig.savefig(os.path.join(mergedmap_dump_dir, f"{domainname}_merged.png"))
+fig.savefig(os.path.join(stitchmap_dump_dir, f"{domainname}_merged.png"))
 fig.show()
 
 # x_esgp = esgp[qb]
