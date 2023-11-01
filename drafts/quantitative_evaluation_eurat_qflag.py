@@ -27,6 +27,7 @@ from mmt.utils import config as utilconf
 from mmt.utils import domains
 from mmt.utils import plt_utils
 from mmt.inference import io
+from mmt.inference import translators
 
 
 shortlbnames = np.array(landcovers.ecoclimapsg_labels)
@@ -61,16 +62,12 @@ config = utilconf.get_config(
 
 # Loading models
 #----------------
-print(f"Loading auto-encoders from {xp_name}")
-model1 = io.load_pytorch_model(xp_name, "esawc", "esgp")
-model1 = model1.to(device)
-model2 = io.load_pytorch_model(xp_name, "ecosg", "esgp")
-model2 = model2.to(device)
-epoch = io.get_epoch_of_best_model(xp_name)
-
-toh1 = mmt_transforms.OneHot(13, device = device)
-toh2 = mmt_transforms.OneHot(35, device = device)
-to_tensor = lambda x: torch.Tensor(x[:]).long()
+checkpoint_path = os.path.join(mmt_repopath, "saved_models", "vanilla_eurat3.ep169.ckpt")
+print(f"Loading auto-encoders from {checkpoint_path}")
+translator1 = translators.EsawcToEsgp(checkpoint_path = checkpoint_path)
+translator2 = translators.EsawcEcosgToEsgpRFC(checkpoint_path = checkpoint_path)
+epoch = io.get_epoch_of_best_model(checkpoint_path)
+to_tensor = lambda x: torch.Tensor(x[:]).long().unsqueeze(0)
 
 # VALIDATION DOMAINS
 #====================
@@ -99,14 +96,12 @@ for i in tqdm(items):
     x2 = to_tensor(h5f["ecosg"].get(i))
     x3 = h5f["ecosg"].get(i)
     y_true = h5f["esgp"].get(i)
-    with torch.no_grad():
-        x1 = toh1(x1)
-        x2 = toh2(x2)
-        y1 = model1(x1.unsqueeze(0)).argmax(1).cpu()
-        y2 = model2(x2.unsqueeze(0)).argmax(1).cpu()
     
-    cmx_esawc2esgp_esgp += metrics.confusion_matrix(y_true[:].ravel(), y1.numpy().ravel(), labels = np.arange(n_labels))
-    cmx_esgp2esgp_esgp += metrics.confusion_matrix(y_true[:].ravel(), y2.numpy().ravel(), labels = np.arange(n_labels))
+    y1 = translator1.predict_from_data(x1)
+    y2 = translator2.predict_from_data(x1, x2)
+    
+    cmx_esawc2esgp_esgp += metrics.confusion_matrix(y_true[:].ravel(), y1.ravel(), labels = np.arange(n_labels))
+    cmx_esgp2esgp_esgp += metrics.confusion_matrix(y_true[:].ravel(), y2.ravel(), labels = np.arange(n_labels))
     cmx_ecosg_esgp += metrics.confusion_matrix(y_true[:].ravel(), np.tile(x3[:], (5,5)).ravel(), labels = np.arange(n_labels))
 
 
@@ -129,8 +124,8 @@ plt_utils.storeImages = True
 print("Drawing confusion matrices...")
 for cmx, method, shortmet in zip(
         [cmx_esawc2esgp_esgp, cmx_esgp2esgp_esgp, cmx_ecosg_esgp],
-        ["ESAWC -> ECOSG+", "ECOSG -> ECOSG+", "ECOSG"],
-        ["esawc2esgp", "ecosg2esgp", "ecosg"],
+        ["ESAWC -> ECOSG+", "ESA+ESG -> ECOSG+", "ECOSG"],
+        ["esawc2esgp", "esaesg2esgp", "ecosg"],
     ):
     print(f"Method = {method}")
     
@@ -199,7 +194,7 @@ print(f"""Recap of overall accuracies over {domainname}:
 +------------+----------------+--------------+
 | ECOSG      | {oap['ecosg']}          | {oat['ecosg']}        |
 | ESA trans  | {oap['esawc2esgp']}          | {oat['esawc2esgp']}        |
-| ESG trans  | {oap['ecosg2esgp']}          | {oat['ecosg2esgp']}        |
+| ESG + ESA  | {oap['esaesg2esgp']}          | {oat['esaesg2esgp']}        |
 +------------+----------------+--------------+
 """)
 # EOF

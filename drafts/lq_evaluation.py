@@ -16,6 +16,7 @@ from pprint import pprint
 import torchvision.transforms as tvt
 
 from mmt.inference import io
+from mmt.inference import translators
 from mmt import _repopath_ as mmt_repopath
 from mmt.datasets import transforms as mmt_transforms
 from mmt.datasets import landcovers
@@ -44,14 +45,10 @@ print(f"Landcovers loaded with native CRS and resolution")
 
 # Loading models
 #----------------
-print(f"Loading auto-encoders from {xp_name}")
-model1 = io.load_pytorch_model(xp_name, "esawc", "esgp")
-model1 = model1.to(device)
-model2 = io.load_pytorch_model(xp_name, "ecosg", "esgp")
-model2 = model2.to(device)
-
-toh1 = mmt_transforms.OneHot(esawc.n_labels + 1, device = device)
-toh2 = mmt_transforms.OneHot(ecosg.n_labels + 1, device = device)
+checkpoint_path = os.path.join(mmt_repopath, "saved_models", "vanilla_eurat3.ckpt")
+print(f"Loading auto-encoders from {checkpoint_path}")
+translator1 = translators.EsawcToEsgp(checkpoint_path = checkpoint_path)
+translator2 = translators.EsawcEcosgToEsgpRFC(checkpoint_path = checkpoint_path)
 
 # Inference
 #----------------
@@ -69,18 +66,15 @@ for i, domainname in enumerate(val_domains):
     esgp.plot(x_esgp, figax = (fig, axs[i, 1]), show_titles=False, show_colorbar=False)
     ecosg.plot(x_ecosg, figax = (fig, axs[i, 2]), show_titles=False, show_colorbar=False)
     
-    with torch.no_grad():
-        x1 = toh1(x_esawc["mask"])
-        x2 = toh2(x_ecosg["mask"])
-        y1 = model1(x1).argmax(1).cpu()
-        y2 = model2(x2).argmax(1).cpu()
+    y1 = translator1(qb)
+    y2 = translator2(qb)
     
     esgp.plot({"mask":y1}, figax = (fig, axs[i, -2]), show_titles=False, show_colorbar=False)
     esgp.plot({"mask":y2}, figax = (fig, axs[i, -1]), show_titles=False, show_colorbar=False)
     
     
 [ax.axis("off") for ax in axs.ravel()]
-cols = ["ESAWC", "ECOSG+", "ECOSG", "ESAWC -> ECOSG+", "ECOSG -> ECOSG+"]
+cols = ["ESAWC", "ECOSG+", "ECOSG", translator1.__class__.__name__, translator2.__class__.__name__]
 for ax, col in zip(axs[0], cols):
     ax.set_title(col)
 

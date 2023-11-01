@@ -66,6 +66,7 @@ class MapTranslator:
         self.checkpoint_path = checkpoint_path
         self.remove_tmpdirs = remove_tmpdirs
         self.device = torch.device(device)
+        self.shortname = self.__class__.__name__ + "." + os.path.basename(checkpoint_path)
 
     def predict_from_data(self, x):
         """Run the translation from matrices of land cover labels
@@ -84,6 +85,12 @@ class MapTranslator:
     ):
         """Inference over large domain in made in tiling the large domain into small patches"""
         raise NotImplementedError
+    
+    def __call__(self, qb):
+        return self.predict_from_domain(qb)
+    
+    def __repr__(self):
+        return str(self.__class__) + " checkpoint_path=" + self.checkpoint_path
 
 
 # PRACTICAL CLASSES
