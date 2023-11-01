@@ -6,8 +6,6 @@ Utilities for configuration parsing
 """
 import os
 import shutil
-import string
-import random
 
 import logging
 from logging import Formatter
@@ -20,32 +18,8 @@ from pprint import pprint
 
 from mmt import _repopath_ as mmt_repopath
 from mmt.utils import dirs
+from mmt.utils import misc
 
-
-def id_generator(size = 6, chars = string.ascii_lowercase + string.digits, forbidden = "_"):
-    """Generate random strings of characters and digits than can be used as
-    unique identifier
-    
-    
-    Parameters
-    ----------
-    size: int
-        Length of the returned string of characters
-    
-    chars: list
-        Admissible characters. Default are lower-case alphanumeric ASCII characters
-    
-    
-    Returns
-    -------
-    idstr: str
-        String of `size` characters randomly taken among `chars`
-    """
-    idstr = "".join([random.choice(chars) for _ in range(size)])
-    while forbidden in idstr:
-        idstr = "".join([random.choice(chars) for _ in range(size)])
-    
-    return idstr
 
 def setup_logging(log_dir):
     log_file_format = "[%(levelname)s] - %(asctime)s - %(name)s - : %(message)s in %(pathname)s:%(lineno)d"
@@ -106,7 +80,7 @@ def get_config_from_yaml(yaml_file):
     
     if "[id]" in config["xp_name"]:
         config["xp_name"] = config["xp_name"].replace(
-            "[id]", id_generator()
+            "[id]", misc.id_generator()
         )
     
     return EasyDict(config)

@@ -1,6 +1,32 @@
 import time
 import logging
+import string
+import random
 
+def id_generator(size = 6, chars = string.ascii_lowercase + string.digits, forbidden = "_"):
+    """Generate random strings of characters and digits than can be used as
+    unique identifier
+    
+    
+    Parameters
+    ----------
+    size: int
+        Length of the returned string of characters
+    
+    chars: list
+        Admissible characters. Default are lower-case alphanumeric ASCII characters
+    
+    
+    Returns
+    -------
+    idstr: str
+        String of `size` characters randomly taken among `chars`
+    """
+    idstr = "".join([random.choice(chars) for _ in range(size)])
+    while forbidden in idstr:
+        idstr = "".join([random.choice(chars) for _ in range(size)])
+    
+    return idstr
 
 def timeit(f):
     """Decorator to time Any Function"""
