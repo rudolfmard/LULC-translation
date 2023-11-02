@@ -188,6 +188,7 @@ class TorchgeoLandcover(tgd.RasterDataset):
         sample: Dict[str, Any],
         show_titles: bool = True,
         show_colorbar: bool = True,
+        title: Optional[str] = None,
         suptitle: Optional[str] = None,
         figax = None
     ):
@@ -218,7 +219,10 @@ class TorchgeoLandcover(tgd.RasterDataset):
         nx, ny = label.shape
         im = ax.imshow(label, cmap=cmap, vmin=0, vmax=len(self.labels)-1)
         if show_titles:
-            ax.set_title(self.__class__.__name__)
+            if title is None:
+                title = self.__class__.__name__
+            
+            ax.set_title(title)
         
         if show_colorbar:
             if len(ul) > 2:

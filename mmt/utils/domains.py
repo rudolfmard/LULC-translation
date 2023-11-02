@@ -454,6 +454,8 @@ portugese_crops = GeoRectangle(
     [-7.0984782206142825, -7.0781569753000895, 40.759403727839384, 40.77504037344005],
     fmt = "llmm"
 )
+# Large portion of Sahara, mostly over Algeria and Lybia
+large_sahara = GeoRectangle([-2, 21, 20, 34])
 # Reunion crops and forest
 reunion_crops = GeoRectangle([55.6638, 55.7004, -21.0505, -21.0150])
 # Small island
