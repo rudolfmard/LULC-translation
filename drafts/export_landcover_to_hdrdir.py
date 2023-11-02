@@ -3,104 +3,83 @@
 """Multiple land-cover/land-use Maps Translation (MMT)
 
 Program to export land cover to HDR/DIR format (SURFEX readable)
+
+
+Examples
+--------
+python export_landcover_to_hdrdir.py --lcpath=/data/trieutord/MLULC/outputs/ECOSGML-v0.4-onelabel.02Nov-13h13 --output=test/hector.dir --domainname=irl750
+    Export the domain 'irl750' of the land cover stored in lcpath (multiple TIF files) into the file output at native resolution
+
+python export_landcover_to_hdrdir.py --lcpath=/data/trieutord/MLULC/outputs/ECOSGML-v0.4-onelabel.02Nov-13h13 --output=test/ireland25.dir --res=0.01
+    Export the full domain of the land cover stored in lcpath (multiple TIF files) into the file output at 0.01 resolution
+
+python export_landcover_to_hdrdir.py --lcpath=/data/trieutord/ECOCLIMAP-SG-ML/tif/ECOCLIMAP-SG-ML-eurat-v0.3 --output=/data/trieutord/ECOCLIMAP-SG-ML/dir-hdr/irl750-ecosg/COVER_ECOSGML_2023_v0.3.dir --domainname=irl750 --res=EcoclimapSG
+    Export the domain 'irl750' of the land cover stored in lcpath (multiple TIF files) into the file output at the same resolution as EcoclimapSG
 """
 
 import os
 import numpy as np
-import rasterio
-from mmt import _repopath_ as mmt_repopath
+from pprint import pprint
+import argparse
+
 from mmt.datasets import landcovers
-from mmt.utils import config as utilconf
+from mmt.datasets import transforms as mmt_transforms
+from mmt.utils import domains
 
-xp_name = "vanilla"
-config = utilconf.get_config(
-    os.path.join(
-        mmt_repopath,
-        "experiments",
-        xp_name,
-        "logs",
-        "config.yaml",
-    )
-)
-mergedmap_dump_dir = os.path.join(config.paths.data_dir, "outputs", f"Merged_vanilla_ireland_esawc_esgp")
+# Argument parsing
+# ----------------
+parser = argparse.ArgumentParser(prog="export_landcover_to_hdrdir")
+parser.add_argument("--lcpath", help="Path to the directory with land cover TIF files.", type=str)
+parser.add_argument("--output", help="Output file name (full path)", type=str)
+parser.add_argument("--domainname", help="Geographical domain name")
+parser.add_argument("--res", help="Resolution of the map (degree)", default=None)
+parser.add_argument('--no-fillsea', help="Do not replace missing data by sea", dest='fillsea', action='store_false')
+args = parser.parse_args()
 
-print(f"Loading landcover with orginal CRS and resolution")
-merged = landcovers.MergedMap(path = mergedmap_dump_dir)
-print(f"Loaded: {merged.__class__.__name__} with crs={merged.crs} and res={merged.res}")
-data = merged[merged.bounds]
-print(f"Data loaded. shape={data['mask'].shape}")
+lcpath = args.lcpath
+output = args.output
+domainname = args.domainname
+res = args.res
+fillsea = args.fillsea
 
-fig, ax = merged.plot(data)
-fig.show()
+# Argument checks
+# ----------------
+assert os.path.exists(lcpath), f"Path {lcpath} does not exist"
 
-def export_to_dirhdr(sample, ofn_dir):
-    """Export a sample to the SURFEX-readable format DIR/HDR
-    """
-    # HDR file
-    ofn_hdr = ofn_dir.replace(".dir", ".hdr")
-    hdr_dict = {
-        "nodata":0,
-        "north":sample["bbox"].maxy,
-        "south":sample["bbox"].miny,
-        "west":sample["bbox"].maxx,
-        "east":sample["bbox"].minx,
-        "rows":data["mask"].shape[-2],
-        "cols":data["mask"].shape[-1],
-        "recordtype": "integer 8 bits",
-    }
-    with open(ofn_hdr, "w") as hdr:
-        hdr.write(os.path.basename(ofn_dir).split(".")[0] + "\n")
-        for k,v in hdr_dict.items():
-            hdr.write(f"{k}: {v}\n")
-        
-    
-    # DIR file
-    kwargs = {
-        "driver": "gTiff",
-        "count": 1,
-        "dtype": np.uint8,
-        "crs": data["crs"],
-        "width": data["mask"].shape[-1],
-        "height": data["mask"].shape[-2],
-    }
-    
-    with rasterio.open(ofn_dir, "w", **kwargs) as dst:
-        dst.write(data["mask"].squeeze().numpy(), 1)
-    
-    return ofn_dir, ofn_hdr
+output_path = os.path.dirname(output)
+if not os.path.exists(output_path):
+    os.makedirs(output_path)
 
-ofn_dir = os.path.join(mergedmap_dump_dir, "COVER_ECOSGpp_2023_v0.4.dir")
-export_to_dirhdr(data, ofn_dir)
+print(f"Exporting to {output}")
 
-# hdr_dict = {
-    # "nodata":0,
-    # "north":merged.bounds.maxy,
-    # "south":merged.bounds.miny,
-    # "west":merged.bounds.maxx,
-    # "east":merged.bounds.minx,
-    # "rows":data.shape[0],
-    # "cols":data.shape[1],
-    # "recordtype": "integer 8 bits",
-# }
-# ofn_hdr = ofn_dir.replace(".dir", ".hdr")
-# with open(ofn_hdr, "w") as hdr:
-    # hdr.write(os.path.basename(ofn_dir).split(".")[0] + "\n")
-    # for k,v in hdr_dict.items():
-        # hdr.write(f"{k}:{v}\n")
-    
-# kwargs = {
-    # "driver": "gTiff",
-    # "count": 1,
-    # "dtype": np.uint8,
-    # "crs": data["crs"],
-    # "width": data["mask"].shape[-1],
-    # "height": data["mask"].shape[-2],
-# }
+kwargs = dict(path = lcpath)
 
-# with rasterio.open(ofn_dir, "w", **kwargs) as dst:
-    # dst.write(data["mask"].squeeze().numpy(), 1)
+if fillsea:
+    kwargs.update(transforms=mmt_transforms.FillMissingWithSea(0,1))
+
+if res:
+    if hasattr(landcovers, res):
+        copyresfrom = getattr(landcovers, res)()
+        res = copyresfrom.res
+    else:
+        res = float(res)
+        kwargs.update(res = res)
+
+# Loading map
+# -----------
+lcmap = landcovers.InferenceResults(**kwargs)
+print(f"Loaded: {lcmap.__class__.__name__} with crs={lcmap.crs}, res={lcmap.res}")
 
 
-# ls = os.listdir(mergedmap_dump_dir)
-# ds = [rasterio.open(os.path.join(mergedmap_dump_dir, f), "r") for f in ls]
-# rasterio.merge.merge(ds)
+if domainname:
+    qdomain = getattr(domains, domainname)
+    qb = qdomain.to_tgbox(lcmap.crs)
+else:
+    qb = lcmap.bounds
+    domainname = "all"
+
+# Exporting map
+# -------------
+x_map = lcmap[qb]
+ofn_dir, ofn_hdr = lcmap.export_to_dirhdr(x_map, ofn_dir = output)
+print(f"Files created: {ofn_dir}, {ofn_hdr}")
