@@ -215,6 +215,8 @@ class MapTranslator:
         sampler = samplers.GridGeoSampler(
             self.landcover, size=n_px_max, stride=n_px_max - margin, roi=qb
         )
+        if len(sampler) == 0:
+            raise ValueError(f"Empty sampler. size={n_px_max}, stride={n_px_max - margin}, roi={qb}, landcover bounds={self.landcover.bounds}")
 
         for iqb in tqdm(sampler, desc=f"Inference over {len(sampler)} patches"):
             tifpatchname = f"N{iqb.minx}_E{iqb.maxy}.tif"
@@ -384,6 +386,7 @@ class MapMerger(MapTranslator):
         self.qflags = landcovers.QualityFlagsECOSGplus(transforms=mmt_transforms.FillMissingWithSea(0,6))
         self.landcover = landcovers.InferenceResults(path = source_map_path, res = self.esgp.res)
         self.landcover.res = self.esgp.res
+        self.merge_criterion = qflag2_nodominant
         
     def predict_from_domain(self, qb):
         """Run the translation from geographical domain
@@ -402,7 +405,20 @@ class MapMerger(MapTranslator):
         
         return x_merge.squeeze().numpy()
     
-    def merge_criterion(self, x_qflags, x_esgp):
-        """Use inference result when quality flag beyond 2 except for sea pixels"""
-        return torch.logical_and(x_qflags > 2, x_esgp != 1)
+    # def merge_criterion(self, x_qflags, x_esgp):
+        # """Use inference result when quality flag beyond 2 except for sea pixels"""
+        # return torch.logical_and(x_qflags > 2, x_esgp != 1)
     
+
+def qflag2_nosea(x_qflags, x_esgp):
+    """Use inference result when quality flag beyond 2 except for sea pixels"""
+    return torch.logical_and(x_qflags > 2, x_esgp != 1)
+
+def qflag2_onelabel(x_qflags, x_esgp):
+    """Use inference result when quality flag beyond 2 except for patches with only one label"""
+    return torch.logical_and(x_qflags > 2, torch.Tensor([np.unique(x_esgp).size > 1]))
+
+def qflag2_nodominant(x_qflags, x_esgp):
+    """Use inference result when quality flag beyond 2 except for patches with strongly dominant label"""
+    _, c = np.unique(x_esgp, return_counts = True)
+    return torch.logical_and(x_qflags > 2, torch.Tensor([any(c/c.sum() > 0.9)]))
