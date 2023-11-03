@@ -400,7 +400,7 @@ def dump_labels_in_tif(labels, domain, crs, tifpath):
     if not isinstance(domain, TgeoBoundingBox):
         domain = domain.to_tgbox(crs)
     
-    width, height = labels.shape
+    height, width = labels.shape
     transform = rasterio.transform.from_bounds(
         domain.minx, domain.miny, domain.maxx, domain.maxy, width, height
     )
@@ -458,6 +458,9 @@ def stitch_tif_files(input_dir, output_dir, n_max_files = 200, prefix = "stitche
         lats.append(float(n[1:]))
         lons.append(float(e[1:-4]))
     
+    if verbose:
+        print(f"Stitching {ls.size} TIF files from {input_dir} to <= {n_max_files} TIF files at {output_dir}.")
+    
     X = np.array([lons, lats]).T
     Z = hierarchy.linkage(X, method = "centroid")
     if verbose:
@@ -469,8 +472,9 @@ def stitch_tif_files(input_dir, output_dir, n_max_files = 200, prefix = "stitche
     for k in range(1, n_max_files+1):
         dst_path = os.path.join(output_dir, f"{prefix}_K{k}.tif")
         if len(ls[idx == k]) > 0:
-            if verbose:
+            if verbose and k % max(n_max_files//10, 1) == 0:
                 print(f"[{k}/{n_max_files}] Merging {len(ls[idx == k])} files into {dst_path}")
+            
             rasterio.merge.merge(
                 [os.path.join(input_dir, i) for i in ls[idx == k]],
                 dst_path = dst_path
