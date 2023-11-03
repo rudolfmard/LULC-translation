@@ -58,18 +58,23 @@ if fillsea:
     kwargs.update(transforms=mmt_transforms.FillMissingWithSea(0,1))
 
 if res:
+    changeres = True
     if hasattr(landcovers, res):
         copyresfrom = getattr(landcovers, res)()
         res = copyresfrom.res
     else:
         res = float(res)
         kwargs.update(res = res)
+else:
+    changeres = False
 
 # Loading map
 # -----------
 lcmap = landcovers.InferenceResults(**kwargs)
-print(f"Loaded: {lcmap.__class__.__name__} with crs={lcmap.crs}, res={lcmap.res}")
+if changeres:
+    lcmap.res = res
 
+print(f"Loaded: {lcmap.__class__.__name__} with crs={lcmap.crs}, res={lcmap.res}")
 
 if domainname:
     qdomain = getattr(domains, domainname)

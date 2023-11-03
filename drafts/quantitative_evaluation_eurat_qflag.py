@@ -63,9 +63,10 @@ config = utilconf.get_config(
 # Loading models
 #----------------
 checkpoint_path = os.path.join(mmt_repopath, "saved_models", "vanilla_eurat3.ep169.ckpt")
+classifier_path = os.path.join(mmt_repopath, "saved_models", "rfc_1000trees.pkl")
 print(f"Loading auto-encoders from {checkpoint_path}")
 translator1 = translators.EsawcToEsgp(checkpoint_path = checkpoint_path)
-translator2 = translators.EsawcEcosgToEsgpRFC(checkpoint_path = checkpoint_path)
+translator2 = translators.EsawcEcosgToEsgpRFC(checkpoint_path = checkpoint_path, classifier_path = classifier_path)
 epoch = io.get_epoch_of_best_model(checkpoint_path)
 to_tensor = lambda x: torch.Tensor(x[:]).long().unsqueeze(0)
 
