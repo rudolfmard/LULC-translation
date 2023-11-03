@@ -27,14 +27,14 @@ from wopt.ml import graphics
 
 # Configs
 #------------
-checkpoint_path=os.path.join(mmt_repopath, "saved_models", "vanilla.ckpt")
+checkpoint_path=os.path.join(mmt_repopath, "saved_models", "vanilla_eurat3.ep169.ckpt")
 classifier_path=os.path.join(mmt_repopath, "saved_models", "rfc_1000trees.pkl")
-domainname = "montpellier_agglo"
+domainname = "tripoli_sahara"
 
 # Load translators
 #------------
-translator1 = translators.EsawcToEsgp(checkpoint_path=checkpoint_path)
-translator2 = translators.EsawcEcosgToEsgpRFC(checkpoint_path=checkpoint_path, classifier_path=classifier_path)
+translator1 = translators.EsawcToEsgp(checkpoint_path=checkpoint_path, always_predict = False)
+# translator2 = translators.EsawcEcosgToEsgpRFC(checkpoint_path=checkpoint_path, classifier_path=classifier_path)
 
 # Loading query
 #----------------
@@ -44,9 +44,9 @@ qdomain = getattr(domains, domainname)
 #=================
 esgp = landcovers.EcoclimapSGplus()
 
-for translator in [translator1, translator2]:
+for translator in [translator1]:
     print(f"Testing translator {translator.shortname} on {domainname}")
-    inference_dump_dir = translator.predict_from_large_domain(qdomain, output_dir=f"{domainname}.[id]", tmp_dir=f"{domainname}.[id]", n_max_files=12)
+    inference_dump_dir = translator.predict_from_large_domain(qdomain, output_dir=f"{domainname}.[id]", tmp_dir=f"{domainname}.[id]", n_px_max=5400, n_max_files=12)
     
     # View results
     #----------------
@@ -55,7 +55,7 @@ for translator in [translator1, translator2]:
     
     qb = qdomain.to_tgbox(esgp.crs)
     x_infres = infres[qb]
-    fig, ax = infres.plot(x_infres)
+    fig, ax = infres.plot(x_infres, title = f"Inference from {translator.shortname}")
     fig.savefig(os.path.join(inference_dump_dir, f"{domainname}_infres.png"))
     fig.show()
 
@@ -64,10 +64,10 @@ fig, ax = esgp.plot(x_esgp)
 fig.show()
 
 print("Merging the inference with ECOSG+")
-merger = translators.MapMerger(inference_dump_dir)
-merging_dump_dir = merger.predict_from_large_domain(qdomain, output_dir=f"merger.{domainname}.[id]", tmp_dir=f"merger.{domainname}.[id]", n_px_max=100, n_max_files=12)
+merger = translators.MapMerger(inference_dump_dir, merge_criterion = "qflag2_nodata")
+merging_dump_dir = merger.predict_from_large_domain(qdomain, output_dir=f"merger.{domainname}.[id]", tmp_dir=f"merger.{domainname}.[id]", n_px_max=828, n_max_files=12)
 
 infres = landcovers.InferenceResults(path = merging_dump_dir)
 x_infres = infres[qb]
-fig, ax = infres.plot(x_infres)
+fig, ax = infres.plot(x_infres, title = f"Merged map from {translator.shortname}")
 fig.show()

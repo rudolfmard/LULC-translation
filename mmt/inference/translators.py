@@ -130,7 +130,7 @@ class MapTranslator:
         
         Returns
         -------
-        y: ndarray of shape (H, W)
+        y: ndarray of shape (H', W')
             Matrix of predicted ECOSG+ land cover labels
         """
         raise NotImplementedError
@@ -147,7 +147,7 @@ class MapTranslator:
         
         Returns
         -------
-        y: ndarray of shape (H, W)
+        y: ndarray of shape (H', W')
             Matrix of predicted ECOSG+ land cover labels
         """
         raise NotImplementedError
@@ -230,7 +230,7 @@ class MapTranslator:
             )
         
         if n_max_files > 0:
-            io.stitch_tif_files(tmp_dir, output_dir, n_max_files=n_max_files, prefix = self.__class__.__name__, verbose = False)
+            io.stitch_tif_files(tmp_dir, output_dir, n_max_files=n_max_files, prefix = self.__class__.__name__, verbose = True)
         else:
             shutil.copytree(tmp_dir, output_dir, dirs_exist_ok=True)
 
@@ -252,9 +252,11 @@ class EsawcToEsgp(MapTranslator):
         checkpoint_path=os.path.join(mmt_repopath, "saved_models", "vanilla.ckpt"),
         device="cuda",
         remove_tmpdirs=True,
+        always_predict=True,
     ):
         super().__init__(checkpoint_path, device, remove_tmpdirs)
-
+        self.always_predict = always_predict
+        
         self.esawc = landcovers.ESAWorldCover(transforms=mmt_transforms.EsawcTransform)
         self.esawc_transform = mmt_transforms.OneHot(
             self.esawc.n_labels + 1, device=self.device
@@ -269,10 +271,16 @@ class EsawcToEsgp(MapTranslator):
         """Run the translation from matrices of land cover labels
         :x: `torch.Tensor` of shape (N, 1, H, W)
         """
+        if not self.always_predict:
+            x.to(self.device)
+            _, c = torch.unique(x, return_counts = True)
+            if any(c/c.sum() > 0.9):
+                return np.zeros([s//6 for s in x.shape[-2:]])
+                
         x = self.esawc_transform(x)
         with torch.no_grad():
             y = self.encoder_decoder(x.float())
-
+        
         return y.argmax(1).squeeze().cpu().numpy()
 
     def predict_from_domain(self, qb):
@@ -379,6 +387,7 @@ class MapMerger(MapTranslator):
         source_map_path,
         device="cpu",
         remove_tmpdirs=True,
+        merge_criterion = "qflag2_nosea",
     ):
         super().__init__("merger", device, remove_tmpdirs)
         
@@ -386,7 +395,10 @@ class MapMerger(MapTranslator):
         self.qflags = landcovers.QualityFlagsECOSGplus(transforms=mmt_transforms.FillMissingWithSea(0,6))
         self.landcover = landcovers.InferenceResults(path = source_map_path, res = self.esgp.res)
         self.landcover.res = self.esgp.res
-        self.merge_criterion = qflag2_nodominant
+        if callable(merge_criterion):
+            self.merge_criterion = merge_criterion
+        else:
+            self.merge_criterion = eval(merge_criterion)
         
     def predict_from_domain(self, qb):
         """Run the translation from geographical domain
@@ -400,15 +412,23 @@ class MapMerger(MapTranslator):
         x_esgp = self.esgp[qb]
         
         x_merge = deepcopy(x_esgp["mask"])
-        where_infres = self.merge_criterion(x_qflags["mask"], x_esgp["mask"])
+        
+        if self.merge_criterion.__name__ == "qflag2_nodata":
+            where_infres = self.merge_criterion(x_qflags["mask"], x_infres["mask"])
+        else:
+            where_infres = self.merge_criterion(x_qflags["mask"], x_esgp["mask"])
+        
         x_merge[where_infres] = x_infres["mask"][where_infres]
         
         return x_merge.squeeze().numpy()
-    
-    # def merge_criterion(self, x_qflags, x_esgp):
-        # """Use inference result when quality flag beyond 2 except for sea pixels"""
-        # return torch.logical_and(x_qflags > 2, x_esgp != 1)
-    
+
+
+# MERGING CRITERIA
+# ================
+
+def qflag2_nodata(x_qflags, x_infres):
+    """Use inference result when quality flag beyond 2 except for no data"""
+    return torch.logical_and(x_qflags > 2, x_infres > 0)
 
 def qflag2_nosea(x_qflags, x_esgp):
     """Use inference result when quality flag beyond 2 except for sea pixels"""
@@ -421,4 +441,4 @@ def qflag2_onelabel(x_qflags, x_esgp):
 def qflag2_nodominant(x_qflags, x_esgp):
     """Use inference result when quality flag beyond 2 except for patches with strongly dominant label"""
     _, c = np.unique(x_esgp, return_counts = True)
-    return torch.logical_and(x_qflags > 2, torch.Tensor([any(c/c.sum() > 0.9)]))
+    return torch.logical_and(x_qflags > 2, torch.Tensor([any(c/c.sum() < 0.9)]))
