@@ -26,11 +26,13 @@ from mmt.utils import domains
 
 # Configs
 #---------
+print(f"Deprecated. You better make the qualitative evaluation from a release map (this will make inference). The program for that is qualitative_evaluation.py")
+
 usegpu = True
 device = "cuda" if usegpu else "cpu"
-
-
-print(f"Executing program {sys.argv[0]} in {os.getcwd()}")
+storeImages = True
+fmtImages = ".svg"
+figureDir = ""
 
 xp_name = "vanilla_eurat3"
 val_domains = ["snaefell_glacier", "dublin_city", "iso_kihdinluoto", "elmenia_algeria"]
@@ -79,6 +81,12 @@ for ax, col in zip(axs[0], cols):
     ax.set_title(col)
 
 title = f"From xp {xp_name}"
-plt.suptitle(title)
-plt.tight_layout()
+figname = f"qualcheck_{xp_name}"
+fig.suptitle(title)
+fig.tight_layout()
+if storeImages:
+    figpath = os.path.join(figureDir, figname + fmtImages)
+    fig.savefig(figpath)
+    print("Figure saved:", figpath)
+
 plt.show(block=False)
