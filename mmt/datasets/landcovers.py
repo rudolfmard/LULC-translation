@@ -301,11 +301,11 @@ class EcoclimapSGplus(TorchgeoLandcover):
             "nodata":0,
             "north":sample["bbox"].maxy,
             "south":sample["bbox"].miny,
-            "west":sample["bbox"].maxx,
-            "east":sample["bbox"].minx,
+            "west":sample["bbox"].minx,
+            "east":sample["bbox"].maxx,
             "rows":sample["mask"].shape[-2],
             "cols":sample["mask"].shape[-1],
-            "recordtype": "integer 8 bits",
+            "recordtype": "integer 8 bytes",
         }
         with open(ofn_hdr, "w") as hdr:
             hdr.write(os.path.basename(ofn_dir)[:-4] + "\n")
@@ -314,26 +314,8 @@ class EcoclimapSGplus(TorchgeoLandcover):
             
         
         # DIR file
-        trans = rasterio.transform.from_bounds(
-            sample["bbox"].minx,
-            sample["bbox"].miny,
-            sample["bbox"].maxx,
-            sample["bbox"].maxy,
-            sample["mask"].shape[-1],
-            sample["mask"].shape[-2],
-        )
-        kwargs = {
-            "driver": "gTiff",
-            "count": 1,
-            "dtype": np.uint8,
-            "crs": sample["crs"],
-            "width": sample["mask"].shape[-1],
-            "height": sample["mask"].shape[-2],
-            "transform": trans,
-        }
-        
-        with rasterio.open(ofn_dir, "w", **kwargs) as dst:
-            dst.write(sample["mask"].squeeze().numpy(), 1)
+        with open(ofn_dir, "wb") as f:
+            f.write(sample["mask"].squeeze().numpy().astype(np.uint8).tobytes("F"))
         
         return ofn_dir, ofn_hdr
     
@@ -359,8 +341,8 @@ class InferenceResults(EcoclimapSGplus):
         self.n_labels = len(self.labels)
         super().__init__(crs = crs, res = res, transforms = transforms, tgeo_init = tgeo_init)
 
-class MergedMap(InferenceResults):
-    pass
+class EcoclimapSGML(EcoclimapSGplus):
+    path = os.path.join(config.paths.data_dir, "tiff_data", "ECOCLIMAP-SG-ML", "tif", f"ECOCLIMAP-SG-ML-v{config.versions.ecosgml}")
 
 class OpenStreetMap:
     """OpenStreetMap land cover from Cartopy (for plot only).
