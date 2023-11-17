@@ -436,6 +436,7 @@ irl750 = GeoRectangle([-15.5, -5, 49.5, 57.5])
 ireland25 = GeoRectangle([-16, 4, 45, 61])
 eurat = GeoRectangle([-32, 42, 20, 72])
 fin_south_deode = GeoRectangle([15.5, 32, 57, 65]) # forecast domain = [16.33, 31.03, 57.59, 64.07]
+paname = GeoRectangle([-1.5, 6, 46, 50.5])
 
 # Sahara small town and lake
 elmenia_algeria = GeoRectangle([2.44, 3.46, 30.01, 30.97])
@@ -449,11 +450,13 @@ ngambe_jungle = GeoRectangle([10.5992, 10.6443, 4.2156, 4.2581])
 mars_cevennes = GeoRectangle([3.5389, 3.5836, 43.9913, 44.0259])
 # Northern crops and forest
 jokioinen_crops = GeoRectangle([23.4278, 23.4913, 60.7896, 60.8204])
-# # Portugese crops and forest
+# Portugese crops and forest
 portugese_crops = GeoRectangle(
     [-7.0984782206142825, -7.0781569753000895, 40.759403727839384, 40.77504037344005],
     fmt = "llmm"
 )
+# Faroe islands
+faroe_islands = GeoRectangle([-8.11, -5.88, 61.30, 62.54])
 # Large portion of Sahara, mostly over Algeria and Lybia
 large_sahara = GeoRectangle([-2, 21, 20, 34])
 # Small portion of Sahara, near Tripoli
@@ -466,4 +469,9 @@ savage_canary_island = GeoRectangle([-15.8935, -15.8517, 30.1319, 30.1677])
 iso_kihdinluoto = GeoRectangle(TgeoBoundingBox(
     minx=21.122670101126037, maxx=21.239336767792704, miny=60.483903274933496, maxy=60.60056994160016, mint=0.0, maxt=1000000000000.0
 ), fmt="tgbox")
-
+# Heavy industry
+istanbul_power_plant = GeoRectangle([28.689, 28.703, 40.971, 40.983])
+# Forest and village
+breznik_slovenia = GeoRectangle([15.1475, 15.1643, 45.5126, 45.5266])
+# Coastline, forest, heavy industry in Croatia
+bakar_bay_croatia = GeoRectangle([14.5263, 14.5864, 45.266, 45.3126])

@@ -47,7 +47,7 @@ if os.path.exists(lcpath):
     lcname = "InferenceResults"
     kwargs.update(path = lcpath)
 else:
-    assert lcname in [None, "InferenceResults"], f"Conflicting arguments: lcpath={lcpath} does not exist and lcname={lcname}"
+    assert lcname not in [None, "InferenceResults"], f"Conflicting arguments: lcpath={lcpath} does not exist and lcname={lcname}"
 
 if lcname == "ESAWorldCover":
     kwargs.update(transforms=mmt_transforms.EsawcTransform)

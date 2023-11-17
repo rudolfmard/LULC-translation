@@ -111,6 +111,22 @@ def get_bbox_from_coord(x_coor, y_coor, patch_size, location="upper-left"):
     
     return xmin, ymin, xmax, ymax
 
+
+def haversine_formula(lon1, lon2, lat1, lat2, degrees = True, r = 6378100):
+    """Give an estimate of the great-circle distance between two points
+    in lon-lat coordinates.
+    
+    Source (2023/11/09): https://en.wikipedia.org/wiki/Haversine_formula
+    """
+    if degrees:
+        lon1, lon2, lat1, lat2 = [a * np.pi/180 for a in [lon1, lon2, lat1, lat2]]
+    
+    return 2 * r * np.arcsin(
+        np.sqrt(
+            np.sin((lat2-lat1)/2)**2 + np.cos(lat2) * np.cos(lat1) * np.sin((lon2-lon1)/2)**2
+            )
+        )
+
 class InfiniIterTool:
     def __init__(self, start):
         self.i = 0
