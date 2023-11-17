@@ -5,7 +5,9 @@
 Land cover maps
 """
 import os
+import time
 import numpy as np
+import netCDF4 as nc
 import rasterio
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -319,6 +321,41 @@ class EcoclimapSGplus(TorchgeoLandcover):
         
         return ofn_dir, ofn_hdr
     
+    def export_to_netcdf(self, sample, ofn_nc = None):
+        """Export a sample to netCDF
+        """
+        if ofn_nc is None:
+            ofn_nc = os.path.join(self.path, f"COVER_{self.__class__.__name__}_2023_v{self.get_version()}.nc")
+        
+        print(f"Writting in file: {ofn_nc}")
+        data = sample["mask"].squeeze().numpy()
+        qb = sample["bbox"]
+        
+        nx, ny = data.shape
+        ncf = nc.Dataset(ofn_nc, "w")
+        ncf.createDimension("x", nx)
+        ncf.createDimension("y", ny)
+        
+        lc = ncf.createVariable("landcover", np.uint8, ("x", "y"))
+        lc[:, :] = data[:, :]
+        lc.units = "ECOCLIMAP-SG land cover labels"
+        
+        ncf.setncatts(
+            dict(
+                title=f"ECOCLIMAP-SG+ land cover. Version {self.get_version()}",
+                source="TIF files",
+                crs = self.crs.to_string(),
+                resolution = self.res,
+                bounds = f"lower-left corner = ({qb.minx}, {qb.miny}); upper-right corner = ({qb.maxx}, {qb.maxy})",
+                labels = "\n".join(self.labels),
+                institution="Met Eireann, met.ie",
+                history=f"Created the {time.ctime()}",
+                contactperson="Thomas Rieutord (thomas.rieutord@met.ie)",
+            )
+        )
+        ncf.close()
+        
+        return ofn_nc
 
 class QualityFlagsECOSGplus(EcoclimapSGplus):
     path = os.path.join(config.paths.data_dir, "tiff_data", "ECOCLIMAP-SG-plus", f"ecosgp-qflags-v{config.versions.ecosgplus}")
