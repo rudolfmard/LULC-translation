@@ -8,6 +8,7 @@ Module to load and export pretrained models for inference
 import os
 import numpy as np
 from scipy.cluster import hierarchy
+from sklearn.cluster import KMeans
 import rasterio
 import torch
 from torchgeo.datasets.utils import BoundingBox as TgeoBoundingBox
@@ -419,11 +420,11 @@ def dump_labels_in_tif(labels, domain, crs, tifpath):
         
     return f
 
-def stitch_tif_files(input_dir, output_dir, n_max_files = 200, prefix = "stitched", verbose = True):
+def stitch_tif_files(input_dir, output_dir, n_max_files = 200, clustering = "kmeans", prefix = "stitched", verbose = True):
     """Merge a large number of TIF files into a smaller number of TIF files.
     
     The files are merged according to the lon-lat coordinates found in their names
-    with hierarchical clustering (centroid linkage).
+    with the clustering method specified (default is K-means with 1 init and 10 iteration max).
     The expected pattern for the names of the TIF files is
         "N<lat>_E<lon>.tif"
         Ex: "N4.09_E43.82.tif"
@@ -440,6 +441,10 @@ def stitch_tif_files(input_dir, output_dir, n_max_files = 200, prefix = "stitche
     
     n_max_files: int
         Maximum number of TIF files in the output directory.
+    
+    clustering: {"kmeans", "hierarchical"}
+        Clustering method to be used (K-means or hierarchical with centroid linkage).
+        Default if K-means with 1 init and 10 iteration max.
     
     prefix: str
         Prefix for the output file names.
@@ -462,11 +467,24 @@ def stitch_tif_files(input_dir, output_dir, n_max_files = 200, prefix = "stitche
         print(f"Stitching {ls.size} TIF files from {input_dir} to <= {n_max_files} TIF files at {output_dir}.")
     
     X = np.array([lons, lats]).T
-    Z = hierarchy.linkage(X, method = "centroid")
-    if verbose:
-        print(f"Hierarchical clustering done.")
     
-    idx = hierarchy.fcluster(Z, t = n_max_files, criterion="maxclust")
+    if verbose:
+        print(f"Starting stitching {len(ls)} TIF files into {n_max_files} files with {clustering}")
+        
+    if clustering == "hierarchical":
+        Z = hierarchy.linkage(X, method = "centroid")
+        if verbose:
+            print(f"Hierarchical clustering done.")
+        
+        idx = hierarchy.fcluster(Z, t = n_max_files, criterion="maxclust")
+    elif clustering == "kmeans":
+        km = KMeans(n_clusters = n_max_files, max_iter=10, n_init=1, init = "k-means++")
+        idx = km.fit_predict(X) + 1
+        if verbose:
+            print(f"K-means clustering done.")
+        
+    else:
+        raise ValueError(f"Unsupported clustering method: {clustering}")
     
     n_files = 0
     for k in range(1, n_max_files+1):
