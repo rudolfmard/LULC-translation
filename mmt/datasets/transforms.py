@@ -217,26 +217,28 @@ class FlipTransform:
 
 class FloorDivMinus:
     """Floor division and substraction"""
-    def __init__(self, div = 10, minus = 0):
+    def __init__(self, div = 10, minus = 0, key="mask"):
         self.div = div
         self.minus = minus
+        self.key = key
     
     def __call__(self, x):
         if isinstance(x, dict):
-            x["mask"] = x["mask"] // self.div - self.minus
+            x[self.key] = x[self.key] // self.div - self.minus
         else:
             x = x // self.div - self.minus
         return x
 
 class FillMissingWithSea:
     """Remplace missing data labels by sea label"""
-    def __init__(self, missing_label = 0, sea_label = 1):
+    def __init__(self, missing_label = 0, sea_label = 1, key="mask"):
         self.missing_label = missing_label
         self.sea_label = sea_label
+        self.key = key
     
     def __call__(self, x):
         if isinstance(x, dict):
-            x["mask"][x["mask"] == self.missing_label] = self.sea_label
+            x[self.key][x[self.key] == self.missing_label] = self.sea_label
         else:
             x[x == self.missing_label] = self.sea_label
         return x
