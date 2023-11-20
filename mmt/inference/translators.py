@@ -105,9 +105,11 @@ class MapTranslator:
         checkpoint_path=None,
         device="cuda",
         remove_tmpdirs=True,
+        output_dtype="int16",
     ):
         self.checkpoint_path = checkpoint_path
         self.remove_tmpdirs = remove_tmpdirs
+        self.output_dtype = output_dtype
         self.device = torch.device(device)
         self.shortname = self.__class__.__name__ + "." + os.path.basename(checkpoint_path)
         self.landcover = None
@@ -203,42 +205,42 @@ class MapTranslator:
             )
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-
+        
         if "[id]" in tmp_dir:
             tmp_dir = tmp_dir.replace(
                 "[id]", "tmp." + dir_id + time.strftime(".%d%b-%Hh%M")
             )
         if not os.path.exists(tmp_dir):
             os.makedirs(tmp_dir)
-
+        
         margin = n_px_max // 6
         sampler = samplers.GridGeoSampler(
             self.landcover, size=n_px_max, stride=n_px_max - margin, roi=qb
         )
         if len(sampler) == 0:
             raise ValueError(f"Empty sampler. size={n_px_max}, stride={n_px_max - margin}, roi={qb}, landcover bounds={self.landcover.bounds}")
-
+        
         for iqb in tqdm(sampler, desc=f"Inference over {len(sampler)} patches"):
             tifpatchname = f"N{iqb.minx}_E{iqb.maxy}.tif"
             if os.path.exists(os.path.join(tmp_dir, tifpatchname)):
                 continue
-
+            
             y = self.predict_from_domain(iqb)
-
+            
             io.dump_labels_in_tif(
-                y, iqb, self.landcover.crs, os.path.join(tmp_dir, tifpatchname)
+                y, iqb, self.landcover.crs, os.path.join(tmp_dir, tifpatchname), self.output_dtype
             )
         
         if n_max_files > 0:
             io.stitch_tif_files(tmp_dir, output_dir, n_max_files=n_max_files, prefix = self.__class__.__name__, verbose = True)
         else:
             shutil.copytree(tmp_dir, output_dir, dirs_exist_ok=True)
-
+        
         if self.remove_tmpdirs:
             shutil.rmtree(tmp_dir)
         else:
             print(f"Kept: tmp_dir={tmp_dir}")
-
+        
         return output_dir
 
 
@@ -252,9 +254,10 @@ class EsawcToEsgp(MapTranslator):
         checkpoint_path=os.path.join(mmt_repopath, "saved_models", "vanilla.ckpt"),
         device="cuda",
         remove_tmpdirs=True,
+        output_dtype="int16",
         always_predict=True,
     ):
-        super().__init__(checkpoint_path, device, remove_tmpdirs)
+        super().__init__(checkpoint_path, device, remove_tmpdirs, output_dtype)
         self.always_predict = always_predict
         
         self.esawc = landcovers.ESAWorldCover(transforms=mmt_transforms.EsawcTransform)
@@ -275,13 +278,21 @@ class EsawcToEsgp(MapTranslator):
             x.to(self.device)
             _, c = torch.unique(x, return_counts = True)
             if any(c/c.sum() > 0.9):
-                return np.zeros([s//6 for s in x.shape[-2:]])
+                return np.zeros(self.get_output_shape(x))
                 
         x = self.esawc_transform(x)
         with torch.no_grad():
             y = self.encoder_decoder(x.float())
         
-        return y.argmax(1).squeeze().cpu().numpy()
+        return self.logits_transform(y)
+        
+    def get_output_shape(self, x):
+        """Return the expected shape of the output with `x` in input"""
+        return [s//6 for s in x.shape[-2:]]
+        
+    def logits_transform(self, logits):
+        """Transform applied to the logits"""
+        return logits.argmax(1).squeeze().cpu().numpy()
 
     def predict_from_domain(self, qb):
         """Run the translation from geographical domain
@@ -289,9 +300,30 @@ class EsawcToEsgp(MapTranslator):
         """
         if not isinstance(qb, TgeoBoundingBox):
             qb = qb.to_tgbox(self.esawc.crs)
-
+        
         x = self.esawc[qb]
         return self.predict_from_data(x["mask"])
+
+
+class EsawcToEsgpProba(EsawcToEsgp):
+    """Return probabilities of classes instead of classes"""
+    def __init__(
+        self,
+        checkpoint_path=os.path.join(mmt_repopath, "saved_models", "vanilla.ckpt"),
+        device="cuda",
+        remove_tmpdirs=True,
+        output_dtype="float32",
+        always_predict=True,
+    ):
+        super().__init__(checkpoint_path, device, remove_tmpdirs, output_dtype, always_predict)
+    
+    def get_output_shape(self, x):
+        """Return the expected shape of the output with `x` in input"""
+        return [35] + [s//6 for s in x.shape[-2:]]
+        
+    def logits_transform(self, logits):
+        """Transform applied to the logits"""
+        return logits.softmax(1).squeeze().cpu().numpy()
 
 
 class EsawcEcosgToEsgpRFC(MapTranslator):
@@ -302,8 +334,9 @@ class EsawcEcosgToEsgpRFC(MapTranslator):
         classifier_path=os.path.join(mmt_repopath, "saved_models", "rfc_200trees.pkl"),
         device="cuda",
         remove_tmpdirs=True,
+        output_dtype="int16",
     ):
-        super().__init__(checkpoint_path, device, remove_tmpdirs)
+        super().__init__(checkpoint_path, device, remove_tmpdirs, output_dtype)
         
         # Landcovers
         self.esawc = landcovers.ESAWorldCover(transforms=mmt_transforms.EsawcTransform)
@@ -387,9 +420,10 @@ class MapMerger(MapTranslator):
         source_map_path,
         device="cpu",
         remove_tmpdirs=True,
+        output_dtype="int16",
         merge_criterion = "qflag2_nosea",
     ):
-        super().__init__("merger", device, remove_tmpdirs)
+        super().__init__("merger", device, remove_tmpdirs, output_dtype)
         
         self.esgp = landcovers.EcoclimapSGplus()
         self.qflags = landcovers.QualityFlagsECOSGplus(transforms=mmt_transforms.FillMissingWithSea(0,6))
@@ -421,6 +455,52 @@ class MapMerger(MapTranslator):
         x_merge[where_infres] = x_infres["mask"][where_infres]
         
         return x_merge.squeeze().numpy()
+
+class MapMergerProba(MapTranslator):
+    """Merge map with ECOCLIMAP-SG+ according to a quality flag criterion"""
+    
+    def __init__(
+        self,
+        source_map_path,
+        device="cpu",
+        remove_tmpdirs=True,
+        output_dtype="int16",
+        merge_criterion = "qflag2_nosea",
+    ):
+        super().__init__("mergerproba", device, remove_tmpdirs, output_dtype)
+        
+        self.esgp = landcovers.EcoclimapSGplus(transforms=mmt_transforms.OneHot(35))
+        self.qflags = landcovers.QualityFlagsECOSGplus(transforms=mmt_transforms.FillMissingWithSea(0,6))
+        self.landcover = landcovers.InferenceResultsProba(path = source_map_path, res = self.esgp.res)
+        self.landcover.res = self.esgp.res
+        if callable(merge_criterion):
+            self.merge_criterion = merge_criterion
+        else:
+            self.merge_criterion = eval(merge_criterion)
+        
+    def predict_from_domain(self, qb):
+        """Run the translation from geographical domain
+        :qb: `torchgeo.datasets.utils.BoundingBox` or `mmt.utils.domains.GeoRectangle`
+        """
+        if not isinstance(qb, TgeoBoundingBox):
+            qb = qb.to_tgbox(self.landcover.crs)
+        
+        x_infres = self.landcover[qb]
+        x_qflags = self.qflags[qb]
+        x_esgp = self.esgp[qb]
+        
+        x_merge = deepcopy(x_esgp["mask"].squeeze())
+        
+        if self.merge_criterion.__name__ == "qflag2_nodata":
+            where_infres = self.merge_criterion(x_qflags["mask"], x_infres["image"].sum(0))
+        else:
+            where_infres = self.merge_criterion(x_qflags["mask"], x_esgp["mask"])
+        
+        where_infres = where_infres.squeeze()
+        x_merge[:, where_infres] = x_infres["image"][:, where_infres]
+        
+        return x_merge.squeeze().numpy()
+
 
 
 # MERGING CRITERIA

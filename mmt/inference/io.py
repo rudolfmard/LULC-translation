@@ -379,7 +379,7 @@ def load_pytorch_embmix(xp_name, h_channels = 64):
     
     return emb_mixer
 
-def dump_labels_in_tif(labels, domain, crs, tifpath):
+def dump_labels_in_tif(labels, domain, crs, tifpath, dtype = "int16"):
     """Write land cover labels in a GeoTIFF file.
     
     
@@ -401,22 +401,34 @@ def dump_labels_in_tif(labels, domain, crs, tifpath):
     if not isinstance(domain, TgeoBoundingBox):
         domain = domain.to_tgbox(crs)
     
-    height, width = labels.shape
+    if labels.ndim == 2:
+        height, width = labels.shape
+        n_channels = 1
+    elif labels.ndim == 3:
+        n_channels, height, width = labels.shape
+    else:
+        raise ValueError(f"Input tensor has unexpected number of dimensions: {labels.ndim}")
+    
     transform = rasterio.transform.from_bounds(
         domain.minx, domain.miny, domain.maxx, domain.maxy, width, height
     )
     kwargs = {
         "driver": "gTiff",
-        "dtype": "int16",
+        "dtype": dtype,
         "nodata": 0,
-        "count": 1,
+        "count": n_channels,
         "crs": crs,
         "transform": transform,
         "width": width,
         "height": height,
     }
     with rasterio.open(tifpath, "w", **kwargs) as f:
-        f.write(labels, 1)
+        if n_channels > 1:
+            for c in range(n_channels):
+                f.write(labels[c,:,:], c+1)
+            
+        else:
+            f.write(labels, 1)
         
     return f
 
