@@ -111,6 +111,13 @@ def get_bbox_from_coord(x_coor, y_coor, patch_size, location="upper-left"):
     
     return xmin, ymin, xmax, ymax
 
+def get_bytes_for_domain(qdomain, res, element_size = 8):
+    """Return the size in bytes that would be necessary to load the query domain (does not load anything)"""
+    
+    nlon = (qdomain.max_longitude - qdomain.min_longitude)/res
+    nlat = (qdomain.max_latitude - qdomain.min_latitude)/res
+    
+    return nlon * nlat * element_size
 
 def haversine_formula(lon1, lon2, lat1, lat2, degrees = True, r = 6378100):
     """Give an estimate of the great-circle distance between two points

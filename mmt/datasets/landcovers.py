@@ -20,6 +20,8 @@ from typing import Any, Dict, Optional
 
 from mmt import _repopath_ as mmt_repopath
 from mmt.utils import config as utilconf
+from mmt.utils import misc
+from mmt.utils import domains
 
 # VARIABLES
 # ============
@@ -182,6 +184,7 @@ class TorchgeoLandcover(tgd.RasterDataset):
     path = ""
     filename_glob = "*.tif"
     is_image = False
+    element_size = 8 #Bytes per pixel
     separate_files = False
     crs = None
     labels = []
@@ -192,6 +195,13 @@ class TorchgeoLandcover(tgd.RasterDataset):
         if tgeo_init:
             super().__init__(self.path, crs = crs, res = res, transforms = transforms)
         
+    def get_bytes_for_domain(self, qb):
+        """Return the size in bytes that would be necessary to load the query domain (does not load anything)"""
+        if isinstance(qb, tgd.BoundingBox):
+            qdomain = domains.GeoRectangle(qb, fmt = "tgbox")
+            
+        return misc.get_bytes_for_domain(qdomain, self.res, self.element_size)
+    
     def plot(
         self,
         sample: Dict[str, Any],
@@ -295,6 +305,7 @@ class ProbaLandcover(tgd.RasterDataset):
     path = ""
     filename_glob = "*.tif"
     is_image = True
+    element_size = 32 #Bytes per pixel
     separate_files = False
     crs = None
     labels = []
@@ -305,6 +316,15 @@ class ProbaLandcover(tgd.RasterDataset):
         if tgeo_init:
             super().__init__(self.path, crs = crs, res = res, transforms = transforms)
         
+    def get_bytes_for_domain(self, qb):
+        """Return the size in bytes that would be necessary to load the query domain (does not load anything)"""
+        if isinstance(qb, tgd.BoundingBox):
+            qdomain = domains.GeoRectangle(qb, fmt = "tgbox")
+        else:
+            qdomain = qb
+            
+        return misc.get_bytes_for_domain(qdomain, self.res, self.element_size)
+    
     def plot(
         self,
         sample: Dict[str, Any],
@@ -593,7 +613,6 @@ class EcoclimapSGplus(TorchgeoLandcover):
         if ofn_nc is None:
             ofn_nc = os.path.join(self.path, f"COVER_{self.__class__.__name__}_2023_v{self.get_version()}.nc")
         
-        print(f"Writting in file: {ofn_nc}")
         data = sample["mask"].squeeze().numpy()
         qb = sample["bbox"]
         
