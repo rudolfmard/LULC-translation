@@ -466,17 +466,38 @@ class MapMergerProba(MapTranslator):
         remove_tmpdirs=True,
         output_dtype="int16",
         merge_criterion = "qflag2_nosea",
+        tgeo_init = True,
     ):
         super().__init__("mergerproba", device, remove_tmpdirs, output_dtype)
         
-        self.esgp = landcovers.EcoclimapSGplus(transforms=mmt_transforms.OneHot(35))
-        self.qflags = landcovers.QualityFlagsECOSGplus(transforms=mmt_transforms.FillMissingWithSea(0,6))
-        self.landcover = landcovers.InferenceResultsProba(path = source_map_path, res = self.esgp.res)
-        self.landcover.res = self.esgp.res
+        self.tgeo_init = tgeo_init
+        
+        self.esgp = landcovers.EcoclimapSGplus(transforms=mmt_transforms.OneHot(35), tgeo_init = tgeo_init)
+        self.qflags = landcovers.QualityFlagsECOSGplus(transforms=mmt_transforms.FillMissingWithSea(0,6), tgeo_init = tgeo_init)
+        if tgeo_init:
+            self.landcover = landcovers.InferenceResultsProba(path = source_map_path, res = self.esgp.res, tgeo_init = tgeo_init)
+            self.landcover.res = self.esgp.res
+        else:
+            self.landcover = landcovers.InferenceResultsProba(path = source_map_path, tgeo_init = tgeo_init)
+        
         if callable(merge_criterion):
             self.merge_criterion = merge_criterion
         else:
             self.merge_criterion = eval(merge_criterion)
+        
+    def predict_from_data(self, x_infres, x_qflags, x_esgp):
+        
+        x_merge = deepcopy(x_esgp)
+        
+        if self.merge_criterion.__name__ == "qflag2_nodata":
+            where_infres = self.merge_criterion(x_qflags, x_infres.sum(0))
+        else:
+            where_infres = self.merge_criterion(x_qflags, x_esgp)
+        
+        where_infres = where_infres.squeeze()
+        x_merge[:, where_infres] = x_infres[:, where_infres]
+        
+        return x_merge.squeeze().numpy()
         
     def predict_from_domain(self, qb):
         """Run the translation from geographical domain
@@ -489,17 +510,7 @@ class MapMergerProba(MapTranslator):
         x_qflags = self.qflags[qb]
         x_esgp = self.esgp[qb]
         
-        x_merge = deepcopy(x_esgp["mask"].squeeze())
-        
-        if self.merge_criterion.__name__ == "qflag2_nodata":
-            where_infres = self.merge_criterion(x_qflags["mask"], x_infres["image"].sum(0))
-        else:
-            where_infres = self.merge_criterion(x_qflags["mask"], x_esgp["mask"])
-        
-        where_infres = where_infres.squeeze()
-        x_merge[:, where_infres] = x_infres["image"][:, where_infres]
-        
-        return x_merge.squeeze().numpy()
+        return self.predict_from_data(x_infres["image"].squeeze(), x_qflags["mask"].squeeze(), x_esgp["mask"].squeeze())
 
 
 
