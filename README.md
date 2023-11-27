@@ -5,7 +5,7 @@ The main purpose of this repository is provide the source code that was used to 
 Land cover maps are translated thanks to auto-encoders, as illustrated in the following figure.
 ECOCLIMAP-SG-ML is obtained by map translation from ESA World Cover to ECOCLIMAP-SG+.
 
-<img src="assets/illustration_map_translation.png" width="300" />
+<img src="assets/illustration_map_translation.png" width="600" />
 
 Installation
 ------------
@@ -151,7 +151,8 @@ The other modules are specific additions for the ECOCLIMAP-SG-ML generation.
 
 
 ### Class diagram
-Two modules contain non-obvious families of classes for which we provide the inheritance diagram here.
+
+Two modules contain customised families of classes for which we provide the inheritance diagram here.
 ```
 mmt.datasets.landcovers
 ├── OpenStreetMap
@@ -179,9 +180,11 @@ mmt.inference.translators
 
 
 ### Acknowledgement
-* [Geoffrey Bessardon](https://github.com/gbessardon) for creating the ECOCLIMAP-SG+ map and providing early releases, used as a reference in this work.
-* [Luc Baudoux](https://github.com/LBaudoux) for the initial implementation of the map translation network and the training data.
-* [Met \'Eireann](https://www.met.ie/about-us) for providing the computing facilities for this work.
+
+Thanks to
+  * [Geoffrey Bessardon](https://github.com/gbessardon) for creating the ECOCLIMAP-SG+ map and providing early releases, used as a reference in this work.
+  * [Luc Baudoux](https://github.com/LBaudoux) for the initial implementation of the map translation network and the training data.
+  * [Met \'Eireann](https://www.met.ie/about-us) for providing the computing facilities for this work.
 
 
 ### License:

@@ -12,3 +12,5 @@ torchgeo>=0.4.1
 tensorboard>=2.13
 tqdm>=4.65
 easydict>=1.9
+imageio>=2.31
+utm>=0.7

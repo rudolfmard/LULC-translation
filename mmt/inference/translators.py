@@ -22,9 +22,7 @@ import time
 import numpy as np
 from copy import deepcopy
 from tqdm import tqdm
-import onnx
 import pickle
-import onnxruntime as ort
 import torch
 from torchgeo.datasets.utils import BoundingBox as TgeoBoundingBox
 from torchgeo import samplers
@@ -39,9 +37,14 @@ from mmt.utils import misc
 # BASE CLASSES
 # ============
 class OnnxModel:
-    """Wrapper for inference from ONNX model"""
+    """Wrapper for inference from ONNX model
+    
+    Not used: remove?
+    """
 
     def __init__(self, onnxfilename, inputname=None, outputname=None):
+        import onnx
+        import onnxruntime as ort
         self.onnxfilename = onnxfilename
         self.ort_session = ort.InferenceSession(
             onnxfilename, providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
