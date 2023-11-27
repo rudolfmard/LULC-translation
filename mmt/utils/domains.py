@@ -444,6 +444,8 @@ elmenia_algeria = GeoRectangle([2.44, 3.46, 30.01, 30.97])
 florida_mangrove = GeoRectangle([-81.5995, -81.5664, 25.9753, 26.0097])
 # Ice, moss and lichen
 snaefell_glacier = GeoRectangle([-15.5828, -15.4863, 64.7673, 64.8113])
+# Alpine valley with town (San Vito de Cadore) and glacier (Antelao, 3263m), Italy
+antelao_glacier = GeoRectangle([12.19188, 12.2922, 46.4055, 46.4767])
 # Cameroon jungle
 ngambe_jungle = GeoRectangle([10.5992, 10.6443, 4.2156, 4.2581])
 # Mars en Cevennes
@@ -475,3 +477,26 @@ istanbul_power_plant = GeoRectangle([28.689, 28.703, 40.971, 40.983])
 breznik_slovenia = GeoRectangle([15.1475, 15.1643, 45.5126, 45.5266])
 # Coastline, forest, heavy industry in Croatia
 bakar_bay_croatia = GeoRectangle([14.5263, 14.5864, 45.266, 45.3126])
+
+
+# Rare labels locations
+# Obtained with `python search_rare_labels.py`
+rare_label_9tropbldec = GeoRectangle(TgeoBoundingBox(
+    # South of Maspalomas, Canary island
+    minx=-15.69859857915911, maxx=-15.617750203588354, miny=27.73, maxy=27.8, mint=0.0, maxt=9.223372036854776e+18
+), fmt="tgbox")
+
+rare_label_14bornldec = GeoRectangle(TgeoBoundingBox(
+    # West of Simferopol, Crimea
+    minx=33.58441521209243, maxx=33.66526358766319, miny=44.90534374868029, maxy=44.98619212425105, mint=0.0, maxt=9.223372036854776e+18
+), fmt="tgbox")
+
+rare_label_22floodedtree = GeoRectangle(TgeoBoundingBox(
+    # Vesturhorn penisula, East coast of Iceland
+    minx=-14.97, maxx=-14.89, miny=64.25, maxy=64.335, mint=0.0, maxt=9.223372036854776e+18
+), fmt="tgbox")
+
+rare_label_30lcz7 = GeoRectangle(TgeoBoundingBox(
+    # Fderik town and seasonal lake, NE Mauritania
+    minx=-12.755717708383559, maxx=-12.674869332812802, miny=22.640779094834773, maxy=22.72162747040553, mint=0.0, maxt=9.223372036854776e+18
+), fmt="tgbox")
