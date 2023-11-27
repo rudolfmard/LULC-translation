@@ -3,6 +3,23 @@
 """Multiple land-cover/land-use Maps Translation (MMT)
 
 Land cover maps
+
+
+Class diagram
+-------------
+torchgeo.datasets.RasterDataset  (-> https://torchgeo.readthedocs.io/en/v0.4.1/api/datasets.html#rasterdataset)
+ ├── TorchgeoLandcover
+ |   ├── EcoclimapSG
+ |   ├── ESAWorldCover
+ |   └── EcoclimapSGplus
+ |       ├── QualityFlagsECOSGplus
+ |       ├── InferenceResults
+ |       └── EcoclimapSGML
+ |   
+ └── ProbaLandcover
+     └── InferenceResultsProba
+    
+OpenStreetMap
 """
 import os
 import time

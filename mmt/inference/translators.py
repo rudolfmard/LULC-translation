@@ -3,6 +3,17 @@
 """Multiple land-cover/land-use Maps Translation (MMT)
 
 Module with inference map translator
+
+
+Class diagram
+-------------
+OnnxModel
+MapTranslator
+ ├── EsawcToEsgp
+ |    └── EsawcToEsgpProba
+ ├── EsawcEcosgToEsgpRFC
+ ├── MapMerger
+ └── MapMergerProba
 """
 
 import os
