@@ -82,6 +82,42 @@ ecoclimapsg_labels = """0. no data
 32: LCZ9: sparsely built
 33: LCZ10: heavy industry""".split("\n")
 
+irish_ecosg_labels = """0. gan sonraí
+1. farraige agus aigéin
+2. lochanna
+3. aibhneacha
+4. talamh lom
+5. carraig lom
+6. sneachta buan
+7. duillsilteach leathanduilleach boreal
+8. duillsilteach leathanduilleach measartha
+9. duillsilteach leathanduilleach trópaiceach
+10. síorghlas leathanduilleach measartha
+11. síorghlas leathanduilleach trópaiceach
+12. síorghlas snáth-dhuilleog boreal
+13. síorghlas snáth-dhuilleog mheasartha
+14. duillsilteach snáth-dhuilleog boreal
+15. tom
+16. féarach boreal
+17. féarach measartha
+18. féarach trópaiceach
+19. barraí C3 geimhridh
+20. barra C3 samhraidh
+21. C4 barra
+22. crainn tuilte
+23. féarach faoi thuilte
+24. LCZ1: ard-ardú dlúth
+25. LCZ2: meán-ardú dlúth
+26. LCZ3: íseal-ardú dlúth
+27. LCZ4: ard-ardú oscailte
+28. LCZ5: meán-ardú oscailte
+29: LCZ6: íseal-ardú oscailte
+30: LCZ7: meáchan éadrom íseal-ardú
+31: LCZ8: íseal-ardú mór
+32: LCZ9: tógtha go tearc
+33: LCZ10: tionscal trom""".split("\n")
+
+
 n_ecoclimapsg_labels = len(ecoclimapsg_labels)
 
 
@@ -620,7 +656,7 @@ class EcoclimapSGplus(TorchgeoLandcover):
         
         # DIR file
         with open(ofn_dir, "wb") as f:
-            f.write(sample["mask"].squeeze().numpy().astype(np.uint8).tobytes("F"))
+            f.write(sample["mask"].squeeze().numpy().astype(np.uint8).tobytes("C"))
         
         return ofn_dir, ofn_hdr
     
