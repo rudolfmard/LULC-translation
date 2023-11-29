@@ -3,5 +3,6 @@
 data/*
 experiments/*
 configs/*
+figures/*
 *.onnx
 *.egg-info/

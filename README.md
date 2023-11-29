@@ -45,7 +45,30 @@ data
      └── ...
 ```
 
-To download the data, a Python program will be provided.
+To download the data, use the following links, uncompress it and store it as indicated above.
+
+#### Landcovers
+
+  * ECOCLIMAP-SG-ML: link to [version 0.6](https://drive.proton.me/urls/7H7V6K62KG#dxLVsVJJ1IDm) (750 MB)
+  * ECOCLIMAP-SG+: link to [version 0.3.e2](https://drive.proton.me/urls/74EH1BYA8W#tRPWIWhS0i1y) (1.2GB)
+  * [ECOCLIMAP-SG](https://opensource.umr-cnrm.fr/projects/ecoclimap-sg/wiki): link to the [EURAT extraction in TIF](https://drive.proton.me/urls/X0QZ18C5X8#XRDMQVNnHGWO)
+  * [ESA World Cover](https://esa-worldcover.org/en): link to the [Zenodo archive](https://zenodo.org/records/7254221). Four macro-tiles cover the EURAT domain (43 GB)
+```
+wget https://zenodo.org/record/7254221/files/ESA_WorldCover_10m_2021_v200_60deg_macrotile_S30W060.zip
+wget https://zenodo.org/record/7254221/files/ESA_WorldCover_10m_2021_v200_60deg_macrotile_N30W060.zip
+wget https://zenodo.org/record/7254221/files/ESA_WorldCover_10m_2021_v200_60deg_macrotile_S30E000.zip
+wget https://zenodo.org/record/7254221/files/ESA_WorldCover_10m_2021_v200_60deg_macrotile_N30E000.zip
+unzip '*.zip' -d ESA-WorldCover-2021
+```
+
+#### Weights
+
+Here is the [link](https://drive.proton.me/urls/DWJ3ATQS9G#i4GptzWdUnC5) to download the weights (11 MB).
+
+#### Training data
+
+Here is the [link](https://drive.proton.me/urls/AA5KJRYPCC#PD5E1XElNMpG) to download the HDF5 files used in the training (1.8 GB)
+
 
 ### Check the installation
 
@@ -61,24 +84,24 @@ Usage
 Once the landcovers are available in the `data/tiff_data` folder, they can be visualized using the `look_at_map.py` program.
 For example, to look at ECOCLIMAP-SG-ML over the EURAT domain with a resolution of 0.1 degrees, the command is:
 ```
-python -i look_at_map.py --lcname=EcoclimapSGML --domainname=eurat --res=0.1
+python -i scripts/look_at_map.py --lcname=EcoclimapSGML --domainname=eurat --res=0.1
 ```
 See the header of `look_at_map.py` for more examples.
 
-Alternatively, if you want to export maps in various formats (netCDF, DIR/HDR), the program `export_landcover.py` has a similar interface.
+Alternatively, if you want to export maps in various formats (netCDF, DIR/HDR), the program `scripts/export_landcover.py` has a similar interface.
 See the header for more information.
 
 
 ### Make inference
 
 Once the landcover and the weights are correctly installed, you can perform inference on any domain for which ESA World Cover is available.
-The program to make the inference is `inference_and_merging.py`.
+The program to make the inference is `scripts/inference_and_merging.py`.
 See the documentation inside to run it.
 
 
 ### Reproduce results
 
-The results presented in the manuscript can be reproduces thanks to the programs `scores_from_inference.py` and `qualitative_evaluation.py`.
+The results presented in the manuscript can be reproduces thanks to the programs `scripts/scores_from_inference.py` and `scripts/qualitative_evaluation.py`.
 
 
 ### Train the model
@@ -102,6 +125,7 @@ The repository has the following directories:
   * `mmt`: contains the source code of the MMT package
   * `questions`: contains programs providing answers to specific questions
   * `tests`: contains programs to test the installation
+  * `scripts`: contains programs ready for use
 
 Specifically, the `mmt` folder will set the organisation of the MMT package in modules and sub-modules which are as follows:
 ```
@@ -150,9 +174,11 @@ The modules `agents`, `graphs`, `datasets` and `utils` are mostly inherited from
 The other modules are specific additions for the ECOCLIMAP-SG-ML generation.
 
 
-### Class diagram
+### Class diagrams
 
 Two modules contain customised families of classes for which we provide the inheritance diagram here.
+
+Landcovers are used to access the data from multiple TIF files:
 ```
 mmt.datasets.landcovers
 ├── OpenStreetMap
@@ -168,6 +194,8 @@ mmt.datasets.landcovers
     └── ProbaLandcover
         └── InferenceResultsProba
 ```
+
+Translators are used to perform map translation in inference mode:
 ```
 mmt.inference.translators
  └── MapTranslator
