@@ -21,6 +21,7 @@ import numpy as np
 from pprint import pprint
 import argparse
 
+from mmt import _repopath_ as mmt_repopath
 from mmt.datasets import landcovers
 from mmt.datasets import transforms as mmt_transforms
 from mmt.utils import domains
@@ -79,6 +80,7 @@ else:
 # ------------
 x_map = lcmap[qb]
 fig, ax = lcmap.plot(x_map)
-fig.savefig(os.path.join(lcmap.path, f"{domainname}.png"))
-print("Figure saved:", os.path.join(lcmap.path, f"{domainname}.png"))
+figpath = os.path.join(mmt_repopath, "figures", f"{lcmap.__class__.__name__}__{lcmap.res}__{domainname}.png")
+fig.savefig(figpath)
+print("Figure saved:", figpath)
 fig.show()

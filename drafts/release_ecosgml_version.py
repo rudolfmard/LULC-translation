@@ -109,6 +109,6 @@ Export it to hdr/dir format (SURFEX readable):
     python export_landcover_to_hdrdir.py --lcpath={output_tif_path} --output=<path> --domainname=<within eurat> --res=<degree>
 
 Push everything to ECMWF HPC:
-    rsync -avz {rootarchivedir} hpc-login:/perm/<ec id>/data/ECOCLIMAP-SG-ML
+    rsync -avz {rootarchivedir}/ hpc-login:/perm/<ec id>/data/ECOCLIMAP-SG-ML
 """
 print(prologue)

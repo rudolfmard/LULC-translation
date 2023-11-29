@@ -19,7 +19,7 @@ checkpoint_path=os.path.join(mmt_repopath, "saved_models", "vanilla_eurat3.ep169
 # classifier_path=os.path.join(mmt_repopath, "saved_models", "rfc_1000trees.pkl")
 domainname = "eurat"
 version = "v0.6"
-n_px_max = 600 # Maximum that could fit on the GPU
+n_px_max = 600 # Maximum that could fit on the GPU?
 inference_dump_dir = os.path.join(mmt_repopath, "data", "outputs")
 
 # Load translators
@@ -38,7 +38,6 @@ inference_tif_dir = translator.predict_from_large_domain(
     n_max_files = 200,
 )
 print(f"Inference complete. inference_tif_dir = {inference_tif_dir}")
-# inference_tif_dir = os.path.join(inference_dump_dir, "eurat.1000clusters.2e7cat.01Nov-17h29")
 
 # Merge with ECOSG+
 #------------
