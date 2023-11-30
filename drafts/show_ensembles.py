@@ -22,12 +22,12 @@ from mmt.utils import domains
 #---------
 print(f"Executing program {sys.argv[0]} in {os.getcwd()}")
 
-storeImages = True
+storeImages = False
 fmtImages = ".svg"
 figureDir = ""
 
 n_px_esawc = 900
-val_domains = ["snaefell_glacier", "nanterre", "iso_kihdinluoto", "bakar_bay_croatia", "portugese_crops", "elmenia_algeria"]
+val_domains = ["snaefell_glacier", "nanterre", "iso_kihdinluoto", "portugese_crops", "elmenia_algeria"]
 checkpoint_path=os.path.join(mmt_repopath, "data", "saved_models", "mmt-weights-v1.0.ckpt")
 
 # ### Random draw

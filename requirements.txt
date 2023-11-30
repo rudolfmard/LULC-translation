@@ -14,3 +14,4 @@ tqdm>=4.65
 easydict>=1.9
 imageio>=2.31
 utm>=0.7
+psutil>=5.9

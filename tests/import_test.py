@@ -65,5 +65,9 @@ plt_utils.plt_loss2
 from mmt.utils import config as utilconf
 utilconf.get_config_from_json
 
+from mmt.inference import io
+from mmt.inference import translators
+translators.EsawcToEsgp
+
 print("All imports passed successfully")
 print(f"Package {mmt.__name__}-{mmt.__version__} from {mmt._repopath_}")
