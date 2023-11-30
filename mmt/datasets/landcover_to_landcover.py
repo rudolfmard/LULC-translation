@@ -18,6 +18,7 @@ from sklearn.decomposition import PCA
 from matplotlib.colors import LinearSegmentedColormap
 
 from mmt.datasets import transforms
+from mmt import _repopath_ as mmt_repopath
 
 rmsuffix = transforms.rmsuffix
 
@@ -689,7 +690,7 @@ class LandcoverToLandcoverDataLoader:
         :param config:
         """
         self.config = config
-        self.datadir = os.path.join(config.paths.data_dir, "hdf5_data")
+        self.datadir = os.path.join(mmt_repopath, "data", "hdf5_data")
         self.device = "cuda" if config.cuda else "cpu"
         self.datasets = [rmsuffix(dataset) for dataset in datasets]
         
@@ -1047,7 +1048,7 @@ class LandcoverToLandcoverDataLoaderNewPosenc(LandcoverToLandcoverDataLoader):
         :param config:
         """
         self.config = config
-        self.datadir = os.path.join(config.paths.data_dir, "hdf5_data")
+        self.datadir = os.path.join(mmt_repopath, "data", "hdf5_data")
         self.device = "cuda" if config.cuda else "cpu"
         self.datasets = [rmsuffix(dataset) for dataset in datasets]
         

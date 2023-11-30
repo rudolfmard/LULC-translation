@@ -265,7 +265,7 @@ class EsawcToEsgp(MapTranslator):
     """Translate from ESA World Cover to ECOCLIMAP-SG+ with map translation auto-encoders"""
     def __init__(
         self,
-        checkpoint_path=os.path.join(mmt_repopath, "saved_models", "vanilla.ckpt"),
+        checkpoint_path=os.path.join(mmt_repopath, "data", "saved_models", "mmt-weights-v1.0.ckpt"),
         device="cuda",
         remove_tmpdirs=True,
         output_dtype="int16",
@@ -323,7 +323,7 @@ class EsawcToEsgpProba(EsawcToEsgp):
     """Return probabilities of classes instead of classes"""
     def __init__(
         self,
-        checkpoint_path=os.path.join(mmt_repopath, "saved_models", "vanilla.ckpt"),
+        checkpoint_path=os.path.join(mmt_repopath, "data", "saved_models", "mmt-weights-v1.0.ckpt"),
         device="cuda",
         remove_tmpdirs=True,
         output_dtype="float32",
@@ -344,8 +344,8 @@ class EsawcEcosgToEsgpRFC(MapTranslator):
     """Translate from ESA World Cover and ECOCLIMAP-SG to ECOCLIMAP-SG+ with a random forest classifer"""
     def __init__(
         self,
-        checkpoint_path=os.path.join(mmt_repopath, "saved_models", "vanilla.ckpt"),
-        classifier_path=os.path.join(mmt_repopath, "saved_models", "rfc_200trees.pkl"),
+        checkpoint_path=os.path.join(mmt_repopath, "data", "saved_models", "mmt-weights-v1.0.ckpt"),
+        classifier_path=os.path.join(mmt_repopath, "data", "saved_models", "rfc_200trees.pkl"),
         device="cuda",
         remove_tmpdirs=True,
         output_dtype="int16",

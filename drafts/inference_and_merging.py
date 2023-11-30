@@ -15,8 +15,7 @@ from mmt.inference import translators
 
 # Configs
 #------------
-checkpoint_path=os.path.join(mmt_repopath, "saved_models", "vanilla_eurat3.ep169.ckpt")
-# classifier_path=os.path.join(mmt_repopath, "saved_models", "rfc_1000trees.pkl")
+checkpoint_path=os.path.join(mmt_repopath, "data", "saved_models", "mmt-weights-v1.0.ckpt")
 domainname = "eurat"
 version = "v0.6"
 n_px_max = 600 # Maximum that could fit on the GPU?

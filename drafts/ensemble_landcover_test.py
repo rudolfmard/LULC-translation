@@ -84,8 +84,8 @@ patches = []
 for iqb in sampler:
     patches.append(domains.GeoRectangle(iqb, fmt = "tgbox"))
 
-inference_template_dir = os.path.join(config.paths.data_dir, "ensembles", f"Inference_{xp_name}_{domainname}_esawc_esgp_[member]")
-mergedmap_template_dir = os.path.join(config.paths.data_dir, "ensembles", f"Merged_{xp_name}_{domainname}_esawc_esgp_[member]")
+inference_template_dir = os.path.join(mmt_repopath, "data", "outputs", "ensembles", f"Inference_{xp_name}_{domainname}_esawc_esgp_[member]")
+mergedmap_template_dir = os.path.join(mmt_repopath, "data", "outputs", "ensembles", f"Merged_{xp_name}_{domainname}_esawc_esgp_[member]")
 
 for mb in range(n_members):
     inference_dump_dir = inference_template_dir.replace("[member]", str(mb).zfill(2))

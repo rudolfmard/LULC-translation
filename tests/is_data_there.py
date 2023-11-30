@@ -41,6 +41,7 @@ data
 
 import os
 import argparse
+from mmt import _repopath_ as mmt_repopath
 
 parser = argparse.ArgumentParser(prog="is_data_there", description='Check if the data is at the correct location and in the correct format.')
 parser.add_argument('--tiff', help="Check if land cover maps are correctly stored in TIF files. Needed to visualize land covers.", action='store_true')
@@ -76,11 +77,10 @@ if weights:
     from mmt.inference import translators
     
     translator = translators.EsawcToEsgp()
-    epoch, iteration = io.get_epoch_of_best_model(translator.checkpoint_path, return_iteration=True)
+    epoch, iteration = io.get_epoch_of_best_model(translator.checkpoint_path, return_iteration=True)    
     print(f"Loaded {translator} at epoch={epoch}, iteration={iteration}")
     
 if hdf5:
-    from mmt import _repopath_ as mmt_repopath
     from mmt.utils import config as utilconf
     from mmt.datasets import landcover_to_landcover
     config = utilconf.get_config(

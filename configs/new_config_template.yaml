@@ -6,6 +6,7 @@ paths:
     experiments_dir: <your experiments dir>
 versions:
     ecosgplus: 0.3.e2
+    ecosgml: 0.6
 dimensions:
     n_channels_hiddenlay: 32
     n_channels_embedding: 50

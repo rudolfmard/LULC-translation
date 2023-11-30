@@ -21,7 +21,7 @@ We recommend to use [Conda](https://docs.conda.io/projects/conda/en/latest/index
 
 ### Data
 All data is assumed to be found in the `data` folder of the repository.
-We recommend to use symbolic links to point to your storage partition.
+We recommend to use symbolic links to adapt it to your file system.
 The `data` folder should be organised as follows:
 
 ```
@@ -72,7 +72,14 @@ Here is the [link](https://drive.proton.me/urls/AA5KJRYPCC#PD5E1XElNMpG) to down
 
 ### Check the installation
 
-To check your installation, run the programs in the `tests` directory.
+To check the software installation:
+```
+python tests/import_tests.py
+````
+To check the data installation:
+```
+python tests/is_data_there.py [--tiff] [--weights] [--hdf5] [--all]
+```
 
 
 

@@ -28,7 +28,7 @@ figureDir = ""
 
 n_px_esawc = 900
 val_domains = ["snaefell_glacier", "nanterre", "iso_kihdinluoto", "bakar_bay_croatia", "portugese_crops", "elmenia_algeria"]
-checkpoint_path=os.path.join(mmt_repopath, "saved_models", "vanilla_eurat3.ep169.ckpt")
+checkpoint_path=os.path.join(mmt_repopath, "data", "saved_models", "mmt-weights-v1.0.ckpt")
 
 # ### Random draw
 # n_members = 4

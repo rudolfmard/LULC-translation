@@ -582,7 +582,7 @@ class OpenStreetMap:
 # =============
 
 class EcoclimapSG(TorchgeoLandcover):
-    path = os.path.join(config.paths.data_dir, "tiff_data", "ECOCLIMAP-SG")
+    path = os.path.join(mmt_repopath, "data", "tiff_data", "ECOCLIMAP-SG")
     filename_glob = "ECOCLIMAP-SG-Eurat.tif"
     labels = ecoclimapsg_labels
     cmap = [
@@ -596,7 +596,7 @@ class EcoclimapSG(TorchgeoLandcover):
 
 
 class ESAWorldCover(TorchgeoLandcover):
-    path = os.path.join(config.paths.data_dir, "tiff_data", "ESA-WorldCover-2021")#, "ESA_WorldCover_10m_2021_v200_60deg_macrotile_N30E000")
+    path = os.path.join(mmt_repopath, "data", "tiff_data", "ESA-WorldCover-2021")#, "ESA_WorldCover_10m_2021_v200_60deg_macrotile_N30E000")
     labels = [
         "No data", "Tree cover", "Shrubland", "Grassland", "Cropland", "Built-up",
         "Bare/sparse veg.", "Snow and ice", "Permanent water bodies",
@@ -610,7 +610,7 @@ class ESAWorldCover(TorchgeoLandcover):
 
 
 class EcoclimapSGplus(TorchgeoLandcover):
-    path = os.path.join(config.paths.data_dir, "tiff_data", "ECOCLIMAP-SG-plus", f"ecosgp-labels-v{config.versions.ecosgplus}")
+    path = os.path.join(mmt_repopath, "data", "tiff_data", "ECOCLIMAP-SG-plus", f"ecosgp-labels-v{config.versions.ecosgplus}")
     labels = ecoclimapsg_labels
     cmap = [
         (0,0,0),(0,0,128),(0,0,205),(0, 0, 255),(211,211,211),(169,169,169),(255,250,250),
@@ -697,7 +697,7 @@ class EcoclimapSGplus(TorchgeoLandcover):
 
 
 class QualityFlagsECOSGplus(EcoclimapSGplus):
-    path = os.path.join(config.paths.data_dir, "tiff_data", "ECOCLIMAP-SG-plus", f"ecosgp-qflags-v{config.versions.ecosgplus}")
+    path = os.path.join(mmt_repopath, "data", "tiff_data", "ECOCLIMAP-SG-plus", f"ecosgp-qflags-v{config.versions.ecosgplus}")
     labels = [
         "0. no data",
         "1. high agreement score + ECOSG",
@@ -738,4 +738,4 @@ class InferenceResultsProba(ProbaLandcover):
 
 class EcoclimapSGML(EcoclimapSGplus):
     """ECOCLIMAP-SG-ML land cover map. Release merge between ECOSG+ and inference results"""
-    path = os.path.join(config.paths.data_dir, "tiff_data", "ECOCLIMAP-SG-ML", "tif", f"ECOCLIMAP-SG-ML-v{config.versions.ecosgml}")
+    path = os.path.join(mmt_repopath, "data", "tiff_data", "ECOCLIMAP-SG-ML", "tif", f"ECOCLIMAP-SG-ML-v{config.versions.ecosgml}")

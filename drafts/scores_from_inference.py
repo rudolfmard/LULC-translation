@@ -38,32 +38,13 @@ device = "cuda" if usegpu else "cpu"
 
 print(f"Executing program {sys.argv[0]} in {os.getcwd()}")
 
-xp_name = "vanilla_eurat3"
-domainname = "eurat"
-
-config = utilconf.get_config(
-    os.path.join(
-        mmt_repopath,
-        "experiments",
-        xp_name,
-        "logs",
-        "config.yaml",
-    )
-)
-
-# plt_utils.figureDir = os.path.join(
-    # mmt_repopath,
-    # "experiments",
-    # xp_name,
-    # "out"
-# )
-plt_utils.figureDir = ""
+plt_utils.figureDir = os.path.join(mmt_repopath, "figures")
 plt_utils.fmtImages = ".svg"
 plt_utils.storeImages = False
 
 # Loading models
 #----------------
-checkpoint_path = os.path.join(mmt_repopath, "saved_models", "vanilla_eurat3.ep169.ckpt")
+checkpoint_path = os.path.join(mmt_repopath, "data", "saved_models", "mmt-weights-v1.0.ckpt")
 print(f"Loading auto-encoders from {checkpoint_path}")
 translator = translators.EsawcToEsgp(checkpoint_path = checkpoint_path)
 epoch = io.get_epoch_of_best_model(checkpoint_path)
@@ -71,7 +52,7 @@ to_tensor = lambda x: torch.Tensor(x[:]).long().unsqueeze(0)
 
 # VALIDATION DOMAINS
 #====================
-ldom_data_dir = os.path.join(config.paths.data_dir, "hdf5_data")
+ldom_data_dir = os.path.join(mmt_repopath, "data", "hdf5_data")
 subset = "test"
 lcnames = ["esawc", "ecosg", "esgp"]
 h5_path = {}
