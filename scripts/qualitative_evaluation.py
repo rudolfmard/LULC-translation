@@ -24,17 +24,9 @@ fmtImages = ".png"
 figureDir = ""
 
 n_px_esawc = 900
-# val_domains = ["snaefell_glacier", "nanterre", "iso_kihdinluoto", "bakar_bay_croatia", "portugese_crops", "elmenia_algeria"]
-val_domains = ["rare_label_9tropbldec", "rare_label_14bornldec", "rare_label_22floodedtree", "rare_label_30lcz7"]
-# val_domains = [
-    # "antelao_glacier",
-    # "nanterre",
-    # "iso_kihdinluoto",
-    # "rare_label_9tropbldec",
-    # "rare_label_14bornldec",
-    # "rare_label_22floodedtree",
-    # "rare_label_30lcz7"
-# ]
+val_domains = ["snaefell_glacier", "nanterre", "iso_kihdinluoto", "bakar_bay_croatia", "portugese_crops", "elmenia_algeria"]
+# val_domains = ["rare_label_9tropbldec", "rare_label_14bornldec", "rare_label_22floodedtree", "rare_label_30lcz7"]
+
 
 # Land cover loading
 #--------------------
@@ -61,7 +53,6 @@ for i, domainname in enumerate(val_domains):
     x_esgml = esgml[qb]
     x_qflags = qflags[qb]
     print(f"Location {domainname} (lon, lat): {dom.central_point()}")
-    # print("   " + " ".join([f"{x}.shape = {eval(x).get('mask').shape}," for x in ["x_esawc", "x_ecosg", "x_esgp", "x_esgml"]]))
     
     esawc.plot(x_esawc, figax = (fig, axs[i, 0]), show_titles=False, show_colorbar=False)
     ecosg.plot(x_ecosg, figax = (fig, axs[i, 1]), show_titles=False, show_colorbar=False)

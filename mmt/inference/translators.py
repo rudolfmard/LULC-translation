@@ -378,9 +378,7 @@ class EsawcEcosgToEsgpRFC(MapTranslator):
         self.avg30 = torch.nn.AvgPool2d((30, 30))
 
     def predict_from_data(self, x_esawc, x_ecosg):
-        """Run the translation from matrices of land cover labels
-        :x: `torch.Tensor` of shape (N, 1, H, W)
-        """
+        """Run the translation from matrices of land cover labels"""
         assert all([s % 30 == 0 for s in x_esawc.shape[-2:]]), f"Invalid shape {x_esawc.shape[-2:]}. Must be a multiple of 30"
         tgt_shape = [s // 6 for s in x_esawc.shape[-2:]]
         
@@ -407,11 +405,9 @@ class EsawcEcosgToEsgpRFC(MapTranslator):
         return y.reshape(tgt_shape)
 
     def predict_from_domain(self, qb):
-        """Run the translation from geographical domain
-        :qb: `torchgeo.datasets.utils.BoundingBox` or `mmt.utils.domains.GeoRectangle`
-        """
+        """Run the translation from geographical domain"""
         if not isinstance(qb, TgeoBoundingBox):
-            qb = qb.to_tgbox(self.esawc.crs)
+            qb = qb.to_tgbox(self.landcover.crs)
         
         x = self.landcover[qb]
         
@@ -449,9 +445,7 @@ class MapMerger(MapTranslator):
             self.merge_criterion = eval(merge_criterion)
         
     def predict_from_domain(self, qb):
-        """Run the translation from geographical domain
-        :qb: `torchgeo.datasets.utils.BoundingBox` or `mmt.utils.domains.GeoRectangle`
-        """
+        """Run the translation from geographical domain"""
         if not isinstance(qb, TgeoBoundingBox):
             qb = qb.to_tgbox(self.landcover.crs)
         
@@ -514,9 +508,7 @@ class MapMergerProba(MapTranslator):
         return x_merge.squeeze().numpy()
         
     def predict_from_domain(self, qb):
-        """Run the translation from geographical domain
-        :qb: `torchgeo.datasets.utils.BoundingBox` or `mmt.utils.domains.GeoRectangle`
-        """
+        """Run the translation from geographical domain"""
         if not isinstance(qb, TgeoBoundingBox):
             qb = qb.to_tgbox(self.landcover.crs)
         

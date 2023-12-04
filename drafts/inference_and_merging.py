@@ -34,7 +34,7 @@ inference_tif_dir = translator.predict_from_large_domain(
     output_dir=os.path.join(inference_dump_dir, f"infres-{version}.{domainname}.[id]"),
     tmp_dir=os.path.join(inference_dump_dir, f"infres-{version}.{domainname}.[id]"),
     n_px_max = n_px_max,
-    n_max_files = 12,
+    n_max_files = 0,
 )
 print(f"Inference complete. inference_tif_dir = {inference_tif_dir}")
 
@@ -49,6 +49,6 @@ merging_dump_dir = merger.predict_from_large_domain(
     tmp_dir=os.path.join(inference_dump_dir, f"merger-{version}.{domainname}.[id]"),
     n_px_max = 80, # Make sure that the patches are smaller than the size of a file
     # Thumb rule: < n_px_max*esawc.res/esgp.res
-    n_max_files = 0, # Set to 0 to avoid clustering (only copy from tmp_dir to output_dir)
+    n_max_files = 12, # Set to 0 to avoid clustering (only copy from tmp_dir to output_dir)
 )
 print(f"Merged map created at {merging_dump_dir}")
