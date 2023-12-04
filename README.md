@@ -47,6 +47,15 @@ data
 
 To download the data, use the following links, uncompress it and store it as indicated above.
 
+#### All together (recommended)
+
+Using this [link](https://drive.proton.me/urls/9NSPARVBHG#sdRkPZNng72D), you can download all the data you need to use he package over Europe (so-called EURAT domain).
+The downloaded volume is 45GB and you will need 160GB locally after decompression.
+Due to the large volume of data, we recommend to **download it the day before**.
+The data is already organised as explained earlier.
+In case you want to focus on some specific part of the data, we provide more detailed information on how to download it separately.
+If you download all the data together, you can skip the next subsections of [Data] and go directly to [Check the installation].
+
 #### Landcovers
 
   * ECOCLIMAP-SG-ML: link to [version 0.6](https://drive.proton.me/urls/7H7V6K62KG#dxLVsVJJ1IDm) (750 MB)
@@ -103,13 +112,21 @@ See the header for more information.
 
 Once the landcover and the weights are correctly installed, you can perform inference on any domain for which ESA World Cover is available.
 The program to make the inference is `scripts/inference_and_merging.py`.
+```
+python drafts/inference_and_merging.py
+python -i scripts/look_at_map.py --lcpath=<path given by the  previous program>
+```
 See the documentation inside to run it.
 
 
 ### Reproduce results
 
 The results presented in the manuscript can be reproduces thanks to the programs `scripts/scores_from_inference.py` and `scripts/qualitative_evaluation.py`.
-
+```
+python -i scripts/qualitative_evaluation.py
+python -i scripts/scores_from_inference.py
+```
+See the documentation and variables inside.
 
 ### Train the model
 
