@@ -46,15 +46,17 @@ data
 ```
 
 To download the data, use the following links, uncompress it and store it as indicated above.
-
-#### All together (recommended)
-
-Using this [link](https://drive.proton.me/urls/9NSPARVBHG#sdRkPZNng72D), you can download all the data you need to use he package over Europe (so-called EURAT domain).
-The downloaded volume is 45GB and you will need 160GB locally after decompression.
 Due to the large volume of data, we recommend to **download it the day before**.
-The data is already organised as explained earlier.
+
+#### Download zipped archives (recommended)
+
+Several zipped archives are available for download, depending on your capacity and what you want to do.
+  * The [full data](https://drive.proton.me/urls/9NSPARVBHG#sdRkPZNng72D) contains weights, training data and land cover maps over all Europe (so-called EURAT domain): 45GB downloaded, 160GB uncompressed.
+  * The [sample data](https://drive.proton.me/urls/4JK0X0BQ2R#rdnXGeWbqWYj) contains weights, training data and land cover maps over Ireland: 2GB downloaded, 100GB uncompressed.
+  * The [sample TIF files](https://drive.proton.me/urls/GTKE99CVB4#IMZcMUYyvgJa) contains only land cover maps over Ireland: 150MB downloaded, 15GB uncompressed.
+
 In case you want to focus on some specific part of the data, we provide more detailed information on how to download it separately.
-If you download all the data together, you can skip the next subsections of [Data](#data) and go directly to [Check the installation](#check-the-installation).
+Except for the sample TIF files, all zipped archived are already organised, so you can skip the next subsections of [Data](#data) and go directly to [Check the installation](#check-the-installation).
 
 #### Landcovers
 
@@ -76,7 +78,7 @@ Here is the [link](https://drive.proton.me/urls/DWJ3ATQS9G#i4GptzWdUnC5) to down
 
 #### Training data
 
-Here is the [link](https://drive.proton.me/urls/AA5KJRYPCC#PD5E1XElNMpG) to download the HDF5 files used in the training (1.8 GB)
+Here is the [link](https://drive.proton.me/urls/AA5KJRYPCC#PD5E1XElNMpG) to download the HDF5 files used in the training (1.8 GB downloaded, 85GB uncompressed)
 
 
 ### Check the installation
@@ -89,7 +91,6 @@ To check the data installation:
 ```
 python tests/is_data_there.py [--tiff] [--weights] [--hdf5] [--all]
 ```
-
 
 
 Usage
