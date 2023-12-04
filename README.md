@@ -54,7 +54,7 @@ The downloaded volume is 45GB and you will need 160GB locally after decompressio
 Due to the large volume of data, we recommend to **download it the day before**.
 The data is already organised as explained earlier.
 In case you want to focus on some specific part of the data, we provide more detailed information on how to download it separately.
-If you download all the data together, you can skip the next subsections of [Data] and go directly to [Check the installation].
+If you download all the data together, you can skip the next subsections of [Data](#data) and go directly to [Check the installation](#check-the-installation).
 
 #### Landcovers
 
