@@ -199,7 +199,7 @@ def load_old_pytorch_model(xp_name, lc_in="esawc", lc_out="esgp"):
     
     return model
     
-def load_pytorch_model(xp_name, lc_in="esawc", lc_out="esgp", train_mode = False):
+def load_pytorch_model(xp_name, lc_in="esawc", lc_out="esgp", train_mode = False, device = "cpu"):
     """Return the pre-trained Pytorch model from the experiment `xp_name`"""
     
     if os.path.isabs(xp_name):
@@ -223,7 +223,7 @@ def load_pytorch_model(xp_name, lc_in="esawc", lc_out="esgp", train_mode = False
     
     assert os.path.isfile(checkpoint_path), f"No checkpoint found at {checkpoint_path}"#
     
-    checkpoint = torch.load(checkpoint_path)
+    checkpoint = torch.load(checkpoint_path, map_location=device)
     config = utilconf.get_config(config_path)
     
     if config.model.type == "transformer_embedding":

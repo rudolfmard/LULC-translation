@@ -279,7 +279,7 @@ class EsawcToEsgp(MapTranslator):
             self.esawc.n_labels + 1, device=self.device
         )
         self.encoder_decoder = io.load_pytorch_model(
-            checkpoint_path, lc_in="esawc", lc_out="esgp"
+            checkpoint_path, lc_in="esawc", lc_out="esgp", device = device
         )
         self.encoder_decoder.to(self.device)
         self.landcover = self.esawc
