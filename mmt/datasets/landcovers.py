@@ -36,16 +36,14 @@ import torchgeo.datasets as tgd
 from typing import Any, Dict, Optional
 
 from mmt import _repopath_ as mmt_repopath
-from mmt.utils import config as utilconf
 from mmt.utils import misc
 from mmt.utils import domains
 
 # VARIABLES
 # ============
+default_ecosgplus_version = "1.4"
+default_ecosgml_version = "0.6"
 
-config = utilconf.get_config_from_yaml(
-    os.path.join(mmt_repopath, "configs", "new_config_template.yaml")
-)
 
 ecoclimapsg_labels = """0. no data
 1. sea and oceans
@@ -610,7 +608,7 @@ class ESAWorldCover(TorchgeoLandcover):
 
 
 class EcoclimapSGplus(TorchgeoLandcover):
-    path = os.path.join(mmt_repopath, "data", "tiff_data", "ECOCLIMAP-SG-plus", f"ecosgp-labels-v{config.versions.ecosgplus}")
+    path = os.path.join(mmt_repopath, "data", "tiff_data", "ECOCLIMAP-SG-plus", f"ecosgp-labels-v{default_ecosgplus_version}")
     labels = ecoclimapsg_labels
     cmap = [
         (0,0,0),(0,0,128),(0,0,205),(0, 0, 255),(211,211,211),(169,169,169),(255,250,250),
@@ -620,6 +618,13 @@ class EcoclimapSGplus(TorchgeoLandcover):
         (255,150,0),(255,180,0),(255,210,0),(255,240,0),(128,128,128)
     ]
     crs = rasterio.crs.CRS.from_string(parse_version_infos(path)["crs"])
+    
+    def __init__(self, version = default_ecosgplus_version, **kwargs):
+        super().__init__(**kwargs)
+        self.path = os.path.join(
+            os.path.dirname(self.path),
+            os.path.basename(self.path).replace(f"-v{default_ecosgplus_version}", f"-v{version}")
+        )
     
     def get_version(self):
         """Read the version from the file version-info.txt"""
@@ -697,7 +702,7 @@ class EcoclimapSGplus(TorchgeoLandcover):
 
 
 class QualityFlagsECOSGplus(EcoclimapSGplus):
-    path = os.path.join(mmt_repopath, "data", "tiff_data", "ECOCLIMAP-SG-plus", f"ecosgp-qflags-v{config.versions.ecosgplus}")
+    path = os.path.join(mmt_repopath, "data", "tiff_data", "ECOCLIMAP-SG-plus", f"ecosgp-qflags-v{default_ecosgplus_version}")
     labels = [
         "0. no data",
         "1. high agreement score + ECOSG",
@@ -738,4 +743,4 @@ class InferenceResultsProba(ProbaLandcover):
 
 class EcoclimapSGML(EcoclimapSGplus):
     """ECOCLIMAP-SG-ML land cover map. Release merge between ECOSG+ and inference results"""
-    path = os.path.join(mmt_repopath, "data", "tiff_data", "ECOCLIMAP-SG-ML", "tif", f"ECOCLIMAP-SG-ML-v{config.versions.ecosgml}")
+    path = os.path.join(mmt_repopath, "data", "tiff_data", "ECOCLIMAP-SG-ML", "tif", f"ECOCLIMAP-SG-ML-v{default_ecosgml_version}")
