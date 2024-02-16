@@ -2,6 +2,9 @@ import time
 import logging
 import string
 import random
+import numpy as np
+import torch
+import torchvision.transforms as tvt
 
 def id_generator(size = 6, chars = string.ascii_lowercase + string.digits, forbidden = "_"):
     """Generate random strings of characters and digits than can be used as
@@ -133,6 +136,50 @@ def haversine_formula(lon1, lon2, lat1, lat2, degrees = True, r = 6378100):
             np.sin((lat2-lat1)/2)**2 + np.cos(lat2) * np.cos(lat1) * np.sin((lon2-lon1)/2)**2
             )
         )
+
+def qscore_from_qflags(qflags):
+    """Return the proportion of quality flag with values 1 or 2"""
+    if isinstance(qflags, torch.Tensor):
+        qflags = qflags.detach().cpu().numpy()
+    
+    if (qflags==0).sum() > 0:
+        return 0
+    else:
+        return (qflags < 3).sum()/qflags.size
+
+
+def divscore_from_esawc(esawc):
+    """Return the proportion of pixels with the dominant label"""
+    if isinstance(esawc, torch.Tensor):
+        esawc = esawc.detach().cpu().numpy()
+    
+    _, c = np.unique(esawc, return_counts = True)
+    return 1 - c.max()/c.sum()
+
+
+def ccrop_and_split(x, n_px):
+    """Center-crop and split into four patches
+    
+    Params
+    ------
+    x: torch.Tensor or dict
+        Data to be cropped and split
+    
+    n_px: int
+        Number of pixels in the split patches
+    """
+    ccrop = tvt.CenterCrop(2 * n_px)
+    try:
+        x = ccrop(x["mask"]).squeeze()
+    except:
+        x = ccrop(x).squeeze()
+        
+    x_train1 =  x[:n_px, :n_px]
+    x_train2 =  x[n_px:, :n_px]
+    x_test =    x[:n_px, n_px:]
+    x_val =     x[n_px:, n_px:]
+    
+    return {"train":x_train1, "train2":x_train2, "test":x_test, "val":x_val}
 
 class InfiniIterTool:
     def __init__(self, start):

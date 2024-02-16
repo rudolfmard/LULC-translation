@@ -243,4 +243,22 @@ class FillMissingWithSea:
             x[x == self.missing_label] = self.sea_label
         return x
 
-EsawcTransform = tvt.Compose([FloorDivMinus(10, 0), FillMissingWithSea(0, 8)])
+class EsawcTransform:
+    def __init__(self, key="mask", threshold = 94):
+        self.key = key
+        self.threshold = threshold
+        
+    def __call__(self, x):
+        if isinstance(x, dict):
+            x[self.key][x[self.key] == 0] = 80
+            x[self.key] = torch.where(
+                x[self.key] < self.threshold,
+                x[self.key] // 10,
+                x[self.key] // 10 + 1
+            )
+        else:
+            x[x == 0] = 80
+            x = torch.where(x < self.threshold, x // 10, x // 10 + 1)
+        return x
+    
+# EsawcTransform = tvt.Compose([FloorDivMinus(10, 0), FillMissingWithSea(0, 8)])

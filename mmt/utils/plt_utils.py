@@ -1,10 +1,13 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib.cm as cm
+import matplotlib.patches as mpatches
 import seaborn as sns
 from torch.nn import Softmax2d
 import torch
 import os
+import cartopy.crs as ccrs
+import cartopy.io.img_tiles as cimgt
 
 coloring = {
     "esawc.hdf5": cm.Set1.colors[0],
@@ -465,3 +468,99 @@ def plot_confusion_matrix(dfcmx, accuracy_in_corner = False, annot=False, fignam
         print("Figure saved:", figpath)
     else:
         plt.show(block=False)
+
+
+def patches_over_domain(qdom, bboxs, zoomout=3, background="osm", details=8, figname=None, figtitle=None):
+    """Locate the patch on a map.
+    
+    
+    Parameters
+    ----------
+    qdom: `wopt.domains.GeoRectangle` or (2,2)-tuple
+        Query domain bounding box (upper-left, lower-right) to be located.
+        Will be displayed in red.
+    
+    bboxs: list of `wopt.domains.GeoRectangle`
+        List of bounding boxes covering the domain. Will be displayed in blue
+    
+    zoomout: float
+        Zoom-out level (coefficient applied to the size of `bbox` on both
+        dimensions). The higher the larger will be the backgournd extent
+    
+    background: {"osm", "terrain"}
+        The map to be drawn in background, Select "osm" for Open Street Map
+        features. Select "terrain" for terrain elevation.
+    
+    details: int, default=8
+        Level of details to be displayed in the background. The higher
+        the more detailed is the backgound but the heavier is the figure
+    
+    figname: str
+        Name of the figure to be saved
+        
+    figtitle: str
+        Title of the figure
+    """
+    if figtitle is None:
+        figtitle = f"Patches location over {background} background"
+    if figname is None:
+        figname = f"patches_over_{background}"
+    
+    if hasattr(qdom, "to_tlbr"):
+        (ulx, uly), (lrx, lry) = qdom.to_tlbr()
+    else:
+        (ulx, uly), (lrx, lry) = qdom
+    
+    dlat = abs(uly-lry)
+    dlon = abs(ulx-lrx)
+    locextent = [ulx - zoomout*dlon, lrx + zoomout*dlon, lry - zoomout*dlat, uly + zoomout*dlat]
+    xticks = np.linspace(locextent[0],locextent[1],5)
+    yticks = np.linspace(locextent[2],locextent[3],5)
+    
+    if background in ["osm", "OSM"]:
+        background_image = cimgt.OSM()
+    elif background in ["terrain", "relief", "stamen"]:
+        background_image = cimgt.Stamen('terrain-background')
+    else:
+        raise ValueError(f"Unknown background: {background}")
+    
+    fig = plt.figure(figsize=(20,15))
+    ax = fig.add_subplot(1, 1, 1, projection=background_image.crs)
+    rectangle = mpatches.Rectangle(
+        xy=[ulx, lry],
+        width=dlon, height=dlat,
+        facecolor='red',alpha=0.2, transform=ccrs.PlateCarree()
+    )
+    ax.set_extent(locextent)
+    ax.add_image(background_image, details)
+    # ax.add_patch(rectangle)
+    for bbox in bboxs:
+        if hasattr(bbox, "to_tlbr"):
+            (ulx, uly), (lrx, lry) = bbox.to_tlbr()
+        else:
+            (ulx, uly), (lrx, lry) = bbox
+        dlat = abs(uly-lry)
+        dlon = abs(ulx-lrx)
+        rectangle = mpatches.Rectangle(
+            xy=[ulx, lry],
+            width=dlon, height=dlat,
+            facecolor='blue',alpha=0.5, transform=ccrs.PlateCarree()
+        )
+        ax.add_patch(rectangle)
+    ax.set_title(figtitle)
+    ax.set_xticks(xticks, crs = ccrs.PlateCarree())
+    ax.set_yticks(yticks, crs = ccrs.PlateCarree())
+    ax.set_xticklabels(np.round(xticks,3))
+    ax.set_yticklabels(np.round(yticks,3))
+    fig.tight_layout()
+        
+    if storeImages:
+        figpath = os.path.join(figureDir, figname + fmtImages)
+        plt.savefig(figpath)
+        plt.close()
+        print("Figure saved:", figpath)
+    else:
+        plt.show(block=False)
+
+
+# EOF
