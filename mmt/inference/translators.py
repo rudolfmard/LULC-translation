@@ -274,7 +274,7 @@ class EsawcToEsgp(MapTranslator):
         super().__init__(checkpoint_path, device, remove_tmpdirs, output_dtype)
         self.always_predict = always_predict
         
-        self.esawc = landcovers.ESAWorldCover(transforms=mmt_transforms.EsawcTransform)
+        self.esawc = landcovers.ESAWorldCover(transforms=mmt_transforms.EsawcTransform())
         self.esawc_transform = mmt_transforms.OneHot(
             self.esawc.n_labels + 1, device=self.device
         )
@@ -353,7 +353,7 @@ class EsawcEcosgToEsgpRFC(MapTranslator):
         super().__init__(checkpoint_path, device, remove_tmpdirs, output_dtype)
         
         # Landcovers
-        self.esawc = landcovers.ESAWorldCover(transforms=mmt_transforms.EsawcTransform)
+        self.esawc = landcovers.ESAWorldCover(transforms=mmt_transforms.EsawcTransform())
         self.esawc_transform = mmt_transforms.OneHot(
             self.esawc.n_labels + 1, device=self.device
         )

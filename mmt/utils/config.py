@@ -34,13 +34,13 @@ def setup_logging(log_dir):
     console_handler.setFormatter(Formatter(log_console_format))
 
     exp_file_handler = RotatingFileHandler(
-        "{}exp_debug.log".format(log_dir), maxBytes=10**6, backupCount=5
+        os.path.join(log_dir, "exp_debug.log"), maxBytes=10**6, backupCount=5
     )
     exp_file_handler.setLevel(logging.DEBUG)
     exp_file_handler.setFormatter(Formatter(log_file_format))
 
     exp_errors_file_handler = RotatingFileHandler(
-        "{}exp_error.log".format(log_dir), maxBytes=10**6, backupCount=5
+        os.path.join(log_dir, "exp_error.log"), maxBytes=10**6, backupCount=5
     )
     exp_errors_file_handler.setLevel(logging.WARNING)
     exp_errors_file_handler.setFormatter(Formatter(log_file_format))
@@ -185,6 +185,7 @@ def process_config(config_file, quiet=False):
     setup_logging(config.paths.log_dir)
     
     shutil.copy(config_file, os.path.join(config.paths.log_dir, "config.yaml"))
+    shutil.copy(config_file, os.path.join(config.paths.checkpoint_dir, "model_best.config.yaml"))
     
     # if not quiet:
         # logging.getLogger().info("Hi, This is root.")

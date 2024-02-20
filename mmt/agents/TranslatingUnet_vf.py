@@ -186,7 +186,7 @@ class TranslatingUnetVfAgent(BaseAgent):
 
     def save_checkpoint(
         self,
-        file_name="checkpoint.pth.tar",
+        file_name="checkpoint.ckpt",
         is_best=0,
         historical_storage="/work/scratch/baudoulu/train2012_valid2018_modelsave/",
     ):
@@ -211,11 +211,11 @@ class TranslatingUnetVfAgent(BaseAgent):
 
         # Save the state
         torch.save(state, self.config.checkpoint_dir + file_name)
-        # If it is the best copy it to another file 'model_best.pth.tar'
+        # If it is the best copy it to another file 'model_best.ckpt'
         if is_best:
             shutil.copyfile(
                 self.config.checkpoint_dir + file_name,
-                self.config.checkpoint_dir + "model_best.pth.tar",
+                self.config.checkpoint_dir + "model_best.ckpt",
             )
 
     def run(self):
@@ -385,7 +385,7 @@ class TranslatingUnetVfAgent(BaseAgent):
     def test(self):
         with torch.no_grad():
             ##### Read ground_truth_file
-            self.load_checkpoint("model_best.pth.tar")
+            self.load_checkpoint("model_best.ckpt")
             self.models.eval()
             nb_it = 0
 

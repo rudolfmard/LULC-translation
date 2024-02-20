@@ -68,7 +68,7 @@ def load_old_pytorch_model(xp_name, lc_in="esawc", lc_out="esgp"):
         "experiments",
         xp_name,
         "checkpoints",
-        "model_best.pth.tar",
+        "model_best.ckpt",
     )
     assert os.path.isfile(checkpoint_path), f"No checkpoint found at {checkpoint_path}"
 
@@ -211,7 +211,7 @@ def load_pytorch_model(xp_name, lc_in="esawc", lc_out="esgp", train_mode = False
             "experiments",
             xp_name,
             "checkpoints",
-            "model_best.pth.tar",
+            "model_best.ckpt",
         )
         config_path = os.path.join(
             mmt_repopath,
@@ -292,7 +292,7 @@ def get_epoch_of_best_model(xp_name, return_iteration = False):
             "experiments",
             xp_name,
             "checkpoints",
-            "model_best.pth.tar",
+            "model_best.ckpt",
         )
     
     assert os.path.isfile(checkpoint_path), f"No checkpoint found at {checkpoint_path}"
@@ -333,7 +333,7 @@ def load_pytorch_posenc(xp_name, lc_name = "esawc", train_mode = False):
         "experiments",
         xp_name,
         "checkpoints",
-        "model_best.pth.tar",
+        "model_best.ckpt",
     )
     assert os.path.isfile(checkpoint_path), f"No checkpoint found at {checkpoint_path}"
     
@@ -559,7 +559,7 @@ def export_position_encoder_to_onnx(xp_name, lc_name = "esawc", onnxfilename = "
         "experiments",
         xp_name,
         "checkpoints",
-        "model_best.pth.tar",
+        "model_best.ckpt",
     )
     assert os.path.isfile(checkpoint_path), f"No checkpoint found at {checkpoint_path}"
     

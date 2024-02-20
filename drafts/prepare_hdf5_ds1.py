@@ -51,10 +51,10 @@ from mmt.utils import misc
 # ----------------
 parser = argparse.ArgumentParser(prog="prepare_hdf5_ds1", description="Create the dataset DS1 (France mainland), which is used to reproduce the result fo Luc Baudoux with new land covers")
 parser.add_argument("--h5template", help="Path to a template HDF5 file. Newly created HDF5 files will be stored in the same directory.")
-parser.add_argument("--lcs", help="Land cover maps to be created", default="esawc,ecosg,esgp")
+parser.add_argument("--lcnames", help="Land cover maps to be created", default="esawc,ecosg,esgp")
 args = parser.parse_args()
 
-lcnames = args.lcs.split(",")
+lcnames = args.lcnames.split(",")
 print(f"Creating {len(lcnames)} HDF5 files based on {args.h5template}")
 
 hdf5_dir = os.path.dirname(args.h5template)

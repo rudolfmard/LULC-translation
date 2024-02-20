@@ -28,8 +28,8 @@ from mmt.utils import tensorboardx_utils
 timeit = misc.timeit
 plt_loss = plt_utils.plt_loss2
 
-default_bestmodel_filename = "model_best.pth.tar"
-default_checkpoint_filename = "checkpoint.pth.tar"
+default_bestmodel_filename = "model_best.ckpt"
+default_checkpoint_filename = "checkpoint.ckpt"
 
 class MultiLULCAgent(base.BaseAgent):
     def __init__(self, config, startfrom = None):
@@ -211,7 +211,7 @@ class MultiLULCAgent(base.BaseAgent):
 
         # Save the state
         torch.save(state, os.path.join(self.config.paths.checkpoint_dir, file_name))
-        # If it is the best copy it to another file 'model_best.pth.tar'
+        # If it is the best copy it to another file 'model_best.ckpt'
         if is_best:
             shutil.copyfile(
                 os.path.join(self.config.paths.checkpoint_dir, file_name),
