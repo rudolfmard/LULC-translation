@@ -2,7 +2,9 @@ import time
 import logging
 import string
 import random
+import json
 import numpy as np
+from hashlib import blake2b
 import torch
 import torchvision.transforms as tvt
 
@@ -30,6 +32,22 @@ def id_generator(size = 6, chars = string.ascii_lowercase + string.digits, forbi
         idstr = "".join([random.choice(chars) for _ in range(size)])
     
     return idstr
+
+def hashdict(d):
+    """Return the hash digest of a dictionary with str keys
+    
+    Source (2024/02/20): https://stackoverflow.com/questions/5884066/hashing-a-dictionary/22003440#22003440
+    """
+    h = blake2b(digest_size=8)
+    
+    try:
+        s = json.dumps(d, sort_keys=True)
+    except TypeError:
+        s = json.dumps({k:repr(v) for k,v in d.items()}, sort_keys=True)
+    
+    h.update(s.encode("utf8"))
+    
+    return h.hexdigest()
 
 def timeit(f):
     """Decorator to time Any Function"""
