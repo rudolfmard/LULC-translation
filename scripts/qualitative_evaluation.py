@@ -9,70 +9,100 @@ import os
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
+import argparse
 
-from mmt.datasets import transforms as mmt_transforms
+from mmt import _repopath_ as mmt_repopath
+from mmt.datasets import transforms
 from mmt.datasets import landcovers
 from mmt.utils import domains
 
+# Argument parsing
+# ----------------
+parser = argparse.ArgumentParser(prog="qualitative_evalution", description="Compare a set of maps on a set of patches")
+parser.add_argument("--locations", help="Domain names to look at", default="snaefell_glacier,nanterre,iso_kihdinluoto,portugese_crops,elmenia_algeria")
+parser.add_argument("--lcnames", help="Land cover maps short names (esawc, ecosg, esgp, esgml, qflags)", default="esawc,ecosg,esgp,esgml,qflags")
+parser.add_argument("--patchsize", help="Size of patch (in the first land cover map CRS). Put 0 to avoid cropping", default=0.08333)
+parser.add_argument("--figfmt", help="Format of the figure", default="png")
+parser.add_argument("--figdir", help="Directory where figure will be saved", default=os.path.join(mmt_repopath, "figures"))
+parser.add_argument("--savefig", help="Save the figures instead of plotting them", action = "store_true")
+args = parser.parse_args()
 
-# Configs
-#---------
-print(f"Executing program {sys.argv[0]} in {os.getcwd()}")
+patch_size = float(args.patchsize)
+locations = args.locations.split(",")
+lcnames = args.lcnames.split(",")
 
-storeImages = False
-fmtImages = ".png"
-figureDir = ""
-
-n_px_esawc = 900
-val_domains = ["snaefell_glacier", "nanterre", "iso_kihdinluoto", "bakar_bay_croatia", "portugese_crops", "elmenia_algeria"]
-# val_domains = ["rare_label_9tropbldec", "rare_label_14bornldec", "rare_label_22floodedtree", "rare_label_30lcz7"]
+lcattrs = {
+    "esawc":{
+        "lcclass": "ESAWorldCover",
+        "kwargs":{
+            "transforms": transforms.EsawcTransform(),
+        },
+        "colname":"ESAWC",
+    },
+    "ecosg":{
+        "lcclass": "EcoclimapSG",
+        "kwargs":{},
+        "colname":"ECOSG",
+    },
+    "esgp":{
+        "lcclass": "EcoclimapSGplus",
+        "kwargs":{},
+        "colname":"ECOSG+",
+    },
+    "esgml":{
+        "lcclass": "EcoclimapSGML",
+        "kwargs":{},
+        "colname":"ECOSG-ML",
+    },
+    "qflags":{
+        "lcclass": "QualityFlagsECOSGplus",
+        "kwargs":{
+            "transforms":transforms.FillMissingWithSea(0,6),
+        },
+        "colname":"QFLAGS",
+    },
+}
 
 
 # Land cover loading
 #--------------------
-esawc = landcovers.ESAWorldCover(transforms=mmt_transforms.EsawcTransform)
-ecosg = landcovers.EcoclimapSG()
-esgp = landcovers.EcoclimapSGplus()
-esgml = landcovers.EcoclimapSGML()
-qflags = landcovers.QualityFlagsECOSGplus(transforms=mmt_transforms.FillMissingWithSea(0,6))
+lcs = []
+for lcname in lcnames:
+    lc_class = getattr(landcovers, lcattrs[lcname]["lcclass"])
+    lcs.append(lc_class(**lcattrs[lcname]["kwargs"]))
+
 print(f"Landcovers loaded with native CRS and resolution")
+n_px = patch_size // lcs[0].res
 
 # Inference
 #----------------
-fig, axs = plt.subplots(len(val_domains), 5, figsize = (12,16))
-for i, domainname in enumerate(val_domains):
+fig, axs = plt.subplots(len(locations), len(lcnames), figsize = (12,16))
+for i, domainname in enumerate(locations):
     dom = getattr(domains, domainname)
-    if n_px_esawc is None:
-        qb = dom.to_tgbox()
+    if n_px > 0:
+        qb = dom.centred_fixed_size(n_px, lcs[0].res).to_tgbox()
     else:
-        qb = dom.centred_fixed_size(n_px_esawc, esawc.res).to_tgbox()
+        qb = dom.to_tgbox()
     
-    x_esawc = esawc[qb]
-    x_ecosg = ecosg[qb]
-    x_esgp = esgp[qb]
-    x_esgml = esgml[qb]
-    x_qflags = qflags[qb]
     print(f"Location {domainname} (lon, lat): {dom.central_point()}")
-    
-    esawc.plot(x_esawc, figax = (fig, axs[i, 0]), show_titles=False, show_colorbar=False)
-    ecosg.plot(x_ecosg, figax = (fig, axs[i, 1]), show_titles=False, show_colorbar=False)
-    esgp.plot(x_esgp, figax = (fig, axs[i, 2]), show_titles=False, show_colorbar=False)
-    esgml.plot(x_esgml, figax = (fig, axs[i, 3]), show_titles=False, show_colorbar=False)
-    qflags.plot(x_qflags, figax = (fig, axs[i, 4]), show_titles=False, show_colorbar=False)
+    for j, lc in enumerate(lcs):
+        x = lc[qb]
+        lc.plot(x, figax = (fig, axs[i, j]), show_titles=False, show_colorbar=False)
     
     
 [ax.axis("off") for ax in axs.ravel()]
-cols = ["ESAWC", "ECOSG", "ECOSG+", "ECOSG-ML", "QFLAGS"]
+cols = [lcattrs[lcname]["colname"] for lcname in lcnames]
 for ax, col in zip(axs[0], cols):
     ax.set_title(col)
 
-v_esgml = esgml.get_version()
-title = f"Qualitative check (ECOSG-ML version {v_esgml})"
-figname = f"qualcheck_esgml{v_esgml}"
-fig.suptitle(title)
+figname = f"_".join(
+    ["qualcheck", "-".join(lcnames), "-".join([loc[:3] for loc in locations])]
+)
+fig.suptitle(figname)
 fig.tight_layout()
-if storeImages:
-    figpath = os.path.join(figureDir, figname + fmtImages)
+
+if args.savefig:
+    figpath = os.path.join(args.figdir, f"{figname}.{args.figfmt}")
     fig.savefig(figpath)
     print("Figure saved:", figpath)
 
