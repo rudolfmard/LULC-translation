@@ -27,7 +27,7 @@ from mmt.utils import config as utilconf
 patch_size_metres = landcover_to_landcover.patch_size_metres
 
 def get_resize_from_mapname(mapname, config):
-    
+    """Return the resizing factor (resolution map/resolution embedding) of a given land cover map"""
     if not mapname.endswith(".hdf5"):
         mapname += ".hdf5"
     
@@ -47,6 +47,14 @@ def get_resize_from_mapname(mapname, config):
         resize = None
         
     return resize
+
+def get_patchsize_from_mapname(mapname):
+    """Return the patch size (number of pixels) of a given land cover map"""
+    if not mapname.endswith(".hdf5"):
+        mapname += ".hdf5"
+    
+    resolution = landcover_to_landcover.resolution_dict[mapname]
+    return patch_size_metres // resolution
 
 def load_old_pytorch_model(xp_name, lc_in="esawc", lc_out="esgp"):
     """Return the pre-trained Pytorch model from the experiment `xp_name`"""
@@ -238,10 +246,20 @@ def load_pytorch_model(xp_name, lc_in="esawc", lc_out="esgp", train_mode = False
     res_in = landcover_to_landcover.resolution_dict[lc_in + ".hdf5"]
     n_channels_in = len(landcover_to_landcover.label_dict[lc_in + ".hdf5"]) + 1
     
+    # autoenc_in = EncDec(
+        # n_channels_in,
+        # n_channels_in,
+        # resize = get_resize_from_mapname(lc_in, config),
+        # n_channels_hiddenlay = config.dimensions.n_channels_hiddenlay,
+        # n_channels_embedding = config.dimensions.n_channels_embedding,
+        # **config.model.params
+    # )
     autoenc_in = EncDec(
-        n_channels_in,
-        n_channels_in,
+        in_channels = n_channels_in,
+        out_channels = n_channels_in,
+        n_px_input = get_patchsize_from_mapname(lc_in),
         resize = get_resize_from_mapname(lc_in, config),
+        n_px_embedding = config.dimensions.n_px_embedding,
         n_channels_hiddenlay = config.dimensions.n_channels_hiddenlay,
         n_channels_embedding = config.dimensions.n_channels_embedding,
         **config.model.params
@@ -253,10 +271,20 @@ def load_pytorch_model(xp_name, lc_in="esawc", lc_out="esgp", train_mode = False
         res_out = landcover_to_landcover.resolution_dict[lc_out + ".hdf5"]
         n_channels_out = len(landcover_to_landcover.label_dict[lc_out + ".hdf5"]) + 1
         
+        # autoenc_out = EncDec(
+            # n_channels_out,
+            # n_channels_out,
+            # resize = get_resize_from_mapname(lc_out, config),
+            # n_channels_hiddenlay = config.dimensions.n_channels_hiddenlay,
+            # n_channels_embedding = config.dimensions.n_channels_embedding,
+            # **config.model.params
+        # )
         autoenc_out = EncDec(
-            n_channels_out,
-            n_channels_out,
+            in_channels = n_channels_out,
+            out_channels = n_channels_out,
+            n_px_input = get_patchsize_from_mapname(lc_out),
             resize = get_resize_from_mapname(lc_out, config),
+            n_px_embedding = config.dimensions.n_px_embedding,
             n_channels_hiddenlay = config.dimensions.n_channels_hiddenlay,
             n_channels_embedding = config.dimensions.n_channels_embedding,
             **config.model.params

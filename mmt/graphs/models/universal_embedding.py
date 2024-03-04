@@ -384,7 +384,7 @@ class UnivEmb(nn.Module):
     def __init__(
         self,
         in_channels,
-        n_classes,
+        out_channels,
         cat=False,
         mul=False,
         softpos=False,
@@ -405,6 +405,8 @@ class UnivEmb(nn.Module):
         tlm_p=0,
         bias=False,
         image_operator="mul",
+        n_px_input = None, # Not used. Added for API compatibility
+        n_px_embedding = None, # Not used. Added for API compatibility
     ):
         super().__init__()
         if number_feature_map is not None:
@@ -442,7 +444,7 @@ class UnivEmb(nn.Module):
             in_dec = in_dec * 2
         self.decoder = decoder(
             in_dec,
-            n_classes,
+            out_channels,
             depth=decoder_depth,
             num_groups=num_groups,
             nf=n_channels_hiddenlay,
@@ -455,7 +457,7 @@ class UnivEmb(nn.Module):
             self.dummy_tensor = torch.ones(1, dtype=torch.float32, requires_grad=True)
             self.encoder_wrapper = ModuleWrapperIgnores2ndArg(self.encoder)
             self.forward_method = self.MemoryMonged_forward
-        self.n_classes = n_classes
+        self.n_classes = out_channels
         self.image_mul = False
         if image_operator == "mul":
             self.image_mul = True

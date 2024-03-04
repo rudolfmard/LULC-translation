@@ -73,17 +73,23 @@ class MultiLULCAgent(base.BaseAgent):
         else:
             raise ValueError(f"Unknown model.type = {config.model.type}. Please change config to one among ['transformer_embedding', 'universal_embedding', 'attention_autoencoder']")
         
+        # self.models = []
+        # for i_model, (input_channel, output_channel) in enumerate(
+            # zip(input_channels, output_channels)
+        # ):
         self.models = [
             EncDec(
-                input_channel,
-                output_channel,
-                resize = resize,
+                in_channels = input_channel,
+                out_channels = output_channel,
+                n_px_input = self.data_loader.real_patch_sizes[i_model],
+                resize = resizes[i_model],
+                n_px_embedding = self.config.dimensions.n_px_embedding,
                 n_channels_hiddenlay = self.config.dimensions.n_channels_hiddenlay,
                 n_channels_embedding = self.config.dimensions.n_channels_embedding,
                 **self.config.model.params
             )
-            for input_channel, output_channel, resize in zip(
-                input_channels, output_channels, resizes
+            for i_model, (input_channel, output_channel) in enumerate(
+                zip(input_channels, output_channels)
             )
         ]
         self.coord_model = position_encoding.PositionEncoder(
