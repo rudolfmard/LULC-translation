@@ -4,15 +4,14 @@
 
 Program to compute confusion matrix of MLCT-net prediction and compare them to ECOSG
 """
-import os
-import h5py
 import argparse
+import os
+
+import h5py
 
 from mmt import _repopath_ as mmt_repopath
-from mmt.utils import plt_utils
-from mmt.utils import scores
 from mmt.inference import translators
-
+from mmt.utils import plt_utils, scores
 
 # Argument parsing
 # ----------------

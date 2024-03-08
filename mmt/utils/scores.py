@@ -8,17 +8,18 @@ Module with confusion matrix utilities
 import os
 import pickle
 import warnings
+
 import numpy as np
-from tqdm import tqdm
-from sklearn import metrics
 import pandas as pd
+from sklearn import metrics
 from torch import tensor
+from tqdm import tqdm
 
 from mmt import _repopath_ as mmt_repopath
-from mmt.utils import misc
+from mmt.datasets.landcovers import (ecoclimapsg_label_hierarchy,
+                                     ecoclimapsg_labels)
 from mmt.inference import io
-from mmt.datasets.landcovers import ecoclimapsg_labels, ecoclimapsg_label_hierarchy
-
+from mmt.utils import misc
 
 CACHE_DIRECTORY = os.path.join(mmt_repopath, "experiments", "cache")
 
