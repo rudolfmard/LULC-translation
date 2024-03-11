@@ -29,7 +29,7 @@ import netCDF4 as nc
 import rasterio
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from matplotlib.colors import ListedColormap
+from matplotlib.colors import ListedColormap, LinearSegmentedColormap
 import cartopy.crs as ccrs
 import cartopy.io.img_tiles as cimgt
 import torchgeo.datasets as tgd
@@ -38,6 +38,7 @@ from typing import Any, Dict, Optional
 from mmt import _repopath_ as mmt_repopath
 from mmt.utils import misc
 from mmt.utils import domains
+from mmt.datasets import transforms
 
 # VARIABLES
 # ============
@@ -309,6 +310,112 @@ class TorchgeoLandcover(tgd.RasterDataset):
         # fig.tight_layout()
         return fig, ax
 
+class ScoreMap(tgd.RasterDataset):
+    """Abstract class for score dataset using TorchGeo.
+    
+    This class is a [customised TorchGeo RasterDataset](https://torchgeo.readthedocs.io/en/latest/tutorials/custom_raster_dataset.html).
+    The customisation is in the precision of the path where to find the data and several
+    attributes that are common to all score maps classes.
+    
+    
+    Parameters
+    ----------
+    transforms: Optional[Callable[[dict[str, Any]], dict[str, Any]]]
+        A function/transform that takes an input sample and returns a transformed version
+    
+    
+    Main attributes
+    ---------------
+    path: str
+        Absolute path to the root directory containing the data
+        
+    filename_glob: str
+        Glob expression used to search for files
+
+    is_image: bool=True
+        Probabilities are seen as imagery to avoid casting data to integers
+
+    separate_files: bool=False
+        True if data is stored in a separate file for each band, else False.
+    
+    crs: `rasterio.crs.CRS`
+        Coordinate reference system in which the land cover is
+    
+    
+    Main methods
+    ------------
+    __getitem__: Return a sample of data
+    plot: Plot a sample of data
+    """
+    path = ""
+    filename_glob = "*.tif"
+    is_image = True
+    element_size = 32 #Bytes per pixel
+    separate_files = False
+    crs = None
+    # cmap = ListedColormap(["red", "tomato", "salmon", "darksalmon", "lightsalmon", "lightseagreen", "green"]).colors
+    # cmap = "RdYlGn"
+    cmap = LinearSegmentedColormap.from_list("mycmap", [(0.0, "red"), (0.6, "gainsboro"), (1, "green")])
+    cmap = [tuple(c[:3]) for c in cmap(np.linspace(0, 1, 100))]
+    
+    def __init__(self, crs = None, res = None, transforms = None, tgeo_init = True):
+        if tgeo_init:
+            super().__init__(self.path, crs = crs, res = res, transforms = transforms)
+        
+    def get_bytes_for_domain(self, qb):
+        """Return the size in bytes that would be necessary to load the query domain (does not load anything)"""
+        if isinstance(qb, tgd.BoundingBox):
+            qdomain = domains.GeoRectangle(qb, fmt = "tgbox")
+        else:
+            qdomain = qb
+            
+        return misc.get_bytes_for_domain(qdomain, self.res, self.element_size)
+    
+    def plot(
+        self,
+        sample: Dict[str, Any],
+        show_titles: bool = True,
+        show_colorbar: bool = True,
+        title: Optional[str] = None,
+        suptitle: Optional[str] = None,
+        figax = None
+    ):
+        """Plot a sample of data.
+
+
+        Parameters
+        ----------
+        sample: dict
+            Sample of data. Labels must be accessible under the 'mask' key.
+
+        show_titles: bool, default=True
+            True if a title is diplayed over the figure.
+
+        suptitle: str
+            If provided, the string given here is put as main title of the figure.
+        """
+        if figax is None:
+            fig, ax = plt.subplots(1, 1, figsize=(12,12))
+        else:
+            fig, ax = figax
+        
+        x = sample["image"].squeeze()
+        
+        im = ax.imshow(x, cmap = ListedColormap(self.cmap))
+        
+        if show_titles:
+            if title is None:
+                title = self.__class__.__name__
+            
+            ax.set_title(title)
+        
+        if show_colorbar:
+            plt.colorbar(im, shrink=0.5)
+            
+        if suptitle is not None:
+            plt.suptitle(suptitle)
+        
+        return fig, ax
 
 class ProbaLandcover(tgd.RasterDataset):
     """Abstract class for land cover probability dataset using TorchGeo.
@@ -421,6 +528,30 @@ class ProbaLandcover(tgd.RasterDataset):
         
         return fig, ax
         
+    def getitem_uq(self, qb):
+        """Return the uncertainty quantification values.
+        
+        
+        The uncertainty is quantified at each pixel by the ratio between
+        the second highest and the highest probability values.
+        
+            p = sample["image"][:, x, y].sort(0)
+            uq = p[-2]/p[-1]
+        
+        For example, with p = [0, ..., 0.05, 0.92], the highest probability label
+        is really dominant, therefore we are confident on this label.
+        UQ = 0.05/0.92 = 0.0543 is low, which reflects this confidence.
+        
+        With p = [0, ..., 0.31, 0.37], the highest probability label
+        is almost as likely as the second one, therefore we are not confident on this label.
+        UQ = 0.31/0.37 = 0.837 is high, which reflects this uncertainty.
+        """
+        sample = self[qb]
+        proba = sample["image"].squeeze().softmax(0)
+        psort, _ = proba.sort(0)
+        
+        return psort[-2]/psort[-1]
+    
     def plot_uncertainty(
         self,
         sample: Dict[str, Any],
@@ -431,13 +562,14 @@ class ProbaLandcover(tgd.RasterDataset):
         logscale: bool = False,
         figax = None
     ):
-        """Plot an estimate of the uncertainty on the land cover label from the land cover probabilities
+        """Plot an estimate of the uncertainty on the land cover label from the land cover probabilities.
+        See `getitem_uq` for definition and properties of the UQ score.
 
 
         Parameters
         ----------
         sample: dict
-            Sample of data. Labels must be accessible under the 'mask' key.
+            Sample of data. Probabilities must be accessible under the 'image' key.
 
         show_titles: bool, default=True
             True if a title is diplayed over the figure.
@@ -744,3 +876,29 @@ class InferenceResultsProba(ProbaLandcover):
 class EcoclimapSGML(EcoclimapSGplus):
     """ECOCLIMAP-SG-ML land cover map. Release merge between ECOSG+ and inference results"""
     path = os.path.join(mmt_repopath, "data", "tiff_data", "ECOCLIMAP-SG-ML", "tif", f"ECOCLIMAP-SG-ML-v{default_ecosgml_version}")
+
+
+class SpecialistLabelsECOSGplus(EcoclimapSGplus):
+    """Identified secondary labels from specialist maps (ECOSG+ before gap-filling with ECOSG)"""
+    path = os.path.join(mmt_repopath, "data", "tiff_data", "ECOCLIMAP-SG-plus", "v2", "labels-isl-ecosgp-v2.0")
+
+
+class ScoreECOSGplus(ScoreMap):
+    """Score quantifying the uncertainty on ECOCLIMAP-SG+ labels"""
+    path = os.path.join(mmt_repopath, "data", "tiff_data", "ECOCLIMAP-SG-plus", "v2", "score-ecosgp-v2.0")
+    crs = rasterio.crs.CRS.from_epsg(4326)
+
+
+class EcoclimapSGplusV2(EcoclimapSGplus):
+    
+    def __init__(self, score_min = 0.6, **kwargs):
+        self.score_min = score_min
+        self.maps = ScoreECOSGplus(transforms = transforms.ScoreTransform(100), **kwargs) & SpecialistLabelsECOSGplus(**kwargs) & EcoclimapSG(**kwargs)
+        
+    def __getitem__(self, qb):
+        x = self.maps[qb]
+        x["mask"] = torch.where(x["image"] > self.score_min, x["mask"][0], x["mask"][1])
+        
+        return x
+
+# EOF

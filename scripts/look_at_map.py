@@ -51,7 +51,11 @@ else:
     assert lcname not in [None, "InferenceResults"], f"Conflicting arguments: lcpath={lcpath} does not exist and lcname={lcname}"
 
 if lcname == "ESAWorldCover":
-    kwargs.update(transforms=mmt_transforms.EsawcTransform)
+    kwargs.update(transforms=mmt_transforms.EsawcTransform())
+    fillsea = False
+
+if lcname == "ScoreECOSGplus":
+    kwargs.update(transforms=mmt_transforms.ScoreTransform(divide_by=100))
     fillsea = False
 
 if fillsea:

@@ -262,3 +262,18 @@ class EsawcTransform:
         return x
     
 # EsawcTransform = tvt.Compose([FloorDivMinus(10, 0), FillMissingWithSea(0, 8)])
+
+class ScoreTransform:
+    """Remove nan and divide by 100"""
+    def __init__(self, divide_by=1, key="image"):
+        self.key = key
+        self.divide_by = divide_by
+    
+    def __call__(self, x):
+        if isinstance(x, dict):
+            x[self.key] = torch.where(x[self.key].isnan(), 0, x[self.key])/self.divide_by
+        else:
+            x = torch.where(x.isnan(), 0, x)/self.divide_by
+        return x
+
+# EOF
