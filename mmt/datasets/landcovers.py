@@ -936,6 +936,7 @@ class EcoclimapSGplusV2(EcoclimapSGplus):
              [0.7598, 0.7286, 0.7288,  ..., 0.7387, 0.6076, 0.4138]]])
     """
     path = os.path.join(mmt_repopath, "data", "tiff_data", "ECOCLIMAP-SG-plus", "v2")
+    element_size = 32 + 8 #Bytes per pixel
     
     def __init__(self, score_min=0.525, **kwargs):
         self.score_min = score_min
@@ -946,18 +947,26 @@ class EcoclimapSGplusV2(EcoclimapSGplus):
             & SpecialistLabelsECOSGplus(**kwargs)
             & EcoclimapSG(**kwargs)
         )
+        self.index = self.maps.index
         self.crs = self.maps.crs
         self.res = self.maps.res
+        self.n_labels = len(self.labels)
 
     def __getitem__(self, qb):
         x = self.maps[qb]
+        
+        # Set score to 0 when specialist maps give no data
+        x["image"] = torch.where(x["mask"][0] == 0, 0, x["image"])
+        
+        # Take specialist maps where score is above threshold, ECOSG elsewhere
         x["mask"] = torch.where(
-            torch.logical_and(x["image"] > self.score_min, x["mask"][0] > 0),
-            x["mask"][0],
-            x["mask"][1]
+            x["image"] > self.score_min, x["mask"][0], x["mask"][1]
         )
-
+        
         return x
+    
+    def __repr__(self):
+        return repr(self.maps)
     
     def get_version(self):
         return "2.0"

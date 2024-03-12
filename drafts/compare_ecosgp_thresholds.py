@@ -31,38 +31,6 @@ patch_size = float(args.patchsize)
 locations = args.locations.split(",")
 thresholds = [float(i) for i in args.thresholds.split(",")]
 
-# lcattrs = {
-    # "esawc":{
-        # "lcclass": "ESAWorldCover",
-        # "kwargs":{
-            # "transforms": transforms.EsawcTransform(),
-        # },
-        # "colname":"ESAWC",
-    # },
-    # "ecosg":{
-        # "lcclass": "EcoclimapSG",
-        # "kwargs":{},
-        # "colname":"ECOSG",
-    # },
-    # "esgp":{
-        # "lcclass": "EcoclimapSGplus",
-        # "kwargs":{},
-        # "colname":"ECOSG+",
-    # },
-    # "esgml":{
-        # "lcclass": "EcoclimapSGML",
-        # "kwargs":{},
-        # "colname":"ECOSG-ML",
-    # },
-    # "qflags":{
-        # "lcclass": "QualityFlagsECOSGplus",
-        # "kwargs":{
-            # "transforms":transforms.FillMissingWithSea(0,6),
-        # },
-        # "colname":"QFLAGS",
-    # },
-# }
-
 
 # Land cover loading
 #--------------------

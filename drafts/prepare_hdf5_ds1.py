@@ -81,7 +81,7 @@ lcattrs = {
         "year": 2018,
     },
     "esgp":{
-        "lcclass": "EcoclimapSGplus",
+        "lcclass": "EcoclimapSGplusV2",
         "kwargs":{
             "res": 60,
             "crs": rasterio.crs.CRS.from_epsg(2154),
