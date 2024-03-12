@@ -355,7 +355,7 @@ class ScoreMap(tgd.RasterDataset):
     crs = None
     # cmap = ListedColormap(["red", "tomato", "salmon", "darksalmon", "lightsalmon", "lightseagreen", "green"]).colors
     # cmap = "RdYlGn"
-    cmap = LinearSegmentedColormap.from_list("mycmap", [(0.0, "red"), (0.6, "gainsboro"), (1, "green")])
+    cmap = LinearSegmentedColormap.from_list("mycmap", [(0.0, "red"), (0.525, "gainsboro"), (1, "green")])
     cmap = [tuple(c[:3]) for c in cmap(np.linspace(0, 1, 100))]
     
     def __init__(self, crs = None, res = None, transforms = None, tgeo_init = True):
@@ -890,15 +890,76 @@ class ScoreECOSGplus(ScoreMap):
 
 
 class EcoclimapSGplusV2(EcoclimapSGplus):
+    """ECOCLIMAP-SG+ version 2.
+
+    Version 2 merges the labels of `SpecialistLabelsECOSGplus` and `EcoclimapSG`
+    according to the score values from `ScoreECOSGplus`. Where score values
+    are higher than the `score_min` parameter, the label are the ones from
+    `SpecialistLabelsECOSGplus`. Elsewhere, they are the ones from `EcoclimapSG`.
     
-    def __init__(self, score_min = 0.6, **kwargs):
+    A sample returned by this class will have the land cover labels in the 
+    'mask' entry and the score values in the 'image' entry.
+    
+    
+    Parameters
+    ----------
+    score_min: float
+        Score threshold to take `SpecialistLabelsECOSGplus` or `EcoclimapSG` labels
+    
+    kwargs: Any parameters of the classes `SpecialistLabelsECOSGplus`, `ScoreECOSGplus` and `EcoclimapSG`
+    
+    
+    Examples
+    --------
+    >>> from mmt.datasets import landcovers
+    >>> from mmt.utils import domains
+    >>> qb = domains.dublin_city.to_tgbox()
+    >>> esgpv2 = landcovers.EcoclimapSGplusV2()
+    Converting EcoclimapSG res from 0.002777777777777778 to 0.0005389891704717129
+    Converting EcoclimapSGplusV2 res from 0.0 to 0.0005389891704717129
+    >>> x = esgpv2[qb]
+    >>> x["mask"]   # -> label values
+    tensor([[[32, 32, 32,  ..., 29, 29, 29],
+             [32, 32, 32,  ..., 29, 29, 29],
+             [32, 32, 32,  ..., 29, 29, 29],
+             ...,
+             [29, 29, 29,  ..., 29, 29, 29],
+             [29, 29, 29,  ..., 29, 29, 29],
+             [29, 29, 29,  ..., 29, 29, 29]]])
+    >>> x["image"]  # -> score values
+    tensor([[[0.4406, 0.5213, 0.4047,  ..., 0.7823, 0.7661, 0.7371],
+             [0.3987, 0.4311, 0.4547,  ..., 0.7891, 0.6753, 0.7673],
+             [0.3943, 0.4552, 0.4740,  ..., 0.7654, 0.7658, 0.7748],
+             ...,
+             [0.7549, 0.7787, 0.7331,  ..., 0.7686, 0.7779, 0.4826],
+             [0.7808, 0.7807, 0.7534,  ..., 0.7669, 0.7141, 0.4752],
+             [0.7598, 0.7286, 0.7288,  ..., 0.7387, 0.6076, 0.4138]]])
+    """
+    path = os.path.join(mmt_repopath, "data", "tiff_data", "ECOCLIMAP-SG-plus", "v2")
+    
+    def __init__(self, score_min=0.525, **kwargs):
         self.score_min = score_min
-        self.maps = ScoreECOSGplus(transforms = transforms.ScoreTransform(100), **kwargs) & SpecialistLabelsECOSGplus(**kwargs) & EcoclimapSG(**kwargs)
-        
+        self.maps = (
+            ScoreECOSGplus(
+                transforms=transforms.ScoreTransform(divide_by=100), **kwargs
+            )
+            & SpecialistLabelsECOSGplus(**kwargs)
+            & EcoclimapSG(**kwargs)
+        )
+        self.crs = self.maps.crs
+        self.res = self.maps.res
+
     def __getitem__(self, qb):
         x = self.maps[qb]
-        x["mask"] = torch.where(x["image"] > self.score_min, x["mask"][0], x["mask"][1])
-        
+        x["mask"] = torch.where(
+            torch.logical_and(x["image"] > self.score_min, x["mask"][0] > 0),
+            x["mask"][0],
+            x["mask"][1]
+        )
+
         return x
+    
+    def get_version(self):
+        return "2.0"
 
 # EOF
