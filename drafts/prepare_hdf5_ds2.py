@@ -55,7 +55,7 @@ from torchgeo.datasets.utils import BoundingBox
 # ----------------
 parser = argparse.ArgumentParser(prog="prepare_hdf5_datasets")
 parser.add_argument("--h5dir", help="Path to the directory where the HDF5 will be stored.")
-parser.add_argument("--npatches", help="Nb of patches to be created", default=4000)
+parser.add_argument("--npatches", help="Nb of patches to be created", default=5000)
 parser.add_argument("--qscore", help="Minimum quality score to reach for a patch to be selected", default=0.7)
 parser.add_argument("--divscore", help="Minimum diversity score to reach for a patch to be selected", default=0.1)
 parser.add_argument("--npxemb", help="Nb of pixels of the patches in the latent space", default=600)
@@ -75,23 +75,22 @@ n_px_emb = int(args.npxemb)
 # Land cover loading
 #--------------------
 print(f"Loading landcovers with native CRS")
-qflag = landcovers.QualityFlagsECOSGplus(transforms=transforms.FillMissingWithSea(0,6))
 esawc = landcovers.ESAWorldCover(transforms=transforms.EsawcTransform())
-esgp = landcovers.EcoclimapSGplus()
+esgp = landcovers.EcoclimapSGplusV2()
 ecosg = landcovers.EcoclimapSG()
 
-lc = esawc & esgp & ecosg & qflag
+lc = esawc & esgp.maps
 
-lcnames = ["esawc", "esgp", "ecosg", "qflag"]
-lcmaps = {"qflag":qflag, "esawc":esawc, "esgp":esgp, "ecosg":ecosg}
-n_pxs = {"qflag":100, "esawc":600, "esgp":100, "ecosg":20}
+lcnames = ["esawc", "esgp", "ecosg"]
+lcmaps = {"esawc":esawc, "esgp":esgp, "ecosg":ecosg}
+n_pxs = {"esawc":600, "esgp":100, "ecosg":20}
 
 # Sampler definition
 #--------------------
 subsets = ["train", "train2", "test", "val"]
 
 n_px_max = 2 * n_px_emb + margin
-sampler_length = 20 * n_patches
+sampler_length = 14 * n_patches
 val_domain = getattr(domains, domainname).to_tgbox(esawc.crs)
 sampler = samplers.RandomGeoSampler(lc, size=n_px_max, length = sampler_length, roi = val_domain)
 
@@ -116,7 +115,7 @@ for subset in subsets:
 i = 0   # Valid patches counter
 j = 0   # All patches counter
 selected_bboxes = []
-missing = {k:0 for k in lcmaps.keys()}
+missing = {k:0 for k in lcnames}
 add_another_patch =True
 sampler = iter(sampler)
 print(f"Start sampling {n_patches} patches over {domainname}")
@@ -132,26 +131,31 @@ while add_another_patch:
     
     # Get the data from all maps
     #-----------------
-    x_lc = lc[qb]
+    x_lc = lc[qb] # 'mask': (3, n_px_max, n_px_max) -> 3: esawc, splab, ecosg ; 'image': (1, n_px_max, n_px_max) -> score
+    x_labels = {
+        "esawc": x_lc["mask"][0],
+        "ecosg": x_lc["mask"][2],
+        "esgp": esgp.getitem_from_data(x_lc["image"], x_lc["mask"][1], x_lc["mask"][2])
+    }
     
     # Quality control
     #-----------------
-    x_qflag = x_lc["mask"][-1].unsqueeze(0)
+    x_score = x_lc["image"].unsqueeze(0)
     x_esawc = x_lc["mask"][0].unsqueeze(0)
     
-    tttv_qflag = misc.ccrop_and_split(x_qflag, n_px_emb)
+    tttv_score = misc.ccrop_and_split(x_score, n_px_emb)
     tttv_esawc = misc.ccrop_and_split(x_esawc, n_px_emb)
     
-    unmet_qscore = [misc.qscore_from_qflags(x) < quality_threshold for x in tttv_qflag.values()]
+    unmet_qscore = [misc.qscore_from_score(x) < quality_threshold for x in tttv_score.values()]
     unmet_divscore = [misc.divscore_from_esawc(x) < diversity_threshold for x in tttv_esawc.values()]
     if any(unmet_qscore) or any(unmet_divscore):
-        # print(f"[-] Unmet quality criterion: all-patch qscore={misc.qscore_from_qflags(x_qflag)}. Move to next patch")
+        # print(f"[-] Unmet quality criterion: all-patch qscore={misc.qscore_from_score(x_score)}. Move to next patch")
         continue
     
     # If passed, write in file
     #--------------------------
     for i_lc, lcname in enumerate(lcnames):
-        x = x_lc["mask"][i_lc].unsqueeze(0)
+        x = x_labels[lcname].unsqueeze(0)
         
         tttv = misc.ccrop_and_split(x, n_px_emb)
         rsz = tvt.Resize(n_pxs[lcname], interpolation = tvt.functional.InterpolationMode.NEAREST)
@@ -166,13 +170,14 @@ while add_another_patch:
     
     selected_bboxes.append(domains.GeoRectangle(qb, fmt = "tgbox"))
     if i % int(n_patches/10) == 0:
-        print(f"[i={i}/{n_patches}, j={j}/{sampler_length}] Missing patches count: " + ", ".join([f"{k}={missing[k]}" for k in lcmaps.keys()]))
+        print(f"[i={i}/{n_patches}, j={j}/{sampler_length}] Missing patches count: " + ", ".join([f"{k}={missing[k]}" for k in lcnames]))
     
     i += 1
     if i >= n_patches:
         add_another_patch = False
         print(f"Number of patches requested has been reached. i={i}/{n_patches}, j={j}/{sampler_length}")
 
+print(f"Acceptation rate: (# valid patches)/(# tested patches) = {i/j}")
 
 # Close HDF5 files
 #-----------------

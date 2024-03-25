@@ -123,7 +123,7 @@ for lcname in lcnames:
         rdata = ccrop(lc[qb]["mask"])
         
         if i % 1000 == 0:
-            print(f"[{i}/{len(th5)}] \t rdata.shape={rdata.shape}\t tdata.shape={tdata.shape}")
+            print(f"[{i}/{len(th5)}] \t rdata.shape={rdata.shape}\t tdata.shape={tdata.shape}, n_zeros={(rdata==0).sum()}")
         
         eh5.create_dataset(k, data=rdata.numpy())
         rd = eh5.get(k)

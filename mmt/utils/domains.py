@@ -477,6 +477,8 @@ istanbul_power_plant = GeoRectangle([28.689, 28.703, 40.971, 40.983])
 breznik_slovenia = GeoRectangle([15.1475, 15.1643, 45.5126, 45.5266])
 # Coastline, forest, heavy industry in Croatia
 bakar_bay_croatia = GeoRectangle([14.5263, 14.5864, 45.266, 45.3126])
+# Estuary, small town and small island. France, Brittany
+plouguernau_estuary = GeoRectangle([-4.583359,-4.492722,48.567861,48.633022])
 
 
 # Rare labels locations

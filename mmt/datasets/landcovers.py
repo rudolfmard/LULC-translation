@@ -38,7 +38,7 @@ from typing import Any, Dict, Optional
 from mmt import _repopath_ as mmt_repopath
 from mmt.utils import misc
 from mmt.utils import domains
-from mmt.datasets import transforms
+from mmt.datasets import transforms as mmt_transforms
 
 # VARIABLES
 # ============
@@ -938,14 +938,21 @@ class EcoclimapSGplusV2(EcoclimapSGplus):
     path = os.path.join(mmt_repopath, "data", "tiff_data", "ECOCLIMAP-SG-plus", "v2")
     element_size = 32 + 8 #Bytes per pixel
     
-    def __init__(self, score_min=0.525, **kwargs):
+    def __init__(self, score_min=0.525, crs = None, res = None, transforms = None, tgeo_init = True):
         self.score_min = score_min
+        
+        scoremap = ScoreECOSGplus(
+            transforms=mmt_transforms.ScoreTransform(divide_by=100), crs=crs, res=res, tgeo_init=tgeo_init
+        )
+        if res is not None:
+            scoremap.res = res
+        if crs is not None:
+            scoremap.crs = crs
+        
         self.maps = (
-            ScoreECOSGplus(
-                transforms=transforms.ScoreTransform(divide_by=100), **kwargs
-            )
-            & SpecialistLabelsECOSGplus(**kwargs)
-            & EcoclimapSG(**kwargs)
+            scoremap
+            & SpecialistLabelsECOSGplus(crs=crs, res=res, transforms=transforms, tgeo_init=tgeo_init)
+            & EcoclimapSG(crs=crs, res=res, transforms=transforms, tgeo_init=tgeo_init)
         )
         self.index = self.maps.index
         self.crs = self.maps.crs
@@ -955,15 +962,27 @@ class EcoclimapSGplusV2(EcoclimapSGplus):
     def __getitem__(self, qb):
         x = self.maps[qb]
         
+        # # Set score to 0 when specialist maps give no data
+        # x["image"] = torch.where(x["mask"][0] == 0, 0, x["image"])
+        
+        # # Take specialist maps where score is above threshold, ECOSG elsewhere
+        # x["mask"] = torch.where(
+            # x["image"] > self.score_min, x["mask"][0], x["mask"][1]
+        # )
+        
+        return self.getitem_from_data(x["image"], x["mask"][0], x["mask"][1])
+    
+    def getitem_from_data(self, score, splab, ecosg):
+        
         # Set score to 0 when specialist maps give no data
-        x["image"] = torch.where(x["mask"][0] == 0, 0, x["image"])
+        score = torch.where(splab == 0, 0, score)
         
         # Take specialist maps where score is above threshold, ECOSG elsewhere
-        x["mask"] = torch.where(
-            x["image"] > self.score_min, x["mask"][0], x["mask"][1]
+        esgp = torch.where(
+            score > self.score_min, splab, ecosg
         )
         
-        return x
+        return esgp
     
     def __repr__(self):
         return repr(self.maps)

@@ -165,6 +165,13 @@ def qscore_from_qflags(qflags):
     else:
         return (qflags < 3).sum()/qflags.size
 
+def qscore_from_score(score):
+    """Return the patch-averaged value of the score"""
+    if isinstance(score, torch.Tensor):
+        score = score.detach().cpu().numpy()
+    
+    return (score > 0.525).sum()/score.size
+    # return score.mean()
 
 def divscore_from_esawc(esawc):
     """Return the proportion of pixels with the dominant label"""
