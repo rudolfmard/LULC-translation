@@ -84,7 +84,7 @@ else:
 # ------------
 x_map = lcmap[qb]
 fig, ax = lcmap.plot(x_map)
-figpath = os.path.join(mmt_repopath, "figures", f"{lcmap.__class__.__name__}__{lcmap.res}__{domainname}.png")
+figpath = os.path.join(mmt_repopath, "figures", f"{lcmap.__class__.__name__}_res{round(lcmap.res,4)}_{domainname}.png")
 fig.savefig(figpath)
 print("Figure saved:", figpath)
 fig.show()

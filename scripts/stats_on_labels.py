@@ -140,7 +140,7 @@ else:
     plt.pie(counts, labels=labels, colors = cmap, autopct='%.0f%%')
 
 plt.title(f"Distribution of {lcname} labels over {domainname}")
-figpath = os.path.join(mmt_repopath, "figures", f"{lcmap.__class__.__name__}__{lcmap.res}__{domainname}_propoflabels_{charttype}.svg")
+figpath = os.path.join(mmt_repopath, "figures", f"{lcmap.__class__.__name__}_res{round(lcmap.res, 4)}_{domainname}_propoflabels_{charttype}.svg")
 fig.savefig(figpath)
 print(f"Figure saved at {figpath}")
 fig.show()
