@@ -283,36 +283,6 @@ def latexstyleprint(pms):
     print(latexstyle)
 
 
-def weights_to_checkpoint(weights):
-    """Return the absolute path to the checkpoint from a weights name"""
-    if os.path.isfile(weights):
-        checkpoint_path = weights
-    elif os.path.isfile(os.path.join(mmt_repopath, "data", "saved_models", weights)):
-        checkpoint_path = os.path.join(mmt_repopath, "data", "saved_models", weights)
-    elif os.path.isfile(
-        os.path.join(
-            mmt_repopath, "experiments", weights, "checkpoints", "model_best.ckpt"
-        )
-    ):
-        checkpoint_path = os.path.join(
-            mmt_repopath, "experiments", weights, "checkpoints", "model_best.ckpt"
-        )
-    else:
-        raise ValueError(f"Unable to find weights for {weights}")
-
-    return checkpoint_path
-
-
-def checkpoint_to_weight(checkpoint_path):
-    """Return the weights short name from the checkpoint absolute path"""
-    weights = os.path.basename(checkpoint_path).split(".")[0]
-
-    if weights == "model_best":
-        weights = os.path.basename(os.path.dirname(os.path.dirname(checkpoint_path)))
-
-    return weights
-
-
 def _compute_confusion_matrix_translator(translator, h5f, n_patches):
     """Compute the confusion matrix for a list of a single translator"""
     assert hasattr(translator, "checkpoint_path") and os.path.isfile(

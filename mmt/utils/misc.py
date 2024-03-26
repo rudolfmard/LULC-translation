@@ -1,12 +1,20 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Multiple land-cover/land-use Maps Translation (MMT)
+
+Module with commonly used functions
+"""
 import time
 import logging
 import string
 import random
 import json
+import os
 import numpy as np
 from hashlib import blake2b
 import torch
 import torchvision.transforms as tvt
+from mmt import _repopath_ as mmt_repopath
 
 def id_generator(size = 6, chars = string.ascii_lowercase + string.digits, forbidden = "_"):
     """Generate random strings of characters and digits than can be used as
@@ -65,6 +73,35 @@ def timeit(f):
 
     return timed
 
+
+def weights_to_checkpoint(weights):
+    """Return the absolute path to the checkpoint from a weights name"""
+    if os.path.isfile(weights):
+        checkpoint_path = weights
+    elif os.path.isfile(os.path.join(mmt_repopath, "data", "saved_models", weights)):
+        checkpoint_path = os.path.join(mmt_repopath, "data", "saved_models", weights)
+    elif os.path.isfile(
+        os.path.join(
+            mmt_repopath, "experiments", weights, "checkpoints", "model_best.ckpt"
+        )
+    ):
+        checkpoint_path = os.path.join(
+            mmt_repopath, "experiments", weights, "checkpoints", "model_best.ckpt"
+        )
+    else:
+        raise ValueError(f"Unable to find weights for {weights}")
+
+    return checkpoint_path
+
+
+def checkpoint_to_weight(checkpoint_path):
+    """Return the weights short name from the checkpoint absolute path"""
+    weights = os.path.basename(checkpoint_path).split(".")[0]
+
+    if weights == "model_best":
+        weights = os.path.basename(os.path.dirname(os.path.dirname(checkpoint_path)))
+
+    return weights
 
 def print_cuda_statistics():
     logger = logging.getLogger("Cuda Statistics")

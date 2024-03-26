@@ -11,7 +11,7 @@ import h5py
 
 from mmt import _repopath_ as mmt_repopath
 from mmt.inference import translators
-from mmt.utils import plt_utils, scores
+from mmt.utils import plt_utils, scores, misc
 
 # Argument parsing
 # ----------------
@@ -79,7 +79,7 @@ n_patches = min(args.npatches, len(h5f["esawc"]))
 # Instanciate all translators
 # -----------------------------
 translator_list = [
-    translators.EsawcToEsgp(checkpoint_path=scores.weights_to_checkpoint(weights))
+    translators.EsawcToEsgp(checkpoint_path=misc.weights_to_checkpoint(weights))
     for weights in weights_list
 ]
 
@@ -89,7 +89,7 @@ translator_list = [
 cmxs = {}
 for translator in translator_list + ["ecosg"]:
     method = (
-        scores.checkpoint_to_weight(translator.checkpoint_path)
+        misc.checkpoint_to_weight(translator.checkpoint_path)
         if hasattr(translator, "checkpoint_path")
         else translator
     )
