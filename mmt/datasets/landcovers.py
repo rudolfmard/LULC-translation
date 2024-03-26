@@ -961,19 +961,34 @@ class EcoclimapSGplusV2(EcoclimapSGplus):
 
     def __getitem__(self, qb):
         x = self.maps[qb]
+        esgp, score = self.getitem_from_data(x["image"], x["mask"][0], x["mask"][1])
         
-        # # Set score to 0 when specialist maps give no data
-        # x["image"] = torch.where(x["mask"][0] == 0, 0, x["image"])
-        
-        # # Take specialist maps where score is above threshold, ECOSG elsewhere
-        # x["mask"] = torch.where(
-            # x["image"] > self.score_min, x["mask"][0], x["mask"][1]
-        # )
-        
-        return self.getitem_from_data(x["image"], x["mask"][0], x["mask"][1])
+        return {"mask":esgp, "image":score}
     
     def getitem_from_data(self, score, splab, ecosg):
+        """Perform the substitution of labels where the score is not high enough.
         
+        
+        Parameters
+        ----------
+        score: ndarray of shape (nx, ny)
+            Matrix of score values
+        
+        splab: ndarray of shape (nx, ny)
+            Matrix of specialist labels (the M* map)
+        
+        ecosg: ndarray of shape (nx, ny)
+            Matrix of ECOSG labels
+        
+        
+        Returns
+        -------
+        esgp: ndarray of shape (nx, ny)
+            Matrix of ECOSG+ labels (M* where score is above threshold, ECOSG elsewhere)
+        
+        score: ndarray of shape (nx, ny)
+            Matrix of score values with 0 where M* has missing data
+        """
         # Set score to 0 when specialist maps give no data
         score = torch.where(splab == 0, 0, score)
         
@@ -982,7 +997,7 @@ class EcoclimapSGplusV2(EcoclimapSGplus):
             score > self.score_min, splab, ecosg
         )
         
-        return esgp
+        return esgp, score
     
     def __repr__(self):
         return repr(self.maps)

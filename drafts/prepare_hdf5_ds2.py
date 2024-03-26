@@ -132,10 +132,11 @@ while add_another_patch:
     # Get the data from all maps
     #-----------------
     x_lc = lc[qb] # 'mask': (3, n_px_max, n_px_max) -> 3: esawc, splab, ecosg ; 'image': (1, n_px_max, n_px_max) -> score
+    x_esgp, _ = esgp.getitem_from_data(x_lc["image"], x_lc["mask"][1], x_lc["mask"][2])
     x_labels = {
         "esawc": x_lc["mask"][0],
         "ecosg": x_lc["mask"][2],
-        "esgp": esgp.getitem_from_data(x_lc["image"], x_lc["mask"][1], x_lc["mask"][2])
+        "esgp": x_esgp
     }
     
     # Quality control

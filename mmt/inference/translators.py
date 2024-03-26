@@ -261,8 +261,9 @@ class MapTranslator:
 # CHILD CLASSES
 # =============
 
-class EsawcToEsgp(MapTranslator):
+class EsawcToEsgp(MapTranslator, landcovers.InferenceResults):
     """Translate from ESA World Cover to ECOCLIMAP-SG+ with map translation auto-encoders"""
+    
     def __init__(
         self,
         checkpoint_path=os.path.join(mmt_repopath, "data", "saved_models", "mmt-weights-v1.0.ckpt"),
@@ -283,7 +284,10 @@ class EsawcToEsgp(MapTranslator):
         )
         self.encoder_decoder.to(self.device)
         self.landcover = self.esawc
-
+    
+    def __getitem__(self, qb):
+        return {"mask": self.predict_from_domain(qb)}
+    
     def predict_from_data(self, x):
         """Run the translation from matrices of land cover labels
         :x: `torch.Tensor` of shape (N, 1, H, W)
@@ -319,7 +323,7 @@ class EsawcToEsgp(MapTranslator):
         return self.predict_from_data(x["mask"])
 
 
-class EsawcToEsgpProba(EsawcToEsgp):
+class EsawcToEsgpProba(EsawcToEsgp, landcovers.InferenceResultsProba):
     """Return probabilities of classes instead of classes"""
     def __init__(
         self,

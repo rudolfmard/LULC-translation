@@ -14,20 +14,24 @@ import argparse
 from mmt import _repopath_ as mmt_repopath
 from mmt.datasets import transforms
 from mmt.datasets import landcovers
-from mmt.utils import domains
+from mmt.utils import domains, misc
+from mmt.inference import translators
 
 # Argument parsing
 # ----------------
 parser = argparse.ArgumentParser(prog="qualitative_evalution", description="Compare a set of maps on a set of patches")
 parser.add_argument("--locations", help="Domain names to look at", default="snaefell_glacier,nanterre,iso_kihdinluoto,portugese_crops,elmenia_algeria")
 parser.add_argument("--lcnames", help="Land cover maps short names (esawc, ecosg, esgp, esgml, qflags)", default="esawc,ecosg,esgp,esgml,qflags")
-parser.add_argument("--patchsize", help="Size of patch (in the first land cover map CRS). Put 0 to avoid cropping", default=0.08333)
+# parser.add_argument("--patchsize", help="Size of patch (in the first land cover map CRS). Put 0 to avoid cropping", default=0.08333)
+parser.add_argument("--npx", help="Size of patch (in number of pixels for the first land cover map). Put 0 to avoid cropping", default=900, type = int)
 parser.add_argument("--figfmt", help="Format of the figure", default="png")
 parser.add_argument("--figdir", help="Directory where figure will be saved", default=os.path.join(mmt_repopath, "figures"))
 parser.add_argument("--savefig", help="Save the figures instead of plotting them", action = "store_true")
 args = parser.parse_args()
 
-patch_size = float(args.patchsize)
+# patch_size = float(args.patchsize)
+# n_px = patch_size // lcs[0].res
+n_px = args.npx
 locations = args.locations.split(",")
 lcnames = args.lcnames.split(",")
 
@@ -49,6 +53,11 @@ lcattrs = {
         "kwargs":{},
         "colname":"ECOSG+",
     },
+    "esgpv2":{
+        "lcclass": "EcoclimapSGplusV2",
+        "kwargs":{},
+        "colname":"ECOSG+v2",
+    },
     "esgml":{
         "lcclass": "EcoclimapSGML",
         "kwargs":{},
@@ -68,11 +77,14 @@ lcattrs = {
 #--------------------
 lcs = []
 for lcname in lcnames:
-    lc_class = getattr(landcovers, lcattrs[lcname]["lcclass"])
-    lcs.append(lc_class(**lcattrs[lcname]["kwargs"]))
+    if lcname in lcattrs.keys():
+        lc_class = getattr(landcovers, lcattrs[lcname]["lcclass"])
+        lcs.append(lc_class(**lcattrs[lcname]["kwargs"]))
+    else:
+        tr = translators.EsawcToEsgp(checkpoint_path=misc.weights_to_checkpoint(lcname))
+        lcs.append(tr)
 
 print(f"Landcovers loaded with native CRS and resolution")
-n_px = patch_size // lcs[0].res
 
 # Inference
 #----------------
@@ -91,7 +103,13 @@ for i, domainname in enumerate(locations):
     
     
 [ax.axis("off") for ax in axs.ravel()]
-cols = [lcattrs[lcname]["colname"] for lcname in lcnames]
+cols = []
+for lcname in lcnames:
+    if lcname in lcattrs.keys():
+        cols.append(lcattrs[lcname]["colname"])
+    else:
+        cols.append(lcname)
+
 for ax, col in zip(axs[0], cols):
     ax.set_title(col)
 
