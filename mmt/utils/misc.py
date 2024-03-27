@@ -10,11 +10,14 @@ import string
 import random
 import json
 import os
+import pickle
 import numpy as np
 from hashlib import blake2b
 import torch
 import torchvision.transforms as tvt
 from mmt import _repopath_ as mmt_repopath
+
+CACHE_DIRECTORY = os.path.join(mmt_repopath, "experiments", "cache")
 
 def id_generator(size = 6, chars = string.ascii_lowercase + string.digits, forbidden = "_"):
     """Generate random strings of characters and digits than can be used as
@@ -73,6 +76,21 @@ def timeit(f):
 
     return timed
 
+def memoize(func):
+    """Decorator for caching the results of a function using Pickle"""
+    def wrapper(**kwargs):
+        headerhash = hashdict(kwargs)
+        cachedfile = os.path.join(CACHE_DIRECTORY, f"{func.__name__}-{headerhash}.pkl")
+        if os.path.isfile(cachedfile):
+            with open(cachedfile, "rb") as f:
+                result = pickle.load(f)
+        else:
+            result = func(**kwargs)
+            with open(cachedfile, "wb") as f:
+                pickle.dump(result, f)
+            
+        return result
+    return wrapper
 
 def weights_to_checkpoint(weights):
     """Return the absolute path to the checkpoint from a weights name"""
