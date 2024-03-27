@@ -8,16 +8,16 @@ import argparse
 import os
 
 import h5py
-
 from mmt import _repopath_ as mmt_repopath
 from mmt.inference import translators
-from mmt.utils import plt_utils, scores, misc
+from mmt.utils import misc, plt_utils, scores
 
 # Argument parsing
 # ----------------
 parser = argparse.ArgumentParser(
     prog="scores_from_inference",
     description="Evaluate model on the dataset DS2 (EURAT-test), and provide confusion matrices",
+    epilog="Example: python -i scores_from_inference.py --weights outofbox2,saunet2,mmt-weights-v1.0.ckpt --npatches 200 --cpu",
 )
 parser.add_argument(
     "--weights",
@@ -44,10 +44,14 @@ parser.add_argument(
 parser.add_argument(
     "--savefig", help="Save the figures instead of plotting them", action="store_true"
 )
+parser.add_argument(
+    "--cpu", help="Perform inference on CPU", action="store_true", default=False
+)
 args = parser.parse_args()
 
 scorename = args.scorename
 weights_list = args.weights.split(",")
+device = "cpu" if args.cpu else "cuda"
 
 plt_utils.figureDir = args.figdir
 plt_utils.fmtImages = "." + args.figfmt
@@ -79,7 +83,9 @@ n_patches = min(args.npatches, len(h5f["esawc"]))
 # Instanciate all translators
 # -----------------------------
 translator_list = [
-    translators.EsawcToEsgp(checkpoint_path=misc.weights_to_checkpoint(weights))
+    translators.EsawcToEsgp(
+        checkpoint_path=misc.weights_to_checkpoint(weights), device=device
+    )
     for weights in weights_list
 ]
 
@@ -96,8 +102,6 @@ for translator in translator_list + ["ecosg"]:
     cmxs[method] = scores.look_in_cache_else_compute(translator, h5f, n_patches)
     print(f"Bulk total overall accuracy ({method}): {scores.oaccuracy(cmxs[method])}")
 
-
-scores.pprint_oaccuracies(cmxs)
 
 # Plot recall matrices
 # ----------------------
@@ -121,5 +125,10 @@ scores.latexstyleprint(pms)
 print(f"\n   {scorename.upper()} FOR SECONDARY LABELS")
 pms = scores.permethod_scores(cmxs, scorename)
 scores.latexstyleprint(pms)
+
+
+# Overall accuracies
+# ----------------------
+scores.pprint_oaccuracies(cmxs)
 
 # EOF

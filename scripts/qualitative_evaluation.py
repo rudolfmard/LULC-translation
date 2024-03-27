@@ -5,28 +5,50 @@
 Qualitative evaluation of map translation. Pre-set patches.
 """
 
+import argparse
 import os
 import sys
-import numpy as np
-import matplotlib.pyplot as plt
-import argparse
 
+import matplotlib.pyplot as plt
+import numpy as np
 from mmt import _repopath_ as mmt_repopath
-from mmt.datasets import transforms
-from mmt.datasets import landcovers
-from mmt.utils import domains, misc
+from mmt.datasets import landcovers, transforms
 from mmt.inference import translators
+from mmt.utils import domains, misc
 
 # Argument parsing
 # ----------------
-parser = argparse.ArgumentParser(prog="qualitative_evalution", description="Compare a set of maps on a set of patches")
-parser.add_argument("--locations", help="Domain names to look at", default="snaefell_glacier,nanterre,iso_kihdinluoto,portugese_crops,elmenia_algeria")
-parser.add_argument("--lcnames", help="Land cover maps short names (esawc, ecosg, esgp, esgml, qflags)", default="esawc,ecosg,esgp,esgml,qflags")
+parser = argparse.ArgumentParser(
+    prog="qualitative_evalution",
+    description="Compare a set of maps on a set of patches",
+    epilog="Example: python -i qualitative_evaluation.py --lcnames esawc,ecosg,outofbox2,mmt-weights-v1.0.ckpt --cpu",
+)
+parser.add_argument(
+    "--locations",
+    help="Domain names to look at",
+    default="snaefell_glacier,nanterre,iso_kihdinluoto,portugese_crops,elmenia_algeria",
+)
+parser.add_argument(
+    "--lcnames",
+    help="Land cover maps short names (esawc, ecosg, esgp, esgml, qflags)",
+    default="esawc,ecosg,esgp,esgml,qflags",
+)
 # parser.add_argument("--patchsize", help="Size of patch (in the first land cover map CRS). Put 0 to avoid cropping", default=0.08333)
-parser.add_argument("--npx", help="Size of patch (in number of pixels for the first land cover map). Put 0 to avoid cropping", default=900, type = int)
+parser.add_argument(
+    "--npx", help="Size of patch (in number of ~10m pixels)", default=900, type=int
+)
 parser.add_argument("--figfmt", help="Format of the figure", default="png")
-parser.add_argument("--figdir", help="Directory where figure will be saved", default=os.path.join(mmt_repopath, "figures"))
-parser.add_argument("--savefig", help="Save the figures instead of plotting them", action = "store_true")
+parser.add_argument(
+    "--figdir",
+    help="Directory where figure will be saved",
+    default=os.path.join(mmt_repopath, "figures"),
+)
+parser.add_argument(
+    "--savefig", help="Save the figures instead of plotting them", action="store_true"
+)
+parser.add_argument(
+    "--cpu", help="Perform inference on CPU", action="store_true", default=False
+)
 args = parser.parse_args()
 
 # patch_size = float(args.patchsize)
@@ -34,74 +56,78 @@ args = parser.parse_args()
 n_px = args.npx
 locations = args.locations.split(",")
 lcnames = args.lcnames.split(",")
+device = "cpu" if args.cpu else "cuda"
 
 lcattrs = {
-    "esawc":{
+    "esawc": {
         "lcclass": "ESAWorldCover",
-        "kwargs":{
+        "kwargs": {
             "transforms": transforms.EsawcTransform(),
         },
-        "colname":"ESAWC",
+        "colname": "ESAWC",
     },
-    "ecosg":{
+    "ecosg": {
         "lcclass": "EcoclimapSG",
-        "kwargs":{},
-        "colname":"ECOSG",
+        "kwargs": {},
+        "colname": "ECOSG",
     },
-    "esgp":{
+    "esgp": {
         "lcclass": "EcoclimapSGplus",
-        "kwargs":{},
-        "colname":"ECOSG+",
+        "kwargs": {},
+        "colname": "ECOSG+",
     },
-    "esgpv2":{
+    "esgpv2": {
         "lcclass": "EcoclimapSGplusV2",
-        "kwargs":{},
-        "colname":"ECOSG+v2",
+        "kwargs": {},
+        "colname": "ECOSG+v2",
     },
-    "esgml":{
+    "esgml": {
         "lcclass": "EcoclimapSGML",
-        "kwargs":{},
-        "colname":"ECOSG-ML",
+        "kwargs": {},
+        "colname": "ECOSG-ML",
     },
-    "qflags":{
+    "qflags": {
         "lcclass": "QualityFlagsECOSGplus",
-        "kwargs":{
-            "transforms":transforms.FillMissingWithSea(0,6),
+        "kwargs": {
+            "transforms": transforms.FillMissingWithSea(0, 6),
         },
-        "colname":"QFLAGS",
+        "colname": "QFLAGS",
     },
 }
-
+# Default resolution is the one of ESA World Cover (~10m)
+res = 8.333e-5
 
 # Land cover loading
-#--------------------
+# --------------------
 lcs = []
 for lcname in lcnames:
     if lcname in lcattrs.keys():
         lc_class = getattr(landcovers, lcattrs[lcname]["lcclass"])
         lcs.append(lc_class(**lcattrs[lcname]["kwargs"]))
     else:
-        tr = translators.EsawcToEsgp(checkpoint_path=misc.weights_to_checkpoint(lcname))
+        tr = translators.EsawcToEsgp(
+            checkpoint_path=misc.weights_to_checkpoint(lcname), device=device
+        )
         lcs.append(tr)
 
 print(f"Landcovers loaded with native CRS and resolution")
 
 # Inference
-#----------------
-fig, axs = plt.subplots(len(locations), len(lcnames), figsize = (12,16))
+# ----------------
+fig, axs = plt.subplots(len(locations), len(lcnames), figsize=(12, 16))
 for i, domainname in enumerate(locations):
     dom = getattr(domains, domainname)
     if n_px > 0:
-        qb = dom.centred_fixed_size(n_px, lcs[0].res).to_tgbox()
+        qb = dom.centred_fixed_size(n_px, res).to_tgbox()
     else:
         qb = dom.to_tgbox()
-    
+
     print(f"Location {domainname} (lon, lat): {dom.central_point()}")
     for j, lc in enumerate(lcs):
         x = lc[qb]
-        lc.plot(x, figax = (fig, axs[i, j]), show_titles=False, show_colorbar=False)
-    
-    
+        lc.plot(x, figax=(fig, axs[i, j]), show_titles=False, show_colorbar=False)
+
+
 [ax.axis("off") for ax in axs.ravel()]
 cols = []
 for lcname in lcnames:
