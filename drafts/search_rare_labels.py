@@ -24,7 +24,7 @@ from mmt.utils import domains
 
 
 n_px = 150
-esgp = landcovers.EcoclimapSGplus()
+esgp = landcovers.EcoclimapSGplusV2()
 
 # # Non-present labels
 # #--------------------
@@ -39,16 +39,14 @@ esgp = landcovers.EcoclimapSGplus()
 # fig.show()
 
 not_in_eurat = [
-    "0. no data",
     "11. tropical broadleaf evergreen",
-    "30: LCZ7: lightweight low-rise",
 ]
 
 rare_labels = [
-    "9. tropical broadleaf deciduous",
-    "14. boreal needleleaf deciduous",
-    "22. flooded trees",
     "30: LCZ7: lightweight low-rise",
+    "9. tropical broadleaf deciduous",
+    "24. LCZ1: compact high-rise",
+    "33: LCZ10: heavy industry",
 ]
 
 # Count labels on pre-set patches

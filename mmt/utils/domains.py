@@ -502,3 +502,24 @@ rare_label_30lcz7 = GeoRectangle(TgeoBoundingBox(
     # Fderik town and seasonal lake, NE Mauritania
     minx=-12.755717708383559, maxx=-12.674869332812802, miny=22.640779094834773, maxy=22.72162747040553, mint=0.0, maxt=9.223372036854776e+18
 ), fmt="tgbox")
+
+
+rare_v2label_30lcz7 = GeoRectangle(TgeoBoundingBox(
+    # Collonges-sous-Salève, Switzerland
+    minx=6.055288722641995, maxx=6.136137098212752, miny=46.15002449279444, maxy=46.230872868365196, mint=0.0, maxt=9.223372036854776e+18
+), fmt="tgbox")
+
+rare_v2label_9tropbldec = GeoRectangle(TgeoBoundingBox(
+    # South of Maspalomas, Canary island
+    minx=-15.691846327550666, maxx=-15.61099795197991, miny=27.689106414967792, maxy=27.76995479053855, mint=0.0, maxt=9.223372036854776e+18
+), fmt="tgbox")
+
+rare_v2label_14lcz1 = GeoRectangle(TgeoBoundingBox(
+    # Reykjavik, Iceland
+    minx=-21.96082936930715, maxx=-21.879980993736392, miny=64.08920105360446, maxy=64.17004942917521, mint=0.0, maxt=9.223372036854776e+18
+), fmt="tgbox")
+
+rare_v2label_33lcz10 = GeoRectangle(TgeoBoundingBox(
+    # Vestmannaeyjabaer, south of Iceland
+    minx=-20.300742724254274, maxx=-20.219894348683518, miny=63.4100746988101, maxy=63.49092307438086, mint=0.0, maxt=9.223372036854776e+18
+), fmt="tgbox")
