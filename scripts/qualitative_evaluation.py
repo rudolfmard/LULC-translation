@@ -81,6 +81,11 @@ lcattrs = {
         "kwargs": {},
         "colname": "ECOSG+v2",
     },
+    "bguess": {
+        "lcclass": "SpecialistLabelsECOSGplus",
+        "kwargs": {},
+        "colname": "BGUESS",
+    },
     "esgml": {
         "lcclass": "EcoclimapSGML",
         "kwargs": {},
@@ -92,6 +97,13 @@ lcattrs = {
             "transforms": transforms.FillMissingWithSea(0, 6),
         },
         "colname": "QFLAGS",
+    },
+    "qscore": {
+        "lcclass": "ScoreECOSGplus",
+        "kwargs": {
+            "transforms": transforms.ScoreTransform(divide_by=100),
+        },
+        "colname": "QSCORE",
     },
 }
 # Default resolution is the one of ESA World Cover (~10m)
