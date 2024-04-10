@@ -690,7 +690,8 @@ class LandcoverToLandcoverDataLoader:
         :param config:
         """
         self.config = config
-        self.datadir = os.path.join(mmt_repopath, "data", "hdf5_data")
+        #self.datadir = os.path.join(mmt_repopath, "data", "hdf5_data")
+        self.datadir = config.paths.data_dir
         self.device = "cuda" if config.cuda else "cpu"
         self.datasets = [rmsuffix(dataset) for dataset in datasets]
         
