@@ -530,8 +530,9 @@ class ScoreMap(tgd.RasterDataset):
     element_size = 32  # Bytes per pixel
     separate_files = False
     crs = None
+    cutoff = 0.525
     cmap = LinearSegmentedColormap.from_list(
-        "mycmap", [(0.0, "red"), (0.525, "gainsboro"), (1, "green")]
+        "mycmap", [(0.0, "red"), (cutoff, "gainsboro"), (1, "green")]
     )
     cmap = [tuple(c[:3]) for c in cmap(np.linspace(0, 1, 100))]
 
@@ -886,6 +887,7 @@ class OpenStreetMap:
             ax0.set_title(self.__class__.__name__)
 
         return fig, ax0
+
 
 
 # CHILD CLASSES
