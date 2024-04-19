@@ -125,7 +125,7 @@ class MapTranslator:
         self.remove_tmpdirs = remove_tmpdirs
         self.output_dtype = output_dtype
         self.device = torch.device(device)
-        self.shortname = self.__class__.__name__ + "." + os.path.basename(checkpoint_path)
+        self.shortname = self.__class__.__name__ + "." + misc.checkpoint_to_weight(checkpoint_path)
         self.landcover = None
         
     def __call__(self, qb):
@@ -304,7 +304,7 @@ class EsawcToEsgp(MapTranslator, landcovers.InferenceResults):
             x.to(self.device)
             _, c = torch.unique(x, return_counts = True)
             if any(c/c.sum() > 0.9):
-                return np.zeros(self.get_output_shape(x))
+                return torch.zeros(self.get_output_shape(x))
                 
         x = self.esawc_transform(x)
         with torch.no_grad():
@@ -321,7 +321,58 @@ class EsawcToEsgp(MapTranslator, landcovers.InferenceResults):
         
         x = self.esawc[qb]
         return self.predict_from_data(x["mask"])
+    
+    def plot_large_domain(self, path, crs = None, res = None):
+        lcclass = self.__class__.__bases__[1]
+        lc = lcclass(path=path, crs=crs, res=res)
+        return lc.plot(lc[lc.bounds])
 
+class EsawcToEsgpThenMerge(EsawcToEsgp, landcovers.InferenceResults):
+    
+    def __init__(
+        self,
+        checkpoint_path=os.path.join(mmt_repopath, "data", "saved_models", "mmt-weights-v1.0.ckpt"),
+        device="cuda",
+        remove_tmpdirs=True,
+        output_dtype="int16",
+        always_predict=True,
+    ):
+        super().__init__(checkpoint_path, device, remove_tmpdirs, output_dtype, always_predict)
+        
+        self.auxmap = landcovers.ScoreECOSGplus(
+            transforms=mmt_transforms.ScoreTransform(divide_by=100),
+            crs = self.esawc.crs,
+            res = self.esawc.res * 6,
+        )
+        self.auxmap.crs = self.esawc.crs
+        self.auxmap.res = self.esawc.res * 6
+        
+        self.score_min = self.auxmap.cutoff
+        
+        self.bottommap = landcovers.EcoclimapSGplusV2p1(
+            score_min=self.score_min,
+            crs = self.esawc.crs,
+            res = self.esawc.res * 6,
+        )
+        self.bottommap.crs = self.esawc.crs
+        self.bottommap.res = self.esawc.res * 6
+    
+    def predict_from_domain(self, qb):
+        """Run the translation from geographical domain
+        :qb: `torchgeo.datasets.utils.BoundingBox` or `mmt.utils.domains.GeoRectangle`
+        """
+        if not isinstance(qb, TgeoBoundingBox):
+            qb = qb.to_tgbox(self.esawc.crs)
+        
+        x = self.esawc[qb]
+        top = self.predict_from_data(x["mask"])
+        aux = self.auxmap[qb]["image"]
+        bottom = self.bottommap[qb]["mask"]
+        
+        return torch.where(self.criterion(top, aux), top, bottom).squeeze()
+    
+    def criterion(self, top, aux):
+        return torch.logical_and(top != 0, aux < self.score_min)
 
 class EsawcToEsgpProba(EsawcToEsgp, landcovers.InferenceResultsProba):
     """Return probabilities of classes instead of classes"""
@@ -347,6 +398,52 @@ class EsawcToEsgpProba(EsawcToEsgp, landcovers.InferenceResultsProba):
     def logits_transform(self, logits):
         """Transform applied to the logits"""
         return logits.softmax(1).squeeze().cpu()
+
+
+class EsawcToEsgpThenMergeProba(EsawcToEsgpThenMerge, landcovers.InferenceResultsProba):
+    
+    plot = landcovers.InferenceResultsProba.plot
+    
+    def __init__(
+        self,
+        checkpoint_path=os.path.join(mmt_repopath, "data", "saved_models", "mmt-weights-v1.0.ckpt"),
+        device="cuda",
+        remove_tmpdirs=True,
+        output_dtype="float32",
+        always_predict=True,
+    ):
+        super().__init__(checkpoint_path, device, remove_tmpdirs, output_dtype, always_predict)
+        self.proba_transform = mmt_transforms.OneHot(
+            self.bottommap.n_labels + 1, device="cpu"
+        )
+    
+    def __getitem__(self, qb):
+        return {"image": self.predict_from_domain(qb)}
+    
+    def get_output_shape(self, x):
+        """Return the expected shape of the output with `x` in input"""
+        return [35] + [s//6 for s in x.shape[-2:]]
+    
+    def logits_transform(self, logits):
+        """Transform applied to the logits"""
+        return logits.softmax(1).squeeze().cpu()
+    
+    def predict_from_domain(self, qb):
+        """Run the translation from geographical domain
+        :qb: `torchgeo.datasets.utils.BoundingBox` or `mmt.utils.domains.GeoRectangle`
+        """
+        if not isinstance(qb, TgeoBoundingBox):
+            qb = qb.to_tgbox(self.esawc.crs)
+        
+        x = self.esawc[qb]
+        top = self.predict_from_data(x["mask"])
+        aux = self.auxmap[qb]["image"]
+        bottom = self.proba_transform(self.bottommap[qb]["mask"]).squeeze()
+        
+        return torch.where(self.criterion(top, aux), top, bottom).squeeze()
+    
+    def criterion(self, top, aux):
+        return torch.logical_and(top.sum(axis=0) != 0, aux < self.score_min)
 
 
 class EsawcEcosgToEsgpRFC(MapTranslator):

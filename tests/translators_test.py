@@ -6,8 +6,6 @@ Program to test the inference with the map translator classes
 """
 
 import os
-# from mmt.datasets import landcovers
-# from mmt.datasets import transforms as mmt_transforms
 from mmt.inference import translators
 from mmt.utils import domains, misc
 import matplotlib.pyplot as plt
@@ -21,6 +19,8 @@ checkpoint_path=misc.weights_to_checkpoint("v2outofbox2")
 for tr in [
     translators.EsawcToEsgp(checkpoint_path=checkpoint_path),
     translators.EsawcToEsgpProba(checkpoint_path=checkpoint_path),
+    translators.EsawcToEsgpThenMerge(checkpoint_path=checkpoint_path),
+    translators.EsawcToEsgpThenMergeProba(checkpoint_path=checkpoint_path),
 ]:
     x = tr[qb]
     shapes = {k:x[k].shape for k in ["mask", "image"] if k in x.keys()}
@@ -32,19 +32,18 @@ qdomain = domains.montpellier_agglo
 os.makedirs("tmp", exist_ok=True)
 
 for tr in [
-    translators.EsawcToEsgp(checkpoint_path=checkpoint_path),
-    translators.EsawcToEsgpProba(checkpoint_path=checkpoint_path),
+    translators.EsawcToEsgp(checkpoint_path=checkpoint_path, always_predict = False),
+    translators.EsawcToEsgpProba(checkpoint_path=checkpoint_path, always_predict = False),
+    translators.EsawcToEsgpThenMerge(checkpoint_path=checkpoint_path, always_predict = True),
+    translators.EsawcToEsgpThenMergeProba(checkpoint_path=checkpoint_path, always_predict = True),
 ]:
     odir = tr.predict_from_large_domain(
         qdomain,
-        output_dir="tmp/[id]",
-        tmp_dir="tmp/[id]",
+        output_dir=f"tmp/{tr.__class__.__name__}.[id]",
         n_px_max = n_px,
         n_max_files = 0,
     )
     print(f"TIF files written in {odir}")
     
-    lcclass = tr.__class__.__bases__[1]
-    lc = lcclass(path=odir)
-    lc.plot(lc[lc.bounds])
+    tr.plot_large_domain(path=odir)
     plt.show(block=False)

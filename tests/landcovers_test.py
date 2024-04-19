@@ -23,6 +23,7 @@ for lc in [
     landcovers.ScoreECOSGplus(transforms = mmt_transforms.ScoreTransform(divide_by=100)),
     landcovers.EcoclimapSGplusV2(),
     landcovers.EcoclimapSGplusV2p1(),
+    landcovers.EcoclimapSGMLv2(path_to_infres = "/data/trieutord/MLULC/outputs/ECOSGML-v2outofbox2-3picmi.18Apr-18h52"),
 ]:
     x = lc[qb]
     shapes = {k:x[k].shape for k in ["mask", "image"] if k in x.keys()}

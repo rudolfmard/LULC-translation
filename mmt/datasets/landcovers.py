@@ -1255,5 +1255,38 @@ class EcoclimapSGplusV2p1(CompositeMap):
         
     def criterion(self, top, aux):
         return torch.logical_and(top != 0, aux > self.score_min)
-    
+
+
+class EcoclimapSGMLv2(CompositeMap):
+    """ECOSG-ML as a CompositeMap from InferenceResults"""
+    def __init__(self, path_to_infres, crs=None, res=None, tgeo_init=True):
+        
+        assert os.path.isdir(path_to_infres), f"No directory found at {path_to_infres}"
+        
+        topmap = InferenceResults(
+            path=path_to_infres, crs=crs, res=res, tgeo_init=tgeo_init
+        )
+        if res is not None:
+            topmap.res = res
+        if crs is not None:
+            topmap.crs = crs
+        
+        auxmap = ScoreECOSGplus(
+            transforms=mmt_transforms.ScoreTransform(divide_by=100),
+            crs=crs,
+            res=res,
+            tgeo_init=tgeo_init,
+        )
+        self.score_min = auxmap.cutoff
+        
+        bottommap = EcoclimapSGplusV2p1(
+            score_min=self.score_min, crs=crs, res=res, tgeo_init=tgeo_init
+        )
+        
+        bottommap = EcoclimapSG(crs=crs, res=res, tgeo_init=tgeo_init)
+        super().__init__(topmap, bottommap, auxmap)
+        
+    def criterion(self, top, aux):
+        return torch.logical_and(top != 0, aux < self.score_min)
+
 # EOF
