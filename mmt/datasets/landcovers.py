@@ -121,6 +121,43 @@ irish_ecosg_labels = """0. gan sonraí
     "\n"
 )
 
+ecoclimapsg_cmap = [
+    (0, 0, 0),
+    (0, 0, 128),
+    (0, 0, 205),
+    (0, 0, 255),
+    (211, 211, 211),
+    (169, 169, 169),
+    (255, 250, 250),
+    (240, 255, 240),
+    (85, 107, 47),
+    (154, 205, 50),
+    (0, 128, 0),
+    (255, 127, 80),
+    (160, 82, 45),
+    (34, 139, 34),
+    (188, 143, 143),
+    (205, 133, 63),
+    (222, 184, 135),
+    (50, 205, 50),
+    (255, 215, 0),
+    (32, 178, 170),
+    (173, 255, 47),
+    (189, 183, 107),
+    (102, 102, 0),
+    (46, 139, 87),
+    (138, 2, 0),
+    (206, 0, 0),
+    (252, 1, 1),
+    (255, 90, 0),
+    (255, 120, 0),
+    (255, 150, 0),
+    (255, 180, 0),
+    (255, 210, 0),
+    (255, 240, 0),
+    (128, 128, 128),
+]
+
 
 n_ecoclimapsg_labels = len(ecoclimapsg_labels)
 
@@ -493,8 +530,6 @@ class ScoreMap(tgd.RasterDataset):
     element_size = 32  # Bytes per pixel
     separate_files = False
     crs = None
-    # cmap = ListedColormap(["red", "tomato", "salmon", "darksalmon", "lightsalmon", "lightseagreen", "green"]).colors
-    # cmap = "RdYlGn"
     cmap = LinearSegmentedColormap.from_list(
         "mycmap", [(0.0, "red"), (0.525, "gainsboro"), (1, "green")]
     )
@@ -812,8 +847,6 @@ class OpenStreetMap:
         patch_size: int, optional
             Patch size to use when the sample only has a 'coordinate' key.
             If not provided, the default patch size set in init is used.
-
-
         """
 
         if figax is None:
@@ -863,42 +896,7 @@ class EcoclimapSG(TorchgeoLandcover):
     path = os.path.join(mmt_repopath, "data", "tiff_data", "ECOCLIMAP-SG")
     filename_glob = "ECOCLIMAP-SG-Eurat.tif"
     labels = ecoclimapsg_labels
-    cmap = [
-        (0, 0, 0),
-        (0, 0, 128),
-        (0, 0, 205),
-        (0, 0, 255),
-        (211, 211, 211),
-        (169, 169, 169),
-        (255, 250, 250),
-        (240, 255, 240),
-        (85, 107, 47),
-        (154, 205, 50),
-        (0, 128, 0),
-        (255, 127, 80),
-        (160, 82, 45),
-        (34, 139, 34),
-        (188, 143, 143),
-        (205, 133, 63),
-        (222, 184, 135),
-        (50, 205, 50),
-        (255, 215, 0),
-        (32, 178, 170),
-        (173, 255, 47),
-        (189, 183, 107),
-        (102, 102, 0),
-        (46, 139, 87),
-        (138, 2, 0),
-        (206, 0, 0),
-        (252, 1, 1),
-        (255, 90, 0),
-        (255, 120, 0),
-        (255, 150, 0),
-        (255, 180, 0),
-        (255, 210, 0),
-        (255, 240, 0),
-        (128, 128, 128),
-    ]
+    cmap = ecoclimapsg_cmap
     crs = rasterio.crs.CRS.from_epsg(4326)
 
 
@@ -946,42 +944,7 @@ class EcoclimapSGplus(TorchgeoLandcover):
         f"ecosgp-labels-v{default_ecosgplus_version}",
     )
     labels = ecoclimapsg_labels
-    cmap = [
-        (0, 0, 0),
-        (0, 0, 128),
-        (0, 0, 205),
-        (0, 0, 255),
-        (211, 211, 211),
-        (169, 169, 169),
-        (255, 250, 250),
-        (240, 255, 240),
-        (85, 107, 47),
-        (154, 205, 50),
-        (0, 128, 0),
-        (255, 127, 80),
-        (160, 82, 45),
-        (34, 139, 34),
-        (188, 143, 143),
-        (205, 133, 63),
-        (222, 184, 135),
-        (50, 205, 50),
-        (255, 215, 0),
-        (32, 178, 170),
-        (173, 255, 47),
-        (189, 183, 107),
-        (102, 102, 0),
-        (46, 139, 87),
-        (138, 2, 0),
-        (206, 0, 0),
-        (252, 1, 1),
-        (255, 90, 0),
-        (255, 120, 0),
-        (255, 150, 0),
-        (255, 180, 0),
-        (255, 210, 0),
-        (255, 240, 0),
-        (128, 128, 128),
-    ]
+    cmap = ecoclimapsg_cmap
     crs = rasterio.crs.CRS.from_string(parse_version_infos(path)["crs"])
 
     def __init__(self, version=default_ecosgplus_version, **kwargs):
@@ -1003,118 +966,6 @@ class EcoclimapSGplus(TorchgeoLandcover):
             for l in f.readlines():
                 if "version=" in l:
                     return l.split('"')[1]
-
-    # def export_to_dirhdr(self, sample, ofn_dir=None):
-    #     """Export a sample to the SURFEX-readable format DIR/HDR"""
-    #     if ofn_dir is None:
-    #         ofn_dir = os.path.join(
-    #             self.path,
-    #             f"COVER_{self.__class__.__name__}_2024.dir",
-    #         )
-
-    #     # HDR file
-    #     ofn_hdr = ofn_dir.replace(".dir", ".hdr")
-    #     hdr_dict = {
-    #         "nodata": 0,
-    #         "north": sample["bbox"].maxy,
-    #         "south": sample["bbox"].miny,
-    #         "west": sample["bbox"].minx,
-    #         "east": sample["bbox"].maxx,
-    #         "rows": sample["mask"].shape[-2],
-    #         "cols": sample["mask"].shape[-1],
-    #         "recordtype": "integer 8 bytes",
-    #     }
-    #     with open(ofn_hdr, "w") as hdr:
-    #         hdr.write(os.path.basename(ofn_dir)[:-4] + "\n")
-    #         for k, v in hdr_dict.items():
-    #             hdr.write(f"{k}: {v}\n")
-
-    #     # DIR file
-    #     with open(ofn_dir, "wb") as f:
-    #         f.write(sample["mask"].squeeze().numpy().astype(np.uint8).tobytes("C"))
-
-    #     return ofn_dir, ofn_hdr
-
-    # def export_to_netcdf(self, sample, ofn_nc=None):
-    #     """Export a sample to netCDF"""
-    #     if ofn_nc is None:
-    #         ofn_nc = os.path.join(
-    #             self.path,
-    #             f"COVER_{self.__class__.__name__}_2024.nc",
-    #         )
-
-    #     data = sample["mask"].squeeze().numpy()
-    #     qb = sample["bbox"]
-
-    #     nx, ny = data.shape
-    #     ncf = nc.Dataset(ofn_nc, "w")
-    #     ncf.createDimension("x", nx)
-    #     ncf.createDimension("y", ny)
-
-    #     lc = ncf.createVariable("landcover", np.uint8, ("x", "y"))
-    #     lc[:, :] = data[:, :]
-    #     lc.units = "ECOCLIMAP-SG land cover labels"
-
-    #     ncf.setncatts(
-    #         dict(
-    #             title=f"ECOCLIMAP-SG+ land cover. Version {self.get_version()}",
-    #             source="TIF files",
-    #             crs=self.crs.to_string(),
-    #             resolution=self.res,
-    #             bounds=f"lower-left corner = ({qb.minx}, {qb.miny}); upper-right corner = ({qb.maxx}, {qb.maxy})",
-    #             labels="\n".join(self.labels),
-    #             institution="Met Eireann, met.ie",
-    #             history=f"Created the {time.ctime()}",
-    #             contactperson="Thomas Rieutord (thomas.rieutord@met.ie)",
-    #         )
-    #     )
-    #     ncf.close()
-
-    #     return ofn_nc
-
-    # def export_to_tif(self, sample, ofn_tif=None):
-    #     """Export a sample to GeoTIFF"""
-    #     if ofn_tif is None:
-    #         ofn_tif = os.path.join(
-    #             self.path,
-    #             f"COVER_{self.__class__.__name__}_2024.tif",
-    #         )
-    #     data = sample["mask"].squeeze().numpy()
-    #     width, height = data.shape
-    #     transf = rasterio.transform.from_bounds(
-    #         sample["bbox"].minx,
-    #         sample["bbox"].miny,
-    #         sample["bbox"].maxx,
-    #         sample["bbox"].maxy,
-    #         width,
-    #         height,
-    #     )
-    #     kwargs = {
-    #         "driver": "gTiff",
-    #         "dtype": np.uint8,
-    #         "count": 1,
-    #         "crs": self.crs,
-    #         "transform": transf,
-    #         "width": width,
-    #         "height": height,
-    #     }
-
-    #     with rasterio.open(ofn_tif, "w", **kwargs) as f:
-    #         f.write(sample["mask"].squeeze().numpy(), 1)
-
-    #     return ofn_tif
-
-    # def export_to_npy(self, sample, ofn_npy=None):
-    #     """Export a sample to numpy array"""
-    #     if ofn_npy is None:
-    #         ofn_npy = os.path.join(
-    #             self.path,
-    #             f"COVER_{self.__class__.__name__}_2024.npy",
-    #         )
-
-    #     np.save(ofn_npy, sample["mask"].squeeze().numpy().astype(np.uint8))
-
-    #     return ofn_npy
 
 
 class QualityFlagsECOSGplus(EcoclimapSGplus):
@@ -1158,42 +1009,7 @@ class InferenceResultsProba(ProbaLandcover):
     """ECOSG-like land cover probability maps (same labels) loaded from a given path"""
 
     labels = ecoclimapsg_labels
-    cmap = [
-        (0, 0, 0),
-        (0, 0, 128),
-        (0, 0, 205),
-        (0, 0, 255),
-        (211, 211, 211),
-        (169, 169, 169),
-        (255, 250, 250),
-        (240, 255, 240),
-        (85, 107, 47),
-        (154, 205, 50),
-        (0, 128, 0),
-        (255, 127, 80),
-        (160, 82, 45),
-        (34, 139, 34),
-        (188, 143, 143),
-        (205, 133, 63),
-        (222, 184, 135),
-        (50, 205, 50),
-        (255, 215, 0),
-        (32, 178, 170),
-        (173, 255, 47),
-        (189, 183, 107),
-        (102, 102, 0),
-        (46, 139, 87),
-        (138, 2, 0),
-        (206, 0, 0),
-        (252, 1, 1),
-        (255, 90, 0),
-        (255, 120, 0),
-        (255, 150, 0),
-        (255, 180, 0),
-        (255, 210, 0),
-        (255, 240, 0),
-        (128, 128, 128),
-    ]
+    cmap = ecoclimapsg_cmap
     crs = rasterio.crs.CRS.from_epsg(4326)
 
     def __init__(self, path, crs=None, res=None, transforms=None, tgeo_init=True):
