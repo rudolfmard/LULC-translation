@@ -222,7 +222,7 @@ class MapTranslator:
         
         if "[id]" in tmp_dir:
             tmp_dir = tmp_dir.replace(
-                "[id]", "tmp." + dir_id + time.strftime(".%d%b-%Hh%M")
+                "[id]", dir_id + time.strftime(".%d%b-%Hh%M") + ".TMP"
             )
         if not os.path.exists(tmp_dir):
             os.makedirs(tmp_dir)
@@ -287,6 +287,14 @@ class EsawcToEsgp(MapTranslator, landcovers.InferenceResults):
     
     def __getitem__(self, qb):
         return {"mask": self.predict_from_domain(qb)}
+        
+    def get_output_shape(self, x):
+        """Return the expected shape of the output with `x` in input"""
+        return [s//6 for s in x.shape[-2:]]
+        
+    def logits_transform(self, logits):
+        """Transform applied to the logits"""
+        return logits.argmax(1).squeeze().cpu()
     
     def predict_from_data(self, x):
         """Run the translation from matrices of land cover labels
@@ -303,15 +311,7 @@ class EsawcToEsgp(MapTranslator, landcovers.InferenceResults):
             y = self.encoder_decoder(x.float())
         
         return self.logits_transform(y)
-        
-    def get_output_shape(self, x):
-        """Return the expected shape of the output with `x` in input"""
-        return [s//6 for s in x.shape[-2:]]
-        
-    def logits_transform(self, logits):
-        """Transform applied to the logits"""
-        return logits.argmax(1).squeeze().cpu().numpy()
-
+    
     def predict_from_domain(self, qb):
         """Run the translation from geographical domain
         :qb: `torchgeo.datasets.utils.BoundingBox` or `mmt.utils.domains.GeoRectangle`
@@ -325,6 +325,8 @@ class EsawcToEsgp(MapTranslator, landcovers.InferenceResults):
 
 class EsawcToEsgpProba(EsawcToEsgp, landcovers.InferenceResultsProba):
     """Return probabilities of classes instead of classes"""
+    plot = landcovers.InferenceResultsProba.plot
+    
     def __init__(
         self,
         checkpoint_path=os.path.join(mmt_repopath, "data", "saved_models", "mmt-weights-v1.0.ckpt"),
@@ -335,13 +337,16 @@ class EsawcToEsgpProba(EsawcToEsgp, landcovers.InferenceResultsProba):
     ):
         super().__init__(checkpoint_path, device, remove_tmpdirs, output_dtype, always_predict)
     
+    def __getitem__(self, qb):
+        return {"image": self.predict_from_domain(qb)}
+    
     def get_output_shape(self, x):
         """Return the expected shape of the output with `x` in input"""
         return [35] + [s//6 for s in x.shape[-2:]]
         
     def logits_transform(self, logits):
         """Transform applied to the logits"""
-        return logits.softmax(1).squeeze().cpu().numpy()
+        return logits.softmax(1).squeeze().cpu()
 
 
 class EsawcEcosgToEsgpRFC(MapTranslator):
