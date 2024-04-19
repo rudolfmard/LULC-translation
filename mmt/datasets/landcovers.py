@@ -889,6 +889,54 @@ class OpenStreetMap:
         return fig, ax0
 
 
+class CompositeMap(TorchgeoLandcover):
+    """Composite map built with a bottom map, a top map, and an overwritting criterion.
+    The composite map returns the top map if the criterion is met and the bottom if it is not.
+    
+    
+    Example
+    -------
+    from mmt.datasets import landcovers
+    ecosg = landcovers.EcoclimapSG()
+    mstar = landcovers.SpecialistLabelsECOSGplus()
+    score = landcovers.ScoreECOSGplus(transforms = mmt_transforms.ScoreTransform(divide_by=100))
+    
+    compo = landcovers.CompositeMap(topmap = mstar, bottommap = ecosg)
+    """
+    labels = ecoclimapsg_labels
+    cmap = ecoclimapsg_cmap
+    
+    def __init__(self, topmap, bottommap, auxmap = None):
+        self.topmap = topmap
+        self.bottommap = bottommap
+        self.auxmap = auxmap
+        
+        if self.auxmap is None:
+            self.maps = topmap & bottommap
+        else:
+            self.maps = topmap & bottommap & auxmap
+            
+        self.index = self.maps.index
+        self.crs = self.maps.crs
+        self.res = self.maps.res
+        self.n_labels = len(self.labels)
+    
+    def __getitem__(self, qb):
+        x = self.maps[qb]
+        top = x["mask"][0]
+        bottom = x["mask"][1]
+        
+        if self.auxmap is None:
+            aux = None
+        elif self.auxmap.is_image:
+            aux = x["image"]
+        else:
+            aux = x["mask"][2]
+        
+        return {"mask": torch.where(self.criterion(top, aux), top, bottom)}
+    
+    def criterion(self, top, aux):
+        return top != 0
 
 # CHILD CLASSES
 # =============
@@ -1183,4 +1231,29 @@ class EcoclimapSGplusV2(EcoclimapSGplus):
         return "2.0"
 
 
+class EcoclimapSGplusV2p1(CompositeMap):
+    """ECOSG+ as a CompositeMap"""
+    def __init__(self, score_min=0.525, crs=None, res=None, tgeo_init=True):
+        self.score_min = score_min
+        
+        topmap = SpecialistLabelsECOSGplus(
+            crs=crs, res=res, tgeo_init=tgeo_init
+        )
+        if res is not None:
+            topmap.res = res
+        if crs is not None:
+            topmap.crs = crs
+        
+        bottommap = EcoclimapSG(crs=crs, res=res, tgeo_init=tgeo_init)
+        auxmap = ScoreECOSGplus(
+            transforms=mmt_transforms.ScoreTransform(divide_by=100),
+            crs=crs,
+            res=res,
+            tgeo_init=tgeo_init,
+        )
+        super().__init__(topmap, bottommap, auxmap)
+        
+    def criterion(self, top, aux):
+        return torch.logical_and(top != 0, aux > self.score_min)
+    
 # EOF
