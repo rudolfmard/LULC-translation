@@ -26,7 +26,6 @@ import pickle
 import torch
 from torchgeo.datasets.utils import BoundingBox as TgeoBoundingBox
 from torchgeo import samplers
-from multiprocessing import Pool
 
 from mmt import _repopath_ as mmt_repopath
 from mmt.inference import io
@@ -296,7 +295,7 @@ class EsawcToEsgp(MapTranslator, landcovers.InferenceResults):
         
     def logits_transform(self, logits):
         """Transform applied to the logits"""
-        return logits.argmax(1).squeeze().cpu()
+        return logits.squeeze().argmax(0).cpu()
     
     def predict_from_data(self, x):
         """Run the translation from matrices of land cover labels
@@ -327,6 +326,38 @@ class EsawcToEsgp(MapTranslator, landcovers.InferenceResults):
     def plot_large_domain(self, path, crs = None, res = None):
         lc = self.landcoverclass(path=path, crs=crs, res=res)
         return lc.plot(lc[lc.bounds])
+
+class EsawcToEsgpMembers(EsawcToEsgp):
+    
+    def __init__(
+        self,
+        checkpoint_path=os.path.join(mmt_repopath, "data", "saved_models", "mmt-weights-v1.0.ckpt"),
+        device="cuda",
+        remove_tmpdirs=True,
+        output_dtype="int16",
+        always_predict=True,
+        u=None,
+    ):
+        self.u = u
+        super().__init__(checkpoint_path, device, remove_tmpdirs, output_dtype, always_predict)
+    
+    def _logits_to_member0(self, logits):
+        return logits.argmax(1).squeeze().cpu()
+    
+    def _logits_to_member(self, logits):
+        assert self.u is not None, "Please provide a u value (in ]0,1[) to generate member"
+        proba = logits.softmax(1).squeeze().cpu()
+        cdf = proba.cumsum(0) / proba.sum(0)
+        labels = (cdf < self.u).sum(0)
+        return labels
+    
+    def logits_transform(self, logits):
+        """Transform applied to the logits"""
+        if self.u is None:
+            return self._logits_to_member0(logits)
+        else:
+            return self._logits_to_member(logits)
+            
 
 class EsawcToEsgpThenMerge(EsawcToEsgp, landcovers.InferenceResults):
     
@@ -464,11 +495,11 @@ class EsawcToEsgpThenMergeMembers(EsawcToEsgpThenMerge):
         super().__init__(checkpoint_path, device, remove_tmpdirs, output_dtype, always_predict)
     
     def _logits_to_member0(self, logits):
-        return logits.argmax(1).squeeze().cpu()
+        return logits.squeeze().argmax(0).cpu()
     
     def _logits_to_member(self, logits):
         assert self.u is not None, "Please provide a u value (in ]0,1[) to generate member"
-        proba = logits.softmax(1).squeeze().cpu()
+        proba = logits.squeeze().softmax(0).cpu()
         cdf = proba.cumsum(0) / proba.sum(0)
         labels = (cdf < self.u).sum(0)
         return labels
@@ -658,38 +689,67 @@ class MapMerger(MapTranslator):
         device="cpu",
         remove_tmpdirs=True,
         output_dtype="int16",
-        merge_criterion = "qflag2_nosea",
     ):
         super().__init__("merger", device, remove_tmpdirs, output_dtype)
         
-        self.esgp = landcovers.EcoclimapSGplus()
-        self.qflags = landcovers.QualityFlagsECOSGplus(transforms=mmt_transforms.FillMissingWithSea(0,6))
-        self.landcover = landcovers.InferenceResults(path = source_map_path, res = self.esgp.res)
-        self.landcover.res = self.esgp.res
-        if callable(merge_criterion):
-            self.merge_criterion = merge_criterion
-        else:
-            self.merge_criterion = eval(merge_criterion)
+        self.auxmap = landcovers.ScoreECOSGplus(
+            transforms=mmt_transforms.ScoreTransform(divide_by=100),
+        )
+        self.score_min = self.auxmap.cutoff
         
+        self.bottommap = landcovers.EcoclimapSGplusV2p1(
+            score_min=self.score_min,
+        )
+        
+        self.topmap = landcovers.InferenceResults(path = source_map_path, res = self.bottommap.res)
+        self.topmap.res = self.bottommap.res
+        
+        self.landcover = self.bottommap
+        
+        # self.esgp = landcovers.EcoclimapSGplus()
+        # self.qflags = landcovers.QualityFlagsECOSGplus(transforms=mmt_transforms.FillMissingWithSea(0,6))
+        # self.landcover = landcovers.InferenceResults(path = source_map_path, res = self.esgp.res)
+        # self.landcover.res = self.esgp.res
+        # if callable(merge_criterion):
+            # self.merge_criterion = merge_criterion
+        # else:
+            # self.merge_criterion = eval(merge_criterion)
+        
+    # def predict_from_domain(self, qb):
+        # """Run the translation from geographical domain"""
+        # if not isinstance(qb, TgeoBoundingBox):
+            # qb = qb.to_tgbox(self.landcover.crs)
+        
+        # x_infres = self.landcover[qb]
+        # x_qflags = self.qflags[qb]
+        # x_esgp = self.esgp[qb]
+        
+        # x_merge = deepcopy(x_esgp["mask"])
+        
+        # if self.merge_criterion.__name__ == "qflag2_nodata":
+            # where_infres = self.merge_criterion(x_qflags["mask"], x_infres["mask"])
+        # else:
+            # where_infres = self.merge_criterion(x_qflags["mask"], x_esgp["mask"])
+        
+        # x_merge[where_infres] = x_infres["mask"][where_infres]
+        
+        # return x_merge.squeeze().numpy()
+
     def predict_from_domain(self, qb):
-        """Run the translation from geographical domain"""
+        """Run the translation from geographical domain
+        :qb: `torchgeo.datasets.utils.BoundingBox` or `mmt.utils.domains.GeoRectangle`
+        """
         if not isinstance(qb, TgeoBoundingBox):
-            qb = qb.to_tgbox(self.landcover.crs)
+            qb = qb.to_tgbox(self.bottommap.crs)
         
-        x_infres = self.landcover[qb]
-        x_qflags = self.qflags[qb]
-        x_esgp = self.esgp[qb]
+        top = self.topmap[qb]["mask"]
+        aux = self.auxmap[qb]["image"]
+        bottom = self.bottommap[qb]["mask"]
         
-        x_merge = deepcopy(x_esgp["mask"])
-        
-        if self.merge_criterion.__name__ == "qflag2_nodata":
-            where_infres = self.merge_criterion(x_qflags["mask"], x_infres["mask"])
-        else:
-            where_infres = self.merge_criterion(x_qflags["mask"], x_esgp["mask"])
-        
-        x_merge[where_infres] = x_infres["mask"][where_infres]
-        
-        return x_merge.squeeze().numpy()
+        return torch.where(self.criterion(top, aux), top, bottom).squeeze()
+    
+    def criterion(self, top, aux):
+        return torch.logical_and(top != 0, aux < self.score_min)
 
 class MapMergerProba(MapTranslator):
     """Merge map with ECOCLIMAP-SG+ according to a quality flag criterion"""

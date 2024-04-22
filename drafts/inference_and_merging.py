@@ -21,7 +21,7 @@ default_output = os.path.join(mmt_repopath, "data", "outputs")
 parser = argparse.ArgumentParser(
     prog="inference_and_merging",
     description="Produce the ECOSG-ML map with the given weights on the given domain",
-    epilog="Example: python -i inference_and_merging.py --weights outofbox2 --npatches 200 --cpu",
+    epilog="Example: python -i inference_and_merging.py --weights v2outofbox2 --npatches 200 --cpu",
 )
 parser.add_argument(
     "--weights",
@@ -38,6 +38,12 @@ parser.add_argument("--patchsize", help="Size (#px of 10m) of the patches in the
 parser.add_argument(
     "--cpu", help="Perform inference on CPU", action="store_true", default=False
 )
+parser.add_argument(
+    "--u",
+    help=f"Value for the random drawing of the ensemble",
+    default=None,
+    type=float,
+)
 args = parser.parse_args()
 
 
@@ -47,10 +53,12 @@ weights = misc.checkpoint_to_weight(checkpoint_path)
 domainname = args.domainname
 n_px_max = args.patchsize
 inference_dump_dir = args.output
+u_value = args.u
 
 # Load translators
 #------------
-translator = translators.EsawcToEsgp(checkpoint_path=checkpoint_path, remove_tmpdirs = False, always_predict = False)
+# translator = translators.EsawcToEsgpMembers(checkpoint_path=checkpoint_path, remove_tmpdirs = True, always_predict = False, u=u_value)
+translator = translators.EsawcToEsgp(checkpoint_path=checkpoint_path, remove_tmpdirs = True, always_predict = True)
 
 qdomain = getattr(domains, domainname)
 
@@ -68,8 +76,7 @@ print(f"Inference complete. inference_tif_dir = {inference_tif_dir}")
 # Merge with ECOSG+
 #------------
 print("Merging the inference with ECOSG+")
-merger = translators.MapMerger(inference_tif_dir, merge_criterion = "qflag2_nodata")
-print(f"Merging criterion: {merger.merge_criterion.__doc__}")
+merger = translators.MapMerger(inference_tif_dir)
 merging_dump_dir = merger.predict_from_large_domain(
     qdomain,
     output_dir=os.path.join(inference_dump_dir, f"ECOSGML-{weights}-[id]"),
