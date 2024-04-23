@@ -92,8 +92,8 @@ qdomain = getattr(domains, domainname)
 #------------
 inference_tif_dir = tr.predict_from_large_domain(
     qdomain,
-    output_dir=os.path.join(inference_dump_dir, f"ecosgml-{weights}.{domainname}.u{u_value}"),
-    tmp_dir=os.path.join(inference_dump_dir, f"ecosgml-{weights}.{domainname}.u{u_value}.TMP"),
+    output_dir=os.path.join(inference_dump_dir, f"ecosgml-v2.0-{weights}.{domainname}.u{u_value}"),
+    tmp_dir=os.path.join(inference_dump_dir, f"ecosgml-v2.0-{weights}.{domainname}.u{u_value}.TMP"),
     n_px_max = n_px_max,
     n_max_files = n_cluster_files,
 )
