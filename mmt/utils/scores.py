@@ -215,7 +215,7 @@ def perlabel_scores(cmx, scores=["user_accuracy", "prod_accuracy", "f1score"]):
         https://en.wikipedia.org/wiki/Confusion_matrix
     """
     labels = [s[1:] for s in cmx.index]
-    plscores = pd.DataFrame(index=labels, columns=scores, dtype=float)
+    plscores = pd.DataFrame(index=labels, columns=scores + ["support", "support_frac"], dtype=float)
     for k, l in enumerate(labels):
         with warnings.catch_warnings(category=RuntimeWarning):
             warnings.simplefilter("ignore")
@@ -224,11 +224,14 @@ def perlabel_scores(cmx, scores=["user_accuracy", "prod_accuracy", "f1score"]):
             if "prod_accuracy" in scores:
                 plscores.loc[l, "prod_accuracy"] = cmx.iloc[k, k] / cmx.iloc[k, :].sum()
             if "f1score" in scores:
-                precision = cmx.iloc[k, k] / cmx.iloc[k, :].sum()
+                precision = cmx.iloc[k, k] / cmx.iloc[:, k].sum()
                 recall = cmx.iloc[k, k] / cmx.iloc[k, :].sum()
                 plscores.loc[l, "f1score"] = (
                     2 * precision * recall / (precision + recall)
                 )
+            
+            plscores.loc[l, "support"] = cmx.iloc[k, :].sum()
+            plscores.loc[l, "support_frac"] = cmx.iloc[k, :].sum()/cmx.sum().sum()
 
     return plscores
 
@@ -254,13 +257,15 @@ def permethod_scores(cmxs, scorename="f1score"):
     """
     labels = [s[1:] for s in list(cmxs.values())[0].index]
     pmscores = pd.DataFrame(
-        index=labels, columns=list(cmxs.keys()) + ["best_" + scorename], dtype=float
+        index=labels, columns=list(cmxs.keys()) + ["support", "support_frac", "best_" + scorename], dtype=float
     )
     for method, cmx in cmxs.items():
         pls = perlabel_scores(cmx)
         pmscores.loc[:, method] = pls[scorename]
 
     pmscores["best_" + scorename] = pmscores.idxmax(axis=1)
+    pmscores["support"] = pls["support"]
+    pmscores["support_frac"] = pls["support_frac"]
 
     return pmscores
 

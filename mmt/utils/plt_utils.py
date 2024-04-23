@@ -452,7 +452,7 @@ def plot_confusion_matrix(dfcmx, accuracy_in_corner = False, annot=False, fignam
         figname = "onepatchplot"
     
     fig = plt.figure(figsize=(12,10))
-    ax = sns.heatmap(dfcmx, annot=annot, cmap=sns.cubehelix_palette(as_cmap=True))
+    ax = sns.heatmap(dfcmx, annot=annot, cmap=sns.cubehelix_palette(as_cmap=True), vmin=0, vmax=1)
     ax.set_title(figtitle)
     ax.set_xlabel("Prediction")
     ax.set_ylabel("Reference")
