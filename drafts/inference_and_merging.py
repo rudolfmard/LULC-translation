@@ -3,6 +3,16 @@
 """Multiple land-cover/land-use Maps Translation (MMT)
 
 Run inference and merge with ECOSG+ on large domains
+
+
+Run on a large domain
+----------------------
+python inference_and_merging.py --weights v2outofbox2 --domainname eurat
+python inference_and_merging.py --weights v2outofbox2 --domainname eurat --u 0.82
+python inference_and_merging.py --weights v2outofbox2 --domainname eurat --u 0.47
+python inference_and_merging.py --weights v2outofbox2 --domainname eurat --u 0.11
+python inference_and_merging.py --weights v2outofbox2 --domainname eurat --u 0.34
+python inference_and_merging.py --weights v2outofbox2 --domainname eurat --u 0.65
 """
 
 import argparse
@@ -16,12 +26,12 @@ from mmt.inference import translators
 
 # Configs
 #------------
-default_output = os.path.join(mmt_repopath, "data", "outputs")
+default_output = os.path.join(mmt_repopath, "data", "outputs", "v2")
 
 parser = argparse.ArgumentParser(
     prog="inference_and_merging",
     description="Produce the ECOSG-ML map with the given weights on the given domain",
-    epilog="Example: python -i inference_and_merging.py --weights v2outofbox2 --npatches 200 --cpu",
+    epilog="Example: python inference_and_merging.py --weights v2outofbox2 --domainname montpellier_agglo --patchsize 600 --output test --cpu",
 )
 parser.add_argument(
     "--weights",
@@ -34,7 +44,7 @@ parser.add_argument(
     default=default_output,
 )
 parser.add_argument("--domainname", help="Geographical domain name", default="montpellier_agglo")
-parser.add_argument("--patchsize", help="Size (#px of 10m) of the patches in the sampler", default=600, type=int) # Maximum that could fit on the GPU?
+parser.add_argument("--scoremin", help="Score threshold for the transition", default=0.525, type=float)
 parser.add_argument(
     "--cpu", help="Perform inference on CPU", action="store_true", default=False
 )
@@ -51,38 +61,50 @@ device = "cpu" if args.cpu else "cuda"
 checkpoint_path = misc.weights_to_checkpoint(args.weights)
 weights = misc.checkpoint_to_weight(checkpoint_path)
 domainname = args.domainname
-n_px_max = args.patchsize
 inference_dump_dir = args.output
 u_value = args.u
 
 # Load translators
 #------------
-# translator = translators.EsawcToEsgpMembers(checkpoint_path=checkpoint_path, remove_tmpdirs = True, always_predict = False, u=u_value)
-translator = translators.EsawcToEsgp(checkpoint_path=checkpoint_path, remove_tmpdirs = True, always_predict = True)
+translator = translators.EsawcToEsgpMembers(checkpoint_path=checkpoint_path, remove_tmpdirs = True, always_predict = True, u = u_value)
 
 qdomain = getattr(domains, domainname)
+
+if qdomain.to_tgbox("EPSG:3035").area > 1e10:
+    # If the domain is greater than 10,000 km2, cluster the TIF files
+    n_px_max1 = 600
+    n_cluster_files1 = 1000
+    n_px_max2 = 600
+    n_cluster_files2 = 200
+else:
+    n_px_max1 = 600
+    n_cluster_files1 = 0
+    n_px_max2 = 80
+    n_cluster_files2 = 0
+    
+
 
 # Run inference
 #------------
 inference_tif_dir = translator.predict_from_large_domain(
     qdomain,
-    output_dir=os.path.join(inference_dump_dir, f"infres-{weights}.{domainname}.[id]"),
-    tmp_dir=os.path.join(inference_dump_dir, f"infres-{weights}.{domainname}.[id]"),
-    n_px_max = n_px_max,
-    n_max_files = 0,
+    output_dir=os.path.join(inference_dump_dir, f"infres-v2.0-{weights}.{domainname}.u{u_value}"),
+    tmp_dir=os.path.join(inference_dump_dir, f"infres-v2.0-{weights}.{domainname}.u{u_value}.TMP"),
+    n_px_max = n_px_max1,
+    n_cluster_files = n_cluster_files1,
 )
 print(f"Inference complete. inference_tif_dir = {inference_tif_dir}")
 
 # Merge with ECOSG+
 #------------
 print("Merging the inference with ECOSG+")
-merger = translators.MapMerger(inference_tif_dir)
+merger = translators.MapMergerV2(inference_tif_dir, score_min = args.scoremin)
 merging_dump_dir = merger.predict_from_large_domain(
     qdomain,
-    output_dir=os.path.join(inference_dump_dir, f"ECOSGML-{weights}-[id]"),
-    tmp_dir=os.path.join(inference_dump_dir, f"merger-{weights}.{domainname}.[id]"),
-    n_px_max = 80, # Make sure that the patches are smaller than the size of a file
+    output_dir=os.path.join(inference_dump_dir, f"ecosgml-v2.0-{weights}.{domainname}.u{u_value}.sm{args.scoremin}"),
+    tmp_dir=os.path.join(inference_dump_dir, f"ecosgml-v2.0-{weights}.{domainname}.u{u_value}.sm{args.scoremin}.TMP"),
+    n_px_max = n_px_max2, # Make sure that the patches are smaller than the size of a file
     # Thumb rule: < n_px_max*esawc.res/esgp.res
-    n_max_files = 12, # Set to 0 to avoid clustering (only copy from tmp_dir to output_dir)
+    n_cluster_files = n_cluster_files2, # Set to 0 to avoid clustering (only copy from tmp_dir to output_dir)
 )
-print(f"Merged map created at {merging_dump_dir}")
+print(f"Plot it: python -i ../scripts/look_at_map.py --lcpath {merging_dump_dir}")

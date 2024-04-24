@@ -117,7 +117,7 @@ for lcname in lcnames:
         lc_class = getattr(landcovers, lcattrs[lcname]["lcclass"])
         lcs.append(lc_class(**lcattrs[lcname]["kwargs"]))
     else:
-        tr = translators.EsawcToEsgp(
+        tr = translators.EsawcToEsgpAsMap(
             checkpoint_path=misc.weights_to_checkpoint(lcname), device=device
         )
         lcs.append(tr)
