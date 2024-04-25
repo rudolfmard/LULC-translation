@@ -500,8 +500,8 @@ def stitch_tif_files(input_dir, output_dir, n_max_files = 200, clustering = "kme
     lons = []
     for i in ls:
         n, e = i.split("_")
-        lats.append(float(n[1:]))
-        lons.append(float(e[1:-4]))
+        lats.append(float(n[4:]))
+        lons.append(float(e[4:]))
     
     if verbose:
         print(f"Stitching {ls.size} TIF files from {input_dir} to <= {n_max_files} TIF files at {output_dir}.")

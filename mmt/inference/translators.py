@@ -26,7 +26,7 @@ import pickle
 import torch
 from torchgeo.datasets.utils import BoundingBox as TgeoBoundingBox
 from torchgeo import samplers
-from memory_profiler import profile
+# from memory_profiler import profile
 
 from mmt import _repopath_ as mmt_repopath
 from mmt.inference import io
@@ -34,6 +34,13 @@ from mmt.datasets import landcovers
 from mmt.datasets import transforms as mmt_transforms
 from mmt.utils import misc
 
+
+# from multiprocessing import Pool
+from torch.multiprocessing import Pool, Process, set_start_method
+try:
+     set_start_method('spawn')
+except RuntimeError:
+    pass
 
 # BASE CLASSES
 # ============
@@ -169,7 +176,7 @@ class MapTranslator:
         """
         raise NotImplementedError
     
-    @profile
+    # @profile
     def predict_from_large_domain(
         self, qb, output_dir="[id]", tmp_dir="[id]", n_cluster_files=200, n_px_max=600
     ):
@@ -211,41 +218,20 @@ class MapTranslator:
         output_dir: str
             Path to the output directory where the TIF files are stored (with completion)
         """
-        if not isinstance(qb, TgeoBoundingBox):
-            qb = qb.to_tgbox(self.landcover.crs)
+        tmp_dir, output_dir = misc.create_directories(tmp_dir, output_dir)
         
-        dir_id = misc.id_generator()
-        if "[id]" in output_dir:
-            output_dir = output_dir.replace(
-                "[id]", dir_id + time.strftime(".%d%b-%Hh%M")
-            )
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
+        patches_definition_file = os.path.join(tmp_dir, "patches_definition_file.txt")
+        if not os.path.isfile(patches_definition_file):
+            sample_domain_with_patches(qb, self.landcover, n_px_max, tmp_dir)
         
-        if "[id]" in tmp_dir:
-            tmp_dir = tmp_dir.replace(
-                "[id]", "tmp." + dir_id + time.strftime(".%d%b-%Hh%M")
-            )
-        if not os.path.exists(tmp_dir):
-            os.makedirs(tmp_dir)
-        
-        margin = n_px_max // 6
-        sampler = samplers.GridGeoSampler(
-            self.landcover, size=n_px_max, stride=n_px_max - margin, roi=qb
-        )
-        if len(sampler) == 0:
-            raise ValueError(f"Empty sampler. size={n_px_max}, stride={n_px_max - margin}, roi={qb}, landcover bounds={self.landcover.bounds}")
-        
-        for iqb in tqdm(sampler, desc=f"Inference over {len(sampler)} patches"):
-            tifpatchname = f"N{iqb.minx}_E{iqb.maxy}.tif"
-            if os.path.exists(os.path.join(tmp_dir, tifpatchname)):
-                continue
-            
-            y = self.predict_from_domain(iqb)
-            
-            io.dump_labels_in_tif(
-                y, iqb, self.landcover.crs, os.path.join(tmp_dir, tifpatchname), self.output_dtype
-            )
+        with PatchIterator(tmp_dir) as pi:
+            for tifpatchname, iqb in tqdm(pi, desc=f"Inference over {len(pi)} patches"):
+                
+                l_pred = self.predict_from_domain(iqb)
+                
+                io.dump_labels_in_tif(
+                    l_pred, iqb, self.landcover.crs, os.path.join(tmp_dir, tifpatchname), self.output_dtype
+                )
         
         if n_cluster_files > 0:
             io.stitch_tif_files(tmp_dir, output_dir, n_max_files=n_cluster_files, prefix = self.__class__.__name__, verbose = True)
@@ -359,7 +345,75 @@ class EsawcToEsgpMembers(EsawcToEsgp):
             return self._logits_to_member0(logits)
         else:
             return self._logits_to_member(logits)
-            
+    
+
+class EsawcToEsgpShowEnsemble(EsawcToEsgpAsMap):
+    
+    def __init__(
+        self,
+        checkpoint_path=os.path.join(mmt_repopath, "data", "saved_models", "mmt-weights-v1.0.ckpt"),
+        device="cuda",
+        remove_tmpdirs=True,
+        output_dtype="int16",
+        always_predict=True,
+        u = None,
+    ):
+        super().__init__(checkpoint_path, device, remove_tmpdirs, output_dtype, always_predict)
+        
+        self.u = u
+        
+        self.auxmap = landcovers.ScoreECOSGplus(
+            transforms=mmt_transforms.ScoreTransform(divide_by=100),
+            crs = self.esawc.crs,
+            res = self.esawc.res * 6,
+        )
+        self.auxmap.crs = self.esawc.crs
+        self.auxmap.res = self.esawc.res * 6
+        
+        self.score_min = self.auxmap.cutoff
+        
+        self.bottommap = landcovers.EcoclimapSGplusV2p1(
+            score_min=self.score_min,
+            crs = self.esawc.crs,
+            res = self.esawc.res * 6,
+        )
+        self.bottommap.crs = self.esawc.crs
+        self.bottommap.res = self.esawc.res * 6
+    
+    def predict_from_domain(self, qb):
+        """Run the translation from geographical domain
+        :qb: `torchgeo.datasets.utils.BoundingBox` or `mmt.utils.domains.GeoRectangle`
+        """
+        if not isinstance(qb, TgeoBoundingBox):
+            qb = qb.to_tgbox(self.esawc.crs)
+        
+        x = self.esawc[qb]
+        top = self.predict_from_data(x["mask"])
+        aux = self.auxmap[qb]["image"]
+        bottom = self.bottommap[qb]["mask"]
+        
+        return torch.where(self.criterion(top, aux), top, bottom).squeeze()
+    
+    def criterion(self, top, aux):
+        return torch.logical_and(top != 0, aux < self.score_min)
+    
+    def _logits_to_member0(self, logits):
+        return logits.argmax(1).squeeze().cpu()
+    
+    def _logits_to_member(self, logits):
+        assert self.u is not None, "Please provide a u value (in ]0,1[) to generate member"
+        proba = logits.softmax(1).squeeze().cpu()
+        cdf = proba.cumsum(0) / proba.sum(0)
+        labels = (cdf < self.u).sum(0)
+        return labels
+    
+    def logits_transform(self, logits):
+        """Transform applied to the logits"""
+        if self.u is None:
+            return self._logits_to_member0(logits)
+        else:
+            return self._logits_to_member(logits)
+    
 
 class EsawcToEsgpProba(EsawcToEsgp):
     """Return probabilities of classes instead of classes"""
@@ -529,6 +583,80 @@ class MapMergerProba(MapTranslator):
 
 # MERGING CRITERIA
 # ================
+
+def sample_domain_with_patches(domain, landcover, patch_size, tmp_dir):
+    """Sample create a list of TIF file names that cover the whole domain
+    
+    Example
+    -------
+    >>> from mmt.utils import domains
+    >>> from mmt.datasets import landcovers
+    >>> from mmt.inference import translators
+    >>> landcover = landcovers.EcoclimapSG()
+    >>> domain = domains.eurat
+    >>> patch_size = 20
+    >>> tmp_dir = "tmp"
+    >>> translators.sample_domain_with_patches(domain, landcover, patch_size, tmp_dir)
+    """
+    if not isinstance(domain, TgeoBoundingBox):
+        qb = domain.to_tgbox(landcover.crs)
+    
+    margin = patch_size // 6
+    sampler = samplers.GridGeoSampler(
+        landcover, size=patch_size, stride=patch_size - margin, roi=qb
+    )
+    if len(sampler) == 0:
+        raise ValueError(f"Empty sampler. size={patch_size}, stride={patch_size - margin}, roi={qb}, landcover bounds={landcover.bounds}")
+    
+    patches_definition_file = os.path.join(tmp_dir, "patches_definition_file.txt")
+    with open(patches_definition_file, "w") as f:
+        for iqb in sampler:
+            f.write(
+                "_".join([f"{k}{getattr(iqb,k)}" for k in ["minx", "maxx", "miny", "maxy"]]) + ".tif\n"
+            )
+    
+    return patches_definition_file
+
+
+class PatchIterator:
+    def __init__(self, directory):
+        self.directory = directory
+        self.patches_definition_file = os.path.join(directory, "patches_definition_file.txt")
+    
+    def __enter__(self):
+        self.openfile = open(self.patches_definition_file, "r")
+        self.i = 0
+        l = "_"
+        while os.path.exists(os.path.join(self.directory, l.strip())):
+            l = next(iter(self.openfile))
+            self.i += 1
+        
+        print(f"Opening {self.patches_definition_file} at line #{self.i}: {l.strip()}")
+        return self
+    
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        self.openfile.close()
+        print(f"Closing {self.patches_definition_file} at line #{self.i}")
+        
+    def __iter__(self):
+        return self
+    
+    def __next__(self):
+        l = next(iter(self.openfile))
+        self.i += 1
+        tiff = l.strip()
+        bbox = TgeoBoundingBox(*[float(s[4:]) for s in tiff[:-4].split("_")],0,1e12)
+        return tiff, bbox
+    
+    def __len__(self):
+        if not hasattr(self, "_len"):
+            with open(self.patches_definition_file) as f:
+               count = sum(1 for _ in f)
+            
+            self._len = count
+        
+        return self._len
+
 
 def qflag2_nodata(x_qflags, x_infres):
     """Use inference result when quality flag beyond 2 except for no data"""

@@ -121,6 +121,26 @@ def checkpoint_to_weight(checkpoint_path):
 
     return weights
 
+def create_directories(*indirs):
+    """Give default name when the keyword '[id]' is present and create the directories
+    
+    Example
+    -------
+    >>> create_directories("tmp_[id]", "tmp", "out_[id]")
+    ['tmp_cg242z.25Apr-09h35', 'tmp', 'out_cg242z.25Apr-09h35']
+    """
+    dir_id = id_generator()
+    outdirs = []
+    for d in indirs:
+        if "[id]" in d:
+            d = d.replace(
+                "[id]", dir_id + time.strftime(".%d%b-%Hh%M")
+            )
+        os.makedirs(d, exist_ok=True)
+        outdirs.append(d)
+    
+    return outdirs
+
 def print_cuda_statistics():
     logger = logging.getLogger("Cuda Statistics")
     import sys
@@ -261,17 +281,4 @@ def ccrop_and_split(x, n_px):
     
     return {"train":x_train1, "train2":x_train2, "test":x_test, "val":x_val}
 
-class InfiniIterTool:
-    def __init__(self, start):
-        self.i = 0
-        self.size = len(start)
-        self.start = iter(start)
 
-    def __iter__(self):
-        self.i = 0
-        return self
-
-    def __next__(self):
-        x = self.start[self.i % self.size]
-        self.i += 1
-        return x

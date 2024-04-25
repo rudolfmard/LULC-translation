@@ -116,6 +116,11 @@ for lcname in lcnames:
     if lcname in lcattrs.keys():
         lc_class = getattr(landcovers, lcattrs[lcname]["lcclass"])
         lcs.append(lc_class(**lcattrs[lcname]["kwargs"]))
+    elif lcname == "ECOSG-ML":
+        tr = translators.EsawcToEsgpShowEnsemble(
+            checkpoint_path=misc.weights_to_checkpoint("v2outofbox2"), device=device
+        )
+        lcs.append(tr)
     else:
         tr = translators.EsawcToEsgpAsMap(
             checkpoint_path=misc.weights_to_checkpoint(lcname), device=device
