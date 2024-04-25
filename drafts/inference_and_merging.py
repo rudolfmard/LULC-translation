@@ -9,8 +9,8 @@ Run on a large domain
 ----------------------
 python inference_and_merging.py --weights v2outofbox2 --domainname eurat
 python inference_and_merging.py --weights v2outofbox2 --domainname eurat --u 0.82
-python inference_and_merging.py --weights v2outofbox2 --domainname eurat --u 0.47
 python inference_and_merging.py --weights v2outofbox2 --domainname eurat --u 0.11
+python inference_and_merging.py --weights v2outofbox2 --domainname eurat --u 0.47
 python inference_and_merging.py --weights v2outofbox2 --domainname eurat --u 0.34
 python inference_and_merging.py --weights v2outofbox2 --domainname eurat --u 0.65
 """
@@ -54,6 +54,20 @@ parser.add_argument(
     default=None,
     type=float,
 )
+parser.add_argument(
+    "--skip-inference",
+    help="Do not run the inference",
+    dest="skip_inference",
+    action="store_true",
+    default=False,
+)
+parser.add_argument(
+    "--skip-merging",
+    help="Do not run the merging",
+    dest="skip_merging",
+    action="store_true",
+    default=False,
+)
 args = parser.parse_args()
 
 
@@ -66,7 +80,6 @@ u_value = args.u
 
 # Load translators
 #------------
-translator = translators.EsawcToEsgpMembers(checkpoint_path=checkpoint_path, remove_tmpdirs = True, always_predict = True, u = u_value)
 
 qdomain = getattr(domains, domainname)
 
@@ -86,25 +99,33 @@ else:
 
 # Run inference
 #------------
-inference_tif_dir = translator.predict_from_large_domain(
-    qdomain,
-    output_dir=os.path.join(inference_dump_dir, f"infres-v2.0-{weights}.{domainname}.u{u_value}"),
-    tmp_dir=os.path.join(inference_dump_dir, f"infres-v2.0-{weights}.{domainname}.u{u_value}.TMP"),
-    n_px_max = n_px_max1,
-    n_cluster_files = n_cluster_files1,
-)
+inference_tif_dir = os.path.join(inference_dump_dir, f"infres-v2.0-{weights}.{domainname}.u{u_value}")
+
+if not args.skip_inference:
+    translator = translators.EsawcToEsgpMembers(checkpoint_path=checkpoint_path, remove_tmpdirs = True, always_predict = True, u = u_value)
+    translator.predict_from_large_domain_parallel(
+        qdomain,
+        output_dir=inference_tif_dir,
+        tmp_dir=inference_tif_dir + ".TMP",
+        n_px_max = n_px_max1,
+        n_cluster_files = n_cluster_files1,
+    )
+
 print(f"Inference complete. inference_tif_dir = {inference_tif_dir}")
 
 # Merge with ECOSG+
 #------------
 print("Merging the inference with ECOSG+")
-merger = translators.MapMergerV2(inference_tif_dir, score_min = args.scoremin)
-merging_dump_dir = merger.predict_from_large_domain(
-    qdomain,
-    output_dir=os.path.join(inference_dump_dir, f"ecosgml-v2.0-{weights}.{domainname}.u{u_value}.sm{args.scoremin}"),
-    tmp_dir=os.path.join(inference_dump_dir, f"ecosgml-v2.0-{weights}.{domainname}.u{u_value}.sm{args.scoremin}.TMP"),
-    n_px_max = n_px_max2, # Make sure that the patches are smaller than the size of a file
-    # Thumb rule: < n_px_max*esawc.res/esgp.res
-    n_cluster_files = n_cluster_files2, # Set to 0 to avoid clustering (only copy from tmp_dir to output_dir)
-)
+merging_dump_dir = os.path.join(inference_dump_dir, f"ecosgml-v2.0-{weights}.{domainname}.u{u_value}.sm{args.scoremin}")
+if not args.skip_merging:
+    merger = translators.MapMergerV2(inference_tif_dir, score_min = args.scoremin)
+    merging_dump_dir = merger.predict_from_large_domain(
+        qdomain,
+        output_dir=merging_dump_dir,
+        tmp_dir=merging_dump_dir + ".TMP",
+        n_px_max = n_px_max2, # Make sure that the patches are smaller than the size of a file
+        # Thumb rule: < n_px_max*esawc.res/esgp.res
+        n_cluster_files = n_cluster_files2, # Set to 0 to avoid clustering (only copy from tmp_dir to output_dir)
+    )
+
 print(f"Plot it: python -i ../scripts/look_at_map.py --lcpath {merging_dump_dir}")
