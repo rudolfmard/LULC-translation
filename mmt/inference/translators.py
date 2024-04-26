@@ -224,14 +224,31 @@ class MapTranslator:
         if not os.path.isfile(patches_definition_file):
             sample_domain_with_patches(qb, self.landcover, n_px_max, tmp_dir)
         
-        with PatchIterator(tmp_dir) as pi:
-            for tifpatchname, iqb in tqdm(pi, desc=f"Inference over {len(pi)} patches"):
+        with open(patches_definition_file, "r") as f:
+            patches = f.readlines()
+        
+        for tifpatchname in tqdm(patches, desc=f"Inference over {len(patches)} patches"):
+            tifpatchname = tifpatchname.strip()
+            if os.path.exists(os.path.join(tmp_dir, tifpatchname)):
+                continue
+            
+            iqb = TgeoBoundingBox(*[float(s[4:]) for s in tifpatchname[:-4].split("_")], 0, 1e12)
+            
+            l_pred = self.predict_from_domain(iqb)
+            
+            io.dump_labels_in_tif(
+                l_pred, iqb, self.landcover.crs, os.path.join(tmp_dir, tifpatchname), self.output_dtype
+            )
+        
+        
+        # with PatchIterator(tmp_dir) as pi:
+            # for tifpatchname, iqb in tqdm(pi, desc=f"Inference over {len(pi)} patches"):
+                # print("Next file to be written:", os.path.join(tmp_dir, tifpatchname))
+                # l_pred = self.predict_from_domain(iqb)
                 
-                l_pred = self.predict_from_domain(iqb)
-                
-                io.dump_labels_in_tif(
-                    l_pred, iqb, self.landcover.crs, os.path.join(tmp_dir, tifpatchname), self.output_dtype
-                )
+                # io.dump_labels_in_tif(
+                    # l_pred, iqb, self.landcover.crs, os.path.join(tmp_dir, tifpatchname), self.output_dtype
+                # )
         
         if n_cluster_files > 0:
             io.stitch_tif_files(tmp_dir, output_dir, n_max_files=n_cluster_files, prefix = self.__class__.__name__, verbose = True)
@@ -622,11 +639,12 @@ class PatchIterator:
     def __init__(self, directory):
         self.directory = directory
         self.patches_definition_file = os.path.join(directory, "patches_definition_file.txt")
+        self.i = 0
     
     def __enter__(self):
         self.openfile = open(self.patches_definition_file, "r")
         self.i = 0
-        l = "_"
+        l = next(iter(self.openfile))
         while os.path.exists(os.path.join(self.directory, l.strip())):
             l = next(iter(self.openfile))
             self.i += 1
@@ -645,17 +663,17 @@ class PatchIterator:
         l = next(iter(self.openfile))
         self.i += 1
         tiff = l.strip()
-        bbox = TgeoBoundingBox(*[float(s[4:]) for s in tiff[:-4].split("_")],0,1e12)
+        bbox = TgeoBoundingBox(*[float(s[4:]) for s in tiff[:-4].split("_")], 0, 1e12)
         return tiff, bbox
     
     def __len__(self):
         if not hasattr(self, "_len"):
-            with open(self.patches_definition_file) as f:
+            with open(self.patches_definition_file, "r") as f:
                count = sum(1 for _ in f)
             
             self._len = count
         
-        return self._len
+        return self._len - self.i
 
 
 def qflag2_nodata(x_qflags, x_infres):
