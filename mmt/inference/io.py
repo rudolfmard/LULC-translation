@@ -458,6 +458,7 @@ def dump_labels_in_tif(labels, domain, crs, tifpath, dtype = "int16"):
         else:
             f.write(labels, 1)
         
+    # print("Written:", tifpath)
     return f
 
 def stitch_tif_files(input_dir, output_dir, n_max_files = 200, clustering = "kmeans", prefix = "stitched", verbose = True):
@@ -499,7 +500,7 @@ def stitch_tif_files(input_dir, output_dir, n_max_files = 200, clustering = "kme
     lats = []
     lons = []
     for i in ls:
-        n, e = i.split("_")
+        n, _, e, _ = i.split("_")
         lats.append(float(n[4:]))
         lons.append(float(e[4:]))
     

@@ -102,8 +102,8 @@ else:
 inference_tif_dir = os.path.join(inference_dump_dir, f"infres-v2.0-{weights}.{domainname}.u{u_value}")
 
 if not args.skip_inference:
-    translator = translators.EsawcToEsgpMembers(checkpoint_path=checkpoint_path, remove_tmpdirs = True, always_predict = True, u = u_value)
-    translator.predict_from_large_domain_parallel(
+    translator = translators.EsawcToEsgpMembers(checkpoint_path=checkpoint_path, remove_tmpdirs = False, always_predict = False, u = u_value)
+    translator.predict_from_large_domain(
         qdomain,
         output_dir=inference_tif_dir,
         tmp_dir=inference_tif_dir + ".TMP",
