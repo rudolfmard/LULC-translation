@@ -508,7 +508,8 @@ def stitch_tif_files(input_dir, output_dir, n_max_files = 200, clustering = "kme
         print(f"Stitching {ls.size} TIF files from {input_dir} to <= {n_max_files} TIF files at {output_dir}.")
     
     X = np.array([lons, lats]).T
-    
+    del lats, lons
+
     if verbose:
         print(f"Starting stitching {len(ls)} TIF files into {n_max_files} files with {clustering}")
         
@@ -518,12 +519,14 @@ def stitch_tif_files(input_dir, output_dir, n_max_files = 200, clustering = "kme
             print(f"Hierarchical clustering done.")
         
         idx = hierarchy.fcluster(Z, t = n_max_files, criterion="maxclust")
+        del X, Z
     elif clustering == "kmeans":
         km = KMeans(n_clusters = n_max_files, max_iter=10, n_init=1, init = "k-means++")
         idx = km.fit_predict(X) + 1
         if verbose:
             print(f"K-means clustering done.")
         
+        del X, km
     else:
         raise ValueError(f"Unsupported clustering method: {clustering}")
     
