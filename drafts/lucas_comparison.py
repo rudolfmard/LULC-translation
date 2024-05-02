@@ -6,6 +6,7 @@ Compare landcovers to LUCAS
 """
 import argparse
 import os
+import time
 
 from tqdm import tqdm
 import numpy as np
@@ -71,18 +72,18 @@ print(f"LUCAS data loaded: {lucas.shape}")
 llons = lucas["POINT_LONG"].values.astype(float)
 llats = lucas["POINT_LAT"].values.astype(float)
 llabl = np.array([convert_lucas_to_primary(l) for l in lucas["SURVEY_LC1"]])
-nmax = 1000
-idx = np.random.randint(0, len(llabl), nmax)
-llons = llons[idx]
-llats = llats[idx]
-llabl = llabl[idx]
+# nmax = 20000
+# idx = np.random.randint(0, len(llabl), nmax)
+# llons = llons[idx]
+# llats = llats[idx]
+# llabl = llabl[idx]
 
 qscore = landcovers.ScoreECOSGplus(transforms=mmt_transforms.ScoreTransform(divide_by=100))
 
 oaccs = {}
-# u_values = [None, 0.82, 0.11, 0.47, 0.34]
-u_values = [0.82, 0.11]
-score_mins = [0.1, 0.3, 0.5, 0.7]
+u_values = [None, 0.82, 0.11, 0.47, 0.34, 0.65]
+# u_values = [0.82, 0.11, 0.47, 0.34, 0.65]
+score_mins = [0.001, 0.1, 0.3, 0.5, 0.7]
 for u in u_values:
     path_to_tif = basepath_to_tif + ".u" + str(u)
     print(path_to_tif, os.path.isdir(path_to_tif))
@@ -90,35 +91,26 @@ for u in u_values:
 
 for iu, u in enumerate(u_values):
     ustr = "u" + str(u)
-    print(f"\n        ======= {ustr} =======\t [{iu}/{len(u_values)}]")
+    print(f"\n        ======= {ustr} =======\t [{iu}/{len(u_values)}] {time.ctime()}")
     path_to_tif = basepath_to_tif + ".u" + str(u)
-    infres = landcovers.InferenceResults(path = path_to_tif, transforms=mmt_transforms.FillMissingWithSea(0, 1))
+    infres = landcovers.InferenceResults(path = path_to_tif)
     
     for ism, score_min in enumerate(score_mins):
         print(f"    ----- score_min={score_min} -----\t [{ism}/{len(score_mins)}]")
         esgpv2 = landcovers.EcoclimapSGplusV2p1(score_min = score_min)
         cmx = pd.DataFrame(index = tlabels, columns = plabels, data = np.zeros((len(primary_labels), len(primary_labels))))
+        missing_lucas = 0
+        missing_pred = 0
         for lon, lat, lab in tqdm(zip(llons, llats, llabl), total = len(llabl), desc = f"Comp. to LUCAS ({ustr}, smin = {score_min})"):
             if lab is None:
+                missing_lucas += 1
                 continue
-            
-            # qb0 = domains.GeoRectangle(
-                # misc.get_bbox_from_coord(lon, lat, infres.res, location = "center"),
-                # fmt = "lbrt"
-            # ).to_tgbox(infres.crs)
-            # ifrlab = convert_ilabel_to_primary(infres[qb0]["mask"].item())
             
             qb1 = domains.GeoRectangle(
                 misc.get_bbox_from_coord(lon, lat, qscore.res, location = "center"),
                 fmt = "lbrt"
             ).to_tgbox(qscore.crs)
             scoreval = qscore[qb1]["image"].item()
-            
-            # qb2 = domains.GeoRectangle(
-                # misc.get_bbox_from_coord(lon, lat, esgpv2.res, location = "center"),
-                # fmt = "lbrt"
-            # ).to_tgbox(esgpv2.crs)
-            # altlab = convert_ilabel_to_primary(esgpv2[qb2]["mask"].item())
             
             if scoreval > score_min:
                 # plab = altlab
@@ -136,21 +128,76 @@ for iu, u in enumerate(u_values):
                 plab = convert_ilabel_to_primary(infres[qb0]["mask"].item())
             
             if plab is None:
+                missing_pred += 1
                 continue
             
             cmx.loc["t" + lab, "p" + plab] += 1
         
-        oaccs[ustr].append(scores.oaccuracy(cmx))
-        print(f"[{ustr}, smin = {score_min}] Overall accuracy: {scores.oaccuracy(cmx)}\n")
+        oacc = scores.oaccuracy(cmx)*(len(llabl) - missing_lucas - missing_pred)/len(llabl)
+        oaccs[ustr].append(oacc)
+        print(f"[{ustr}, smin = {score_min}] Overall accuracy: {scores.oaccuracy(cmx)} Missing: {missing_lucas/len(llabl)} (LUCAS), {missing_pred/len(llabl)} (SG-ML)\n")
+
+print(f"\n        ======= ECOSG =======\t [{iu}/{len(u_values)}] {time.ctime()}")
+ecosg = landcovers.EcoclimapSG()
+cmxsg = pd.DataFrame(index = tlabels, columns = plabels, data = np.zeros((len(primary_labels), len(primary_labels))))
+for lon, lat, lab in tqdm(zip(llons, llats, llabl), total = len(llabl), desc = f"Comp. ECOSG to LUCAS"):
+    if lab is None:
+        continue
+    
+    qb3 = domains.GeoRectangle(
+        misc.get_bbox_from_coord(lon, lat, ecosg.res, location = "center"),
+        fmt = "lbrt"
+    ).to_tgbox(ecosg.crs)
+    blab = convert_ilabel_to_primary(ecosg[qb3]["mask"].item())
+    cmxsg.loc["t" + lab, "p" + blab] += 1
+
+oaccsg = scores.oaccuracy(cmxsg)
+print(f"ECOSG overall accuracy: {oaccsg}\n")
+
+print(f"\n        ======= ECOSG+ =======\t [{iu}/{len(u_values)}] {time.ctime()}")
+oaccsgp = []
+for ism, score_min in enumerate(score_mins):
+    print(f"    ----- score_min={score_min} -----\t [{ism}/{len(score_mins)}]")
+    esgpv2 = landcovers.EcoclimapSGplusV2p1(score_min = score_min)
+    cmx = pd.DataFrame(index = tlabels, columns = plabels, data = np.zeros((len(primary_labels), len(primary_labels))))
+    missing_lucas = 0
+    missing_pred = 0
+    for lon, lat, lab in tqdm(zip(llons, llats, llabl), total = len(llabl), desc = f"Comp. SG+ to LUCAS (smin = {score_min})"):
+        if lab is None:
+            missing_lucas += 1
+            continue
+        
+        qb2 = domains.GeoRectangle(
+            misc.get_bbox_from_coord(lon, lat, esgpv2.res, location = "center"),
+            fmt = "lbrt"
+        ).to_tgbox(esgpv2.crs)
+        plab = convert_ilabel_to_primary(esgpv2[qb2]["mask"].item())
+        
+        if plab is None:
+            missing_pred += 1
+            continue
+        
+        cmx.loc["t" + lab, "p" + plab] += 1
+    
+    oacc = scores.oaccuracy(cmx)*(len(llabl) - missing_lucas - missing_pred)/len(llabl)
+    oaccsgp.append(oacc)
+    print(f"[smin = {score_min}] Overall accuracy: {scores.oaccuracy(cmx)} Missing: {missing_lucas/len(llabl)} (LUCAS), {missing_pred/len(llabl)} (SG+)\n")
 
 plt.figure()
 markers = iter(["*", "o", "s", "v", "^", "d", "+"])
 for ustr in oaccs.keys():
     plt.plot(score_mins, oaccs[ustr], "--", marker = next(markers), label = "u="+ustr[1:])
 
+plt.plot(score_mins, oaccsgp, "k-", marker=".", label = "ECOSG+")
+plt.plot(score_mins, [oaccsg]*len(score_mins), "k:", label = "ECOSG")
 plt.grid()
 plt.title("ECOSG-ML evaluation against LUCAS for multiple score thresholds")
 plt.xlabel("Quality score threshold")
 plt.ylabel("Overall accuracy")
 plt.legend()
+figname = "ecosgml_esgp_ecosg_vs_lucas"
+figdir = os.path.join(mmt_repopath, "figures")
+figpath = os.path.join(figdir, figname + ".svg")
+plt.savefig(figpath)
+print("Figure saved:", figpath)
 plt.show(block=False)
