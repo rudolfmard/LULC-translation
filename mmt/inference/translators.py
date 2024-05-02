@@ -542,6 +542,52 @@ class MapMergerV2(MapTranslator):
         return torch.logical_and(top != 0, aux < self.score_min)
 
 
+class MapMergerV3(MapTranslator):
+    """Merge map with ECOCLIMAP-SG+ according to a quality flag criterion"""
+    
+    def __init__(
+        self,
+        source_map_path,
+        device="cpu",
+        remove_tmpdirs=True,
+        output_dtype="int16",
+        score_min = None,
+    ):
+        super().__init__("merger", device, remove_tmpdirs, output_dtype)
+        
+        auxmap = landcovers.ScoreECOSGplus(
+            transforms=mmt_transforms.ScoreTransform(divide_by=100),
+        )
+        if score_min is None:
+            self.score_min = self.auxmap.cutoff
+        else:
+            self.score_min = score_min
+        
+        bottommap = landcovers.EcoclimapSGplusV2p1(
+            score_min=self.score_min,
+        )
+        
+        topmap = landcovers.InferenceResults(path = source_map_path)
+        
+        self.landcover = auxmap & topmap & bottommap
+        
+    def predict_from_domain(self, qb):
+        """Run the translation from geographical domain
+        :qb: `torchgeo.datasets.utils.BoundingBox` or `mmt.utils.domains.GeoRectangle`
+        """
+        if not isinstance(qb, TgeoBoundingBox):
+            qb = qb.to_tgbox(self.bottommap.crs)
+        
+        top = self.landcover[qb]["mask"][0]
+        aux = self.landcover[qb]["image"]
+        bottom = self.landcover[qb]["mask"][1]
+        
+        return torch.where(self.criterion(top, aux), top, bottom).squeeze()
+    
+    def criterion(self, top, aux):
+        return torch.logical_and(top != 0, aux < self.score_min)
+
+
 class MapMergerProba(MapTranslator):
     """Merge map with ECOCLIMAP-SG+ according to a quality flag criterion"""
     
