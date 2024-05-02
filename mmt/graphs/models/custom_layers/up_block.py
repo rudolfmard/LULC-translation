@@ -74,11 +74,21 @@ class Up(nn.Module):
 
     def forward(self, x1, x2):
         x1 = self.up(x1)
+        
+        #print("---------- up block ----------")
+        #print(f"Input x1 shape: {x1.shape}")
+        #print(f"Input x2 shape: {x2.shape}")
 
         diffY = tensor([x2.size()[2] - x1.size()[2]])
         diffX = tensor([x2.size()[3] - x1.size()[3]])
 
+        #print(f"diffY (x2.shape[2]-x1.shape[2]): {diffY}")
+        #print(f"diffY (x2.shape[3]-x1.shape[3]): {diffX}")
+
         x1 = pad(x1, [diffX // 2, diffX - diffX // 2, diffY // 2, diffY - diffY // 2])
+
+        #print(f"pad x1 with [diffX // 2, diffX - diffX // 2, diffY // 2, diffY - diffY // 2] = {[diffX // 2, diffX - diffX // 2, diffY // 2, diffY - diffY // 2]}")
+        #print("------------------------------")
 
         x = cat([x2, x1], dim=1)
         return self.conv(x)
