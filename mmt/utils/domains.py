@@ -479,7 +479,8 @@ breznik_slovenia = GeoRectangle([15.1475, 15.1643, 45.5126, 45.5266])
 bakar_bay_croatia = GeoRectangle([14.5263, 14.5864, 45.266, 45.3126])
 # Estuary, small town and small island. France, Brittany
 plouguernau_estuary = GeoRectangle([-4.583359,-4.492722,48.567861,48.633022])
-
+# Large town, river to lake transition
+geneva = GeoRectangle([6.092434,6.202126,46.163782,46.239702])
 
 # Rare labels locations
 # Obtained with `python search_rare_labels.py`
