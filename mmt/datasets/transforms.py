@@ -214,11 +214,23 @@ class FlipTransform:
                 sample[k] = TF.vflip(sample[k])
         return sample
 
-class FillMissingWithNeighbors:
-    """Remplace missing data labels by most frequent non-missing neighbors"""
-    def __init__(self, missing_label = 0, neighboring_size = 1, key="mask"):
-        self.missing_label = missing_label
-        self.neighboring_size = neighboring_size
+# ======================
+# TransformsDictOrTensor
+# ======================
+
+class TransformsDictOrTensor:
+    """Abstract class for transforms that can be applied equally to tensor or to dict
+    
+    Overwrite the `transform` method and treat the argument as a tensor.
+    
+    
+    Examples
+    --------
+    >>> tdot = TransformsDictOrTensor(key = "mask")
+    >>> tdot(X)
+    >>> tdot({"mask":X})
+    """
+    def __init__(self, key="mask"):
         self.key = key
     
     def applytodict(transform):
@@ -233,6 +245,20 @@ class FillMissingWithNeighbors:
     
     @applytodict
     def __call__(self, x):
+        return self.transform(x)
+    
+    def transform(self, x):
+        raise NotImplementedError(f"Abstract class {self.__class__.__name__}. Inherit the class and overwrite the method")
+
+
+class FillMissingWithNeighbors(TransformsDictOrTensor):
+    """Remplace missing data labels by most frequent non-missing neighbors"""
+    def __init__(self, missing_label = 0, neighboring_size = 1, key="mask"):
+        super().__init__(key)
+        self.missing_label = missing_label
+        self.neighboring_size = neighboring_size
+    
+    def transform(self, x):
         w = torch.where(x == 0)
         nx, ny = x.shape
         for xz, yz in zip(*w):
@@ -250,6 +276,7 @@ class FillMissingWithNeighbors:
             x[xz, yz] = localmode
         
         return x
+
 
 class FloorDivMinus:
     """Floor division and substraction"""
