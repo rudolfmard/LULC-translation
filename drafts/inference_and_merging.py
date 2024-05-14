@@ -118,7 +118,7 @@ print(f"Inference complete. inference_tif_dir = {inference_tif_dir}")
 print("Merging the inference with ECOSG+")
 merging_dump_dir = os.path.join(inference_dump_dir, f"ecosgml-v2.0-{weights}.{domainname}.u{u_value}.sm{args.scoremin}")
 if not args.skip_merging:
-    merger = translators.MapMergerV3(inference_tif_dir, score_min = args.scoremin)
+    merger = translators.MapMergerV4(inference_tif_dir, score_min = args.scoremin)
     merging_dump_dir = merger.predict_from_large_domain(
         qdomain,
         output_dir=merging_dump_dir,

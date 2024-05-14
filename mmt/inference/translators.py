@@ -240,18 +240,8 @@ class MapTranslator:
                 l_pred, iqb, self.landcover.crs, os.path.join(tmp_dir, tifpatchname), self.output_dtype
             )
         
-        
-        # with PatchIterator(tmp_dir) as pi:
-            # for tifpatchname, iqb in tqdm(pi, desc=f"Inference over {len(pi)} patches"):
-                # print("Next file to be written:", os.path.join(tmp_dir, tifpatchname))
-                # l_pred = self.predict_from_domain(iqb)
-                
-                # io.dump_labels_in_tif(
-                    # l_pred, iqb, self.landcover.crs, os.path.join(tmp_dir, tifpatchname), self.output_dtype
-                # )
-        
         if n_cluster_files > 0:
-            io.stitch_tif_files(tmp_dir, output_dir, n_max_files=n_cluster_files, prefix = self.__class__.__name__, verbose = True)
+            io.stitch_tif_files(tmp_dir, output_dir, n_max_files=n_cluster_files, prefix = os.path.basename(output_dir), verbose = True)
         else:
             shutil.copytree(tmp_dir, output_dir, dirs_exist_ok=True)
         
@@ -532,9 +522,17 @@ class MapMergerV2(MapTranslator):
         if not isinstance(qb, TgeoBoundingBox):
             qb = qb.to_tgbox(self.bottommap.crs)
         
-        top = self.topmap[qb]["mask"]
-        aux = self.auxmap[qb]["image"]
         bottom = self.bottommap[qb]["mask"]
+        
+        try:
+            aux = self.auxmap[qb]["image"]
+        except IndexError:
+            aux = torch.zeros_like(bottom)
+        
+        try:
+            top = self.topmap[qb]["mask"]
+        except IndexError:
+            top = torch.zeros_like(bottom)
         
         return torch.where(self.criterion(top, aux), top, bottom).squeeze()
     
@@ -569,7 +567,7 @@ class MapMergerV3(MapTranslator):
         
         topmap = landcovers.InferenceResults(path = source_map_path)
         
-        self.landcover = auxmap & topmap & bottommap
+        self.landcover = auxmap | topmap | bottommap
         
     def predict_from_domain(self, qb):
         """Run the translation from geographical domain
@@ -641,6 +639,69 @@ class MapMergerProba(MapTranslator):
         x_esgp = self.esgp[qb]
         
         return self.predict_from_data(x_infres["image"].squeeze(), x_qflags["mask"].squeeze(), x_esgp["mask"].squeeze())
+
+
+class MapMergerV4(MapTranslator):
+    """Merge map with ECOCLIMAP-SG+ according to a quality flag criterion"""
+    
+    def __init__(
+        self,
+        source_map_path,
+        device="cpu",
+        remove_tmpdirs=True,
+        output_dtype="int16",
+        score_min = None,
+    ):
+        super().__init__("merger", device, remove_tmpdirs, output_dtype)
+        
+        self.score = landcovers.ScoreECOSGplus(
+            transforms=mmt_transforms.ScoreTransform(divide_by=100),
+        )
+        if score_min is None:
+            self.score_min = self.score.cutoff
+        else:
+            self.score_min = score_min
+        
+        self.bguess = landcovers.SpecialistLabelsECOSGplus(res = self.score.res)
+        self.bguess.res = self.score.res
+        
+        self.ecosg = landcovers.EcoclimapSG(res = self.score.res)
+        self.ecosg.res = self.score.res
+        
+        self.infres = landcovers.InferenceResults(path = source_map_path, res = self.score.res)
+        self.infres.res = self.score.res
+        
+        self.landcover = self.ecosg
+        
+    def predict_from_domain(self, qb):
+        """Run the translation from geographical domain
+        :qb: `torchgeo.datasets.utils.BoundingBox` or `mmt.utils.domains.GeoRectangle`
+        """
+        if not isinstance(qb, TgeoBoundingBox):
+            qb = qb.to_tgbox(self.landcover.crs)
+        
+        x_ecosg = self.ecosg[qb]["mask"].squeeze()
+        
+        def safeget(lc, key="mask"):
+            try:
+                l = lc[qb][key].squeeze()
+            except IndexError:
+                l = torch.zeros_like(x_ecosg)
+            return l
+        
+        x_infres = safeget(self.infres)
+        x_bguess = safeget(self.bguess)
+        x_score = safeget(self.score, key="image")
+        
+        x_ = torch.where(x_score > self.score_min, x_bguess, x_infres)
+        x = torch.where(x_ == 0, x_ecosg, x_)
+        
+        if (x==0).sum() > 0:
+            # These print should not appear
+            print(f"{(x==0).sum()} zeros that shouldn't be there... {x.shape} {qb}")
+            print(f"Zeros: x_infres {(x_infres==0).sum()}, x_ecosg {(x_ecosg==0).sum()}, x_score {(x_score==0).sum()}, x_bguess {(x_bguess==0).sum()}, x_ {(x_==0).sum()}")
+        
+        return x
 
 
 
