@@ -537,11 +537,15 @@ def stitch_tif_files(input_dir, output_dir, n_max_files = 200, clustering = "kme
             if verbose and k % max(n_max_files//10, 1) == 0:
                 print(f"[{k}/{n_max_files}] Merging {len(ls[idx == k])} files into {dst_path}")
             
-            rasterio.merge.merge(
-                [os.path.join(input_dir, i) for i in ls[idx == k]],
-                dst_path = dst_path
-            )
-            n_files += 1
+            try:
+                rasterio.merge.merge(
+                    [os.path.join(input_dir, i) for i in ls[idx == k]],
+                    dst_path = dst_path
+                )
+                n_files += 1
+            except:
+                print(f"Problem with these {len(ls[idx == k])} files:", ls[idx == k])
+                raise Exception("Stop merging TIF files")
         else:
             if verbose:
                 print(f"[{k}/{n_max_files}] Merging {len(ls[idx == k])} files into {dst_path}. File not created.")
