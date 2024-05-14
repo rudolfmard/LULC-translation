@@ -1,0 +1,48 @@
+xp_name: outofbox2
+seed: 666
+cuda: true
+paths:
+    data_dir: /data/trieutord/MLULC
+    experiments_dir: /home/trieutord/Works/Physiography/gitsync/MT-MLULC/experiments
+versions:
+    ecosgplus: 1.4
+    ecosgml: 0.6
+dimensions:
+    n_channels_hiddenlay: 32
+    n_channels_embedding: 50
+    n_px_embedding: 600
+dataloader:
+    type: LandcoverToLandcoverDataLoader
+    params:
+        datasets: ["esawc-train.hdf5", "esgp-train.hdf5", "ecosg-train.hdf5"]
+        num_workers: 0
+        pos_enc: true
+        dataset_class: LandcoverToLandcoverNoJson
+training:
+    batch_size: 16
+    n_epochs: 200
+    tensorboard: false
+    validate_every: 1
+    print_inc: 10
+agent:
+    type: MultiLULCAgent
+    params:
+        startfrom: outofbox1
+model:
+    type: universal_embedding
+    name: UnivEmb
+    use_pos: false
+    params:
+        memory_monger: false
+        up_mode: bilinear
+        decoder_depth: 1
+        mode: light
+        pooling_factors: [3,3,3,3,3]
+        mul: false
+        softpos: false
+        decoder_atrou: true
+optimizer:
+    type: Adam
+    params:
+        lr: 0.0001
+
