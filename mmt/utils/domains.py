@@ -463,6 +463,8 @@ faroe_islands = GeoRectangle([-8.11, -5.88, 61.30, 62.54])
 large_sahara = GeoRectangle([-2, 21, 20, 34])
 # Small portion of Sahara, near Tripoli
 tripoli_sahara = GeoRectangle([11, 15, 30, 33])
+# Track missing data handling around islands and in Sahara
+canaries_morocco = GeoRectangle([-18.457031,-7.338867,24.567108,33.174342])
 # Reunion crops and forest
 reunion_crops = GeoRectangle([55.6638, 55.7004, -21.0505, -21.0150])
 # Small island
