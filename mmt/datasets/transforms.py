@@ -214,6 +214,42 @@ class FlipTransform:
                 sample[k] = TF.vflip(sample[k])
         return sample
 
+class FillMissingWithNeighbors:
+    """Remplace missing data labels by most frequent non-missing neighbors"""
+    def __init__(self, missing_label = 0, neighboring_size = 1, key="mask"):
+        self.missing_label = missing_label
+        self.neighboring_size = neighboring_size
+        self.key = key
+    
+    def applytodict(transform):
+        """Decorator to apply seaminglessly to dict or tensors"""
+        def wrappedtransform(self, x):
+            if isinstance(x, dict):
+                x[self.key] = transform(self, x[self.key])
+            else:
+                x = transform(self, x)
+            return x
+        return wrappedtransform
+    
+    @applytodict
+    def __call__(self, x):
+        w = torch.where(x == 0)
+        nx, ny = x.shape
+        for xz, yz in zip(*w):
+            x0 = max(0,  xz-self.neighboring_size)
+            x1 = min(nx, xz+self.neighboring_size+1)
+            y0 = max(0,  yz-self.neighboring_size)
+            y1 = min(ny, yz+self.neighboring_size+1)
+            xx = x[x0:x1, y0:y1]
+            if len(xx[xx != 0]) > 0:
+                v,c = torch.unique(xx[xx != 0], return_counts = True)
+                localmode = v[c.argmax()]
+            else:
+                localmode = 0
+            
+            x[xz, yz] = localmode
+        
+        return x
 
 class FloorDivMinus:
     """Floor division and substraction"""
