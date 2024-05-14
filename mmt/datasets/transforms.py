@@ -278,65 +278,46 @@ class FillMissingWithNeighbors(TransformsDictOrTensor):
         return x
 
 
-class FloorDivMinus:
+class FloorDivMinus(TransformsDictOrTensor):
     """Floor division and substraction"""
     def __init__(self, div = 10, minus = 0, key="mask"):
+        super().__init__(key)
         self.div = div
         self.minus = minus
-        self.key = key
     
-    def __call__(self, x):
-        if isinstance(x, dict):
-            x[self.key] = x[self.key] // self.div - self.minus
-        else:
-            x = x // self.div - self.minus
-        return x
+    def transform(self, x): 
+        return x // self.div - self.minus
 
-class FillMissingWithSea:
+
+class FillMissingWithSea(TransformsDictOrTensor):
     """Remplace missing data labels by sea label"""
     def __init__(self, missing_label = 0, sea_label = 1, key="mask"):
+        super().__init__(key)
         self.missing_label = missing_label
         self.sea_label = sea_label
-        self.key = key
     
-    def __call__(self, x):
-        if isinstance(x, dict):
-            x[self.key][x[self.key] == self.missing_label] = self.sea_label
-        else:
-            x[x == self.missing_label] = self.sea_label
+    def transform(self, x):
+        x[x == self.missing_label] = self.sea_label
         return x
 
-class EsawcTransform:
+
+class EsawcTransform(TransformsDictOrTensor):
     def __init__(self, key="mask", threshold = 94):
-        self.key = key
+        super().__init__(key)
         self.threshold = threshold
-        
-    def __call__(self, x):
-        if isinstance(x, dict):
-            x[self.key][x[self.key] == 0] = 80
-            x[self.key] = torch.where(
-                x[self.key] < self.threshold,
-                x[self.key] // 10,
-                x[self.key] // 10 + 1
-            )
-        else:
-            x[x == 0] = 80
-            x = torch.where(x < self.threshold, x // 10, x // 10 + 1)
-        return x
     
-# EsawcTransform = tvt.Compose([FloorDivMinus(10, 0), FillMissingWithSea(0, 8)])
+    def transform(self, x):
+        x[x == 0] = 80  # Replace zeros by sea
+        return torch.where(x < self.threshold, x // 10, x // 10 + 1)
 
-class ScoreTransform:
+
+class ScoreTransform(TransformsDictOrTensor):
     """Remove nan and divide by 100"""
     def __init__(self, divide_by=1, key="image"):
-        self.key = key
+        super().__init__(key)
         self.divide_by = divide_by
     
-    def __call__(self, x):
-        if isinstance(x, dict):
-            x[self.key] = torch.where(x[self.key].isnan(), 0, x[self.key])/self.divide_by
-        else:
-            x = torch.where(x.isnan(), 0, x)/self.divide_by
-        return x
+    def transform(self, x):
+        return torch.where(x.isnan(), 0, x)/self.divide_by
 
 # EOF
