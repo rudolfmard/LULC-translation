@@ -16,9 +16,10 @@ qb = domains.dublin_city.to_tgbox()
 for lc in [
     landcovers.EcoclimapSG(),
     landcovers.ESAWorldCover(transforms = mmt_transforms.EsawcTransform()),
+    landcovers.EcoclimapSGMLv3(member = 0),
     landcovers.EcoclimapSGplus(),
     landcovers.QualityFlagsECOSGplus(),
-    landcovers.EcoclimapSGML(),
+    # landcovers.EcoclimapSGML(),
     landcovers.SpecialistLabelsECOSGplus(),
     landcovers.ScoreECOSGplus(transforms = mmt_transforms.ScoreTransform(divide_by=100)),
     landcovers.EcoclimapSGplusV2(),

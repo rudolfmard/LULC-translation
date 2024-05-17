@@ -1289,4 +1289,34 @@ class EcoclimapSGMLv2(CompositeMap):
     def criterion(self, top, aux):
         return torch.logical_and(top != 0, aux < self.score_min)
 
+
+class EcoclimapSGMLv3(TorchgeoLandcover):
+    """ECOSG-ML with all members"""
+    path = os.path.join(mmt_repopath, "data", "tiff_data", "ECOCLIMAP-SG-ML")
+    labels = ecoclimapsg_labels
+    cmap = ecoclimapsg_cmap
+    crs = rasterio.crs.CRS.from_epsg(4326)
+    
+    def __init__(self, member = 0, crs=None, res=None, transforms=None, tgeo_init=True):
+        if member in [0, None]:
+            self.u = None
+            self.member = 0
+        elif member in [1, 0.82]:
+            self.u = 0.82
+            self.member = 1
+        elif member in [2, 0.11]:
+            self.u = 0.11
+            self.member = 2
+        elif member in [3, 0.47]:
+            self.u = 0.47
+            self.member = 3
+        elif member in [4, 0.34]:
+            self.u = 0.34
+            self.member = 4
+        elif member in [5, 0.65]:
+            self.u = 0.65
+            self.member = 5
+        
+        self.path = os.path.join(self.path, "ecosgml-v2.0-mb" + str(self.member).zfill(3))
+        super().__init__(crs=crs, res=res, transforms=transforms, tgeo_init=tgeo_init)
 # EOF
