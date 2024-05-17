@@ -22,6 +22,10 @@ from mmt.utils import domains, misc, scores
 basepath_to_tif = "/data/trieutord/MLULC/outputs/v2/infres-v2.0-v2outofbox2.eurat"
 path_to_lucas = "/data/trieutord/LUCAS/EU_LUCAS_2022.csv"
 
+u_values = [None, 0.82, 0.11, 0.47, 0.34, 0.65]
+# u_values = [0.82, 0.11, 0.47, 0.34, 0.65]
+score_mins = [0.001, 0.1, 0.3, 0.5, 0.7]
+
 # Read LUCAS
 # ----------
 lucas_label_hierarchy = {
@@ -38,22 +42,22 @@ lucas_label_hierarchy = {
         "C"
     ],
     "shrubs": [
-        "D", "E1"
+        "D"
     ],
     "grassland": [
-        "E2", "E3"
+        "E"
     ],
     "crops": [
-        "B",
+        "B"
     ],
     "flooded_veg": [
         "H", "F3"
     ],
     "urban": [
-        "A1", "A2"
+        "A"
     ],
 }
-# primary_labels = [s[0].upper() + s[1:] for s in lucas_label_hierarchy.keys()]
+
 primary_labels = list(lucas_label_hierarchy.keys())
 tlabels, plabels = scores.prefix_labels(primary_labels)
 
@@ -67,23 +71,70 @@ def convert_ilabel_to_primary(ilabel):
         if landcovers.ecoclimapsg_labels[ilabel] in landcovers.ecoclimapsg_label_hierarchy[primary]:
             return primary
 
+def get_lonlat_value(lon, lat, landcover):
+    qb = domains.GeoRectangle(
+        misc.get_bbox_from_coord(lon, lat, landcover.res, location = "center"),
+        fmt = "lbrt"
+    ).to_tgbox(landcover.crs)
+    
+    if landcover.is_image:
+        key = "image"
+    else:
+        key = "mask"
+        
+    return landcover[qb][key].item()
+
+@misc.memoize
+def compute_lucas_confusion_matrix(llons, llats, llabl, landcover, desc = "Comp. to LUCAS"):
+    cmx = pd.DataFrame(index = tlabels, columns = plabels, data = np.zeros((len(primary_labels), len(primary_labels))))
+    missing_lucas = 0
+    missing_pred = 0
+    
+    for lon, lat, lab in tqdm(zip(llons, llats, llabl), total = len(llabl), desc = desc):
+        if lab is None:
+            missing_lucas += 1
+            continue
+        
+        plab = convert_ilabel_to_primary(get_lonlat_value(lon, lat, landcover))
+        
+        if plab is None:
+            missing_pred += 1
+            continue
+            
+        cmx.loc["t" + lab, "p" + plab] += 1
+    
+    return cmx
+
 lucas = pd.read_csv(path_to_lucas, dtype=str, usecols = ["POINT_LONG", "POINT_LAT", "SURVEY_LC1"]).dropna()
 print(f"LUCAS data loaded: {lucas.shape}")
 llons = lucas["POINT_LONG"].values.astype(float)
 llats = lucas["POINT_LAT"].values.astype(float)
 llabl = np.array([convert_lucas_to_primary(l) for l in lucas["SURVEY_LC1"]])
-# nmax = 20000
+# nmax = 2000
 # idx = np.random.randint(0, len(llabl), nmax)
 # llons = llons[idx]
 # llats = llats[idx]
 # llabl = llabl[idx]
 
-qscore = landcovers.ScoreECOSGplus(transforms=mmt_transforms.ScoreTransform(divide_by=100))
+print(f"\n        ======= ECOSG =======\t  {time.ctime()}")
+ecosg = landcovers.EcoclimapSG()
+cmxsg = compute_lucas_confusion_matrix(llons=llons, llats=llats, llabl=llabl, landcover=ecosg, desc = f"Comp. ECOSG to LUCAS")
+oaccsg = scores.oaccuracy(cmxsg)
+print(f"ECOSG overall accuracy: {oaccsg}\n")
 
+print(f"\n        ======= ECOSG+ =======\t  {time.ctime()}")
+oaccsgp = []
+for ism, score_min in enumerate(score_mins):
+    print(f"    ----- score_min={score_min} -----\t [{ism}/{len(score_mins)}]")
+    esgpv2 = landcovers.EcoclimapSGplusV2p1(score_min = score_min)
+    cmx = compute_lucas_confusion_matrix(llons=llons, llats=llats, llabl=llabl, landcover=esgpv2, desc = f"Comp. SG+ to LUCAS (smin = {score_min})")
+    oacc = scores.oaccuracy(cmx)
+    oaccsgp.append(oacc)
+    print(f"[smin = {score_min}] Overall accuracy: {oacc}\n")
+
+
+qscore = landcovers.ScoreECOSGplus(transforms=mmt_transforms.ScoreTransform(divide_by=100))
 oaccs = {}
-u_values = [None, 0.82, 0.11, 0.47, 0.34, 0.65]
-# u_values = [0.82, 0.11, 0.47, 0.34, 0.65]
-score_mins = [0.001, 0.1, 0.3, 0.5, 0.7]
 for u in u_values:
     path_to_tif = basepath_to_tif + ".u" + str(u)
     print(path_to_tif, os.path.isdir(path_to_tif))
@@ -105,83 +156,25 @@ for iu, u in enumerate(u_values):
             if lab is None:
                 missing_lucas += 1
                 continue
-            
-            qb1 = domains.GeoRectangle(
-                misc.get_bbox_from_coord(lon, lat, qscore.res, location = "center"),
-                fmt = "lbrt"
-            ).to_tgbox(qscore.crs)
-            scoreval = qscore[qb1]["image"].item()
+            scoreval = get_lonlat_value(lon, lat, qscore)
             
             if scoreval > score_min:
-                # plab = altlab
-                qb2 = domains.GeoRectangle(
-                    misc.get_bbox_from_coord(lon, lat, esgpv2.res, location = "center"),
-                    fmt = "lbrt"
-                ).to_tgbox(esgpv2.crs)
-                plab = convert_ilabel_to_primary(esgpv2[qb2]["mask"].item())
+                # plab = sgplab
+                plab = convert_ilabel_to_primary(get_lonlat_value(lon, lat, esgpv2))
             else:
                 # plab = ifrlab
-                qb0 = domains.GeoRectangle(
-                    misc.get_bbox_from_coord(lon, lat, infres.res, location = "center"),
-                    fmt = "lbrt"
-                ).to_tgbox(infres.crs)
-                plab = convert_ilabel_to_primary(infres[qb0]["mask"].item())
-            
+                plab = convert_ilabel_to_primary(get_lonlat_value(lon, lat, infres))
+                
             if plab is None:
                 missing_pred += 1
                 continue
             
             cmx.loc["t" + lab, "p" + plab] += 1
         
-        oacc = scores.oaccuracy(cmx)*(len(llabl) - missing_lucas - missing_pred)/len(llabl)
+        oacc = scores.oaccuracy(cmx)
         oaccs[ustr].append(oacc)
         print(f"[{ustr}, smin = {score_min}] Overall accuracy: {scores.oaccuracy(cmx)} Missing: {missing_lucas/len(llabl)} (LUCAS), {missing_pred/len(llabl)} (SG-ML)\n")
 
-print(f"\n        ======= ECOSG =======\t [{iu}/{len(u_values)}] {time.ctime()}")
-ecosg = landcovers.EcoclimapSG()
-cmxsg = pd.DataFrame(index = tlabels, columns = plabels, data = np.zeros((len(primary_labels), len(primary_labels))))
-for lon, lat, lab in tqdm(zip(llons, llats, llabl), total = len(llabl), desc = f"Comp. ECOSG to LUCAS"):
-    if lab is None:
-        continue
-    
-    qb3 = domains.GeoRectangle(
-        misc.get_bbox_from_coord(lon, lat, ecosg.res, location = "center"),
-        fmt = "lbrt"
-    ).to_tgbox(ecosg.crs)
-    blab = convert_ilabel_to_primary(ecosg[qb3]["mask"].item())
-    cmxsg.loc["t" + lab, "p" + blab] += 1
-
-oaccsg = scores.oaccuracy(cmxsg)
-print(f"ECOSG overall accuracy: {oaccsg}\n")
-
-print(f"\n        ======= ECOSG+ =======\t [{iu}/{len(u_values)}] {time.ctime()}")
-oaccsgp = []
-for ism, score_min in enumerate(score_mins):
-    print(f"    ----- score_min={score_min} -----\t [{ism}/{len(score_mins)}]")
-    esgpv2 = landcovers.EcoclimapSGplusV2p1(score_min = score_min)
-    cmx = pd.DataFrame(index = tlabels, columns = plabels, data = np.zeros((len(primary_labels), len(primary_labels))))
-    missing_lucas = 0
-    missing_pred = 0
-    for lon, lat, lab in tqdm(zip(llons, llats, llabl), total = len(llabl), desc = f"Comp. SG+ to LUCAS (smin = {score_min})"):
-        if lab is None:
-            missing_lucas += 1
-            continue
-        
-        qb2 = domains.GeoRectangle(
-            misc.get_bbox_from_coord(lon, lat, esgpv2.res, location = "center"),
-            fmt = "lbrt"
-        ).to_tgbox(esgpv2.crs)
-        plab = convert_ilabel_to_primary(esgpv2[qb2]["mask"].item())
-        
-        if plab is None:
-            missing_pred += 1
-            continue
-        
-        cmx.loc["t" + lab, "p" + plab] += 1
-    
-    oacc = scores.oaccuracy(cmx)*(len(llabl) - missing_lucas - missing_pred)/len(llabl)
-    oaccsgp.append(oacc)
-    print(f"[smin = {score_min}] Overall accuracy: {scores.oaccuracy(cmx)} Missing: {missing_lucas/len(llabl)} (LUCAS), {missing_pred/len(llabl)} (SG+)\n")
 
 plt.figure()
 markers = iter(["*", "o", "s", "v", "^", "d", "+"])
