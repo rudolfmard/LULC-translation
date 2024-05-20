@@ -33,7 +33,11 @@ def main():
     # Create the Agent and pass all the configuration to it then run it..
     agent_class = getattr(multiLULC, config.agent.type)
     agent = agent_class(config, **config.agent.params)
-    agent.run()
+    print("Agent created!")
+    try:
+        agent.run()
+    except:
+        print("agent.run encountered an error!")
     agent.finalize()
 
 

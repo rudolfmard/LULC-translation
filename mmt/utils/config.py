@@ -195,6 +195,6 @@ def process_config(config_file, quiet=False):
         # logging.getLogger().info("The pipeline of the project will begin now.")
         # logging.getLogger().info(" THE Configuration of your experiment ..")
         # logging.getLogger().info(str(config))
-    
+    print("Config processed successfully!")
     return config
 

@@ -41,12 +41,15 @@ class MultiLULCAgent(base.BaseAgent):
         if self.cuda:
             torch.cuda.manual_seed(self.manual_seed)
             self.device = torch.device("cuda")
-            self.logger.info("Program will run on *****GPU-CUDA***** ")
+            #self.logger.info("Program will run on *****GPU-CUDA***** ")
+            print("Program will run on *****GPU-CUDA***** ")
             misc.print_cuda_statistics()
+            print("print_cuda_statistics run")
         else:
             self.device = torch.device("cpu")
             torch.manual_seed(self.manual_seed)
-            self.logger.info("Program will run on *****CPU*****\n")
+            #self.logger.info("Program will run on *****CPU*****\n")
+            print(("Program will run on *****CPU*****\n"))
         
         # Define data_loader
         DataLoader = getattr(landcover_to_landcover, self.config.dataloader.type)
@@ -156,7 +159,8 @@ class MultiLULCAgent(base.BaseAgent):
             filename = os.path.join(self.config.paths.checkpoint_dir, file_name)
             
         try:
-            self.logger.info(f"Loading checkpoint '{filename}'")
+            #self.logger.info(f"Loading checkpoint '{filename}'")
+            print(f"Loading checkpoint '{filename}'")
             checkpoint = torch.load(filename)
 
             self.current_epoch = checkpoint["epoch"]
@@ -173,20 +177,13 @@ class MultiLULCAgent(base.BaseAgent):
                     self.coord_model = torch.nn.DataParallel(self.coord_model)
             self.manual_seed = checkpoint["manual_seed"]
 
-            self.logger.info(
-                "Checkpoint loaded successfully from '{}' at (epoch {}) at (iteration {})\n".format(
-                    filename,
-                    checkpoint["epoch"],
-                    checkpoint["iteration"],
-                )
-            )
+            #self.logger.info("Checkpoint loaded successfully from '{}' at (epoch {}) at (iteration {})\n".format(filename, checkpoint["epoch"], checkpoint["iteration"],))
+            print(f"Checkpoint loaded successfully from '{filename}' at (epoch {checkpoint["epoch"]}) at (iteration {checkpoint["iteration"]})\n")
         except OSError as e:
-            self.logger.info(
-                "No checkpoint exists from '{}'. Skipping...".format(
-                    self.config.paths.checkpoint_dir
-                )
-            )
-            self.logger.info("**First time to train**")
+            #self.logger.info("No checkpoint exists from '{}'. Skipping...".format(self.config.paths.checkpoint_dir))
+            print(f"No checkpoint exists from '{self.config.paths.checkpoint_dir}'. Skipping...")
+            #self.logger.info("**First time to train**")
+            print("**First time to train**")
 
     def save_checkpoint(
         self,
@@ -235,7 +232,8 @@ class MultiLULCAgent(base.BaseAgent):
             self.test()
             torch.cuda.empty_cache()
         except KeyboardInterrupt:
-            self.logger.info("You have entered CTRL+C.. Wait to finalize")
+            #self.logger.info("You have entered CTRL+C.. Wait to finalize")
+            print("You have entered CTRL+C.. Wait to finalize")
 
     def train(self):
         """
@@ -250,16 +248,13 @@ class MultiLULCAgent(base.BaseAgent):
                 # for i, d in enumerate(self.datasets)
             # }
 
-        self.logger.info("Start training !")
+        #self.logger.info("Start training !")
+        print("Start training !")
         for epoch in range(1, self.config.training.n_epochs + 1):
-            self.logger.info("")
-            self.logger.info(
-                " ------- Training epoch {}/{} ({:.0f}%) ------- ".format(
-                    epoch,
-                    self.config.training.n_epochs,
-                    100 * epoch/self.config.training.n_epochs,
-                )
-            )
+            #self.logger.info("")
+            print("")
+            #self.logger.info(" ------- Training epoch {}/{} ({:.0f}%) ------- ".format(epoch, self.config.training.n_epochs, 100 * epoch/self.config.training.n_epochs,))
+            print(f" ------- Training epoch {epoch}/{self.config.training.n_epochs} ({100 * epoch/self.config.training.n_epochs:.0f}%) ------- ")
             
             train_loss = self.train_one_epoch()
             
@@ -268,13 +263,8 @@ class MultiLULCAgent(base.BaseAgent):
             
             torch.cuda.empty_cache()
             if epoch % self.config.training.validate_every == 0:
-                self.logger.info(
-                    " - - - - Validation epoch {}/{} ({:.0f}%) - - - - ".format(
-                        epoch,
-                        self.config.training.n_epochs,
-                        100 * epoch/self.config.training.n_epochs,
-                    )
-                )
+                #self.logger.info(" - - - - Validation epoch {}/{} ({:.0f}%) - - - - ".format(epoch,self.config.training.n_epochs,100 * epoch/self.config.training.n_epochs,))
+                print(f" - - - - Validation epoch {epoch}/{self.config.training.n_epochs} ({100 * epoch/self.config.training.n_epochs:.0f}%) - - - - ")
                 
                 validation_loss = self.validate()
                 
@@ -284,7 +274,8 @@ class MultiLULCAgent(base.BaseAgent):
                 tmp = [v for v in validation_loss.values()]
                 vl = np.mean([item for elem in tmp for item in elem])
                 if vl < loss_ref:
-                    self.logger.info("Best model for now  : saved ")
+                    #self.logger.info("Best model for now  : saved ")
+                    print(("Best model for now  : saved "))
                     loss_ref = vl
                     self.save_checkpoint(is_best=1)
                     io.export_autoencoder_to_onnx(self.config.xp_name, lc_in = "esawc", lc_out = "encoder", onnxfilename = "best_[default].onnx")
@@ -306,7 +297,8 @@ class MultiLULCAgent(base.BaseAgent):
                     plot_validation_loss,
                     savefig=os.path.join(self.config.paths.out_dir, "loss.png"),
                 )
-        self.logger.info("Training ended!")
+        #self.logger.info("Training ended!")
+        print("Training ended!")
 
     @timeit
     def train_one_epoch(self):
@@ -411,9 +403,8 @@ class MultiLULCAgent(base.BaseAgent):
                     
                     # if dlcount[dl] % max(int(len(dl)/20), 1) == 0:
                     if dlcount[dl] % self.config.training.print_inc == 0:
-                        self.logger.info(
-                            f"[ep {self.current_epoch}, i={self.current_iteration}][batch {dlcount[dl]}/{len(dl)}] train\t {source} -> {target} \t Losses: rec={loss_rec.item()}, emb={loss_emb.item()}, tra={loss_tra.item()}"
-                        )
+                        #self.logger.info(f"[ep {self.current_epoch}, i={self.current_iteration}][batch {dlcount[dl]}/{len(dl)}] train\t {source} -> {target} \t Losses: rec={loss_rec.item()}, emb={loss_emb.item()}, tra={loss_tra.item()}")
+                        print(f"[ep {self.current_epoch}, i={self.current_iteration}][batch {dlcount[dl]}/{len(dl)}] train\t {source} -> {target} \t Losses: rec={loss_rec.item()}, emb={loss_emb.item()}, tra={loss_tra.item()}")
                     
                     ### Backward propagation
                     loss.backward()
@@ -498,9 +489,8 @@ class MultiLULCAgent(base.BaseAgent):
                                 data.get("coordinate"),
                             )
                             im_save[source][target] = 1
-                            self.logger.info(
-                                f"Figure saved (patch plot {source} -> {target})"
-                            )
+                            #self.logger.info(f"Figure saved (patch plot {source} -> {target})")
+                            print(f"Figure saved (patch plot {source} -> {target})")
                         if im_save[source][source] == 0:
                             out_img = self.data_loader.plot_samples_per_epoch(
                                 source_patch,
@@ -520,7 +510,8 @@ class MultiLULCAgent(base.BaseAgent):
         return plot_loss
 
     def test(self):
-        self.logger.info(f"Start testing on {len(self.data_loader.test_loader)} items...")
+        #self.logger.info(f"Start testing on {len(self.data_loader.test_loader)} items...")
+        print(f"Start testing on {len(self.data_loader.test_loader)} items...")
         with torch.no_grad():
             ##### Read ground_truth_file
             self.load_checkpoint(default_bestmodel_filename)
@@ -622,7 +613,8 @@ class MultiLULCAgent(base.BaseAgent):
         Finalizes all the operations of the 2 Main classes of the process, the operator and the data loader
         :return:
         """
-        self.logger.info("Please wait while finalizing the operation.. Thank you")
+        #self.logger.info("Please wait while finalizing the operation.. Thank you")
+        print("Please wait while finalizing the operation.. Thank you")
         torch.cuda.empty_cache()
         if self.config.training.tensorboard:
             self.tensorboard_process.kill()

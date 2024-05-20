@@ -11,7 +11,7 @@ class BaseAgent:
 
     def __init__(self, config):
         self.config = config
-        self.logger = logging.getLogger("Agent")
+        #self.logger = logging.getLogger("Agent")
 
     def load_checkpoint(self, file_name):
         """
