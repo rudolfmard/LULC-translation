@@ -259,21 +259,33 @@ class FillMissingWithNeighbors(TransformsDictOrTensor):
         self.neighboring_size = neighboring_size
     
     def transform(self, x):
-        w = torch.where(x == 0)
-        nx, ny = x.shape
+        if x.ndim == 2:
+            nx, ny = x.shape
+            x2 = x
+        elif x.ndim == 3:
+            nc, nx, ny = x.shape
+            x2 = x[0,:,:]
+        elif x.ndim == 4:
+            nb, nc, nx, ny = x.shape
+            x2 = x[0,0,:,:]
+        else:
+            raise ValueError(f"Unable to deal with {x.ndim}-dimensional tensors")
+        
+        w = torch.where(x2 == 0)
+        
         for xz, yz in zip(*w):
             x0 = max(0,  xz-self.neighboring_size)
             x1 = min(nx, xz+self.neighboring_size+1)
             y0 = max(0,  yz-self.neighboring_size)
             y1 = min(ny, yz+self.neighboring_size+1)
-            xx = x[x0:x1, y0:y1]
+            xx = x2[x0:x1, y0:y1]
             if len(xx[xx != 0]) > 0:
                 v,c = torch.unique(xx[xx != 0], return_counts = True)
                 localmode = v[c.argmax()]
             else:
                 localmode = 0
             
-            x[xz, yz] = localmode
+            x2[xz, yz] = localmode
         
         return x
 
