@@ -47,6 +47,11 @@ parser.add_argument(
     dest="fillsea",
     action="store_false",
 )
+parser.add_argument(
+    "--other-kwargs",
+    help="Additional arguments for the landcover init (ex: --lcname ScoreECOSGplus --other-kwargs cutoff=0.3,tgeo_init=False)",
+    dest="okwargs",
+)
 args = parser.parse_args()
 
 lcname = args.lcname
@@ -55,7 +60,10 @@ res = args.res
 lcpath = args.lcpath
 fillsea = args.fillsea
 
-kwargs = dict()
+if args.okwargs is not None:
+    kwargs = {e.split("=")[0]:eval(e.split("=")[1]) for e in args.okwargs.split(",")}
+else:
+    kwargs = dict()
 
 if os.path.exists(lcpath):
     lcname = "InferenceResults"
