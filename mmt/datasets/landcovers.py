@@ -530,13 +530,17 @@ class ScoreMap(tgd.RasterDataset):
     element_size = 32  # Bytes per pixel
     separate_files = False
     crs = None
-    cutoff = 0.525
-    cmap = LinearSegmentedColormap.from_list(
-        "mycmap", [(0.0, "red"), (cutoff, "gainsboro"), (1, "green")]
-    )
-    cmap = [tuple(c[:3]) for c in cmap(np.linspace(0, 1, 100))]
+    # cmap = LinearSegmentedColormap.from_list(
+        # "mycmap", [(0.0, "red"), (cutoff, "gainsboro"), (1, "green")]
+    # )
+    # cmap = [tuple(c[:3]) for c in cmap(np.linspace(0, 1, 100))]
 
-    def __init__(self, crs=None, res=None, transforms=None, tgeo_init=True):
+    def __init__(self, cutoff = 0.525, crs=None, res=None, transforms=None, tgeo_init=True):
+        self.cutoff = cutoff
+        cmap = LinearSegmentedColormap.from_list(
+            "mycmap", [(0.0, "red"), (cutoff, "gainsboro"), (1, "green")]
+        )
+        self.cmap = [tuple(c[:3]) for c in cmap(np.linspace(0, 1, 100))]
         if tgeo_init:
             super().__init__(self.path, crs=crs, res=res, transforms=transforms)
 
@@ -1296,27 +1300,58 @@ class EcoclimapSGMLv3(TorchgeoLandcover):
     labels = ecoclimapsg_labels
     cmap = ecoclimapsg_cmap
     crs = rasterio.crs.CRS.from_epsg(4326)
+    n_members = 6
     
     def __init__(self, member = 0, crs=None, res=None, transforms=None, tgeo_init=True):
         if member in [0, None]:
             self.u = None
-            self.member = 0
+            self._member = 0
         elif member in [1, 0.82]:
             self.u = 0.82
-            self.member = 1
+            self._member = 1
         elif member in [2, 0.11]:
             self.u = 0.11
-            self.member = 2
+            self._member = 2
         elif member in [3, 0.47]:
             self.u = 0.47
-            self.member = 3
+            self._member = 3
         elif member in [4, 0.34]:
             self.u = 0.34
-            self.member = 4
+            self._member = 4
         elif member in [5, 0.65]:
             self.u = 0.65
-            self.member = 5
+            self._member = 5
+        else:
+            raise ValueError(f"Unknown member specification {member}")
         
         self.path = os.path.join(self.path, "ecosgml-v2.0-mb" + str(self.member).zfill(3))
         super().__init__(crs=crs, res=res, transforms=transforms, tgeo_init=tgeo_init)
+    
+    @property
+    def member(self):
+        return self._member
+    
+    @member.setter
+    def member(self, newmember):
+        self.path = os.path.dirname(self.path)
+        self.__init__(member=newmember, crs=self.crs, res=self.res, transforms=self.transforms)
+    
+    def plot_all_members(
+        self,
+        qb: tgd.BoundingBox,
+        suptitle: Optional[str] = None,
+    ):
+        fig, axs = plt.subplots(2, 3, figsize=(12, 12))
+        for mb, ax in enumerate(axs.flatten()):
+            self.member = mb
+            # self.path = os.path.dirname(self.path)
+            # self.__init__(member=mb, crs=self.crs, res=self.res, transforms=self.transforms)
+            x = self[qb]
+            fig, ax = self.plot(x, title = f"Member {mb} (u={self.u})", show_colorbar = False, figax = (fig, ax))
+        
+        if suptitle is not None:
+            plt.suptitle(suptitle)
+            
+        fig.tight_layout()
+        return fig, axs
 # EOF
