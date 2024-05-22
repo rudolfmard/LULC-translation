@@ -42,10 +42,16 @@ parser.add_argument(
     default="",
 )
 parser.add_argument(
-    "--no-fillsea",
-    help="Do not replace missing data by sea",
+    "--fillsea",
+    help="Replace missing data by sea",
     dest="fillsea",
-    action="store_false",
+    action="store_true",
+)
+parser.add_argument(
+    "--fillneighbors",
+    help="Replace missing data by the most common label in the neighborhood",
+    dest="fillneighbors",
+    action="store_true",
 )
 parser.add_argument(
     "--other-kwargs",
@@ -59,6 +65,7 @@ domainname = args.domainname
 res = args.res
 lcpath = args.lcpath
 fillsea = args.fillsea
+fillneighbors = args.fillneighbors
 
 if args.okwargs is not None:
     kwargs = {e.split("=")[0]:eval(e.split("=")[1]) for e in args.okwargs.split(",")}
@@ -84,6 +91,9 @@ if lcname == "ScoreECOSGplus":
 
 if fillsea:
     kwargs.update(transforms=mmt_transforms.FillMissingWithSea(0, 1))
+
+if fillneighbors:
+    kwargs.update(transforms=mmt_transforms.FillMissingWithNeighbors(0, 1))
 
 if res:
     res = float(res)
