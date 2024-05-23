@@ -9,12 +9,17 @@ Class diagram
 -------------
 torchgeo.datasets.RasterDataset  (-> https://torchgeo.readthedocs.io/en/v0.4.1/api/datasets.html#rasterdataset)
  ├── TorchgeoLandcover
- |   ├── EcoclimapSG
  |   ├── ESAWorldCover
- |   └── EcoclimapSGplus
- |       ├── QualityFlagsECOSGplus
- |       ├── InferenceResults
- |       └── EcoclimapSGML
+ |   ├── EcoclimapSG
+ |   |   ├── SpecialistLabelsECOSGplus
+ |   |   ├── InferenceResults
+ |   |   └── EcoclimapSGML
+ |   └── CompositeMap
+ |       ├── EcoclimapSGplus
+ |       └── EcoclimapSGMLcomposite
+ |   
+ ├── ScoreMap
+ |   └── ScoreECOSGplus
  |   
  └── ProbaLandcover
      └── InferenceResultsProba
@@ -22,30 +27,27 @@ torchgeo.datasets.RasterDataset  (-> https://torchgeo.readthedocs.io/en/v0.4.1/a
 OpenStreetMap
 """
 import os
+import sys
 import time
-import torch
-import numpy as np
-import netCDF4 as nc
-import rasterio
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-from matplotlib.colors import ListedColormap, LinearSegmentedColormap
-import cartopy.crs as ccrs
-import cartopy.io.img_tiles as cimgt
-import torchgeo.datasets as tgd
 from typing import Any, Dict, Optional
 
+import cartopy.crs as ccrs
+import cartopy.io.img_tiles as cimgt
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import netCDF4 as nc
+import numpy as np
+import rasterio
+import torch
+import torchgeo.datasets as tgd
+from matplotlib.colors import LinearSegmentedColormap, ListedColormap
+
 from mmt import _repopath_ as mmt_repopath
-from mmt.utils import misc
-from mmt.utils import domains
 from mmt.datasets import transforms as mmt_transforms
+from mmt.utils import domains, misc
 
 # VARIABLES
 # ============
-# default_ecosgplus_version = "0.3.e2"
-default_ecosgplus_version = "1.4"
-default_ecosgml_version = "0.6"
-
 
 ecoclimapsg_labels = """0. no data
 1. sea and oceans
@@ -84,7 +86,7 @@ ecoclimapsg_labels = """0. no data
     "\n"
 )
 
-irish_ecosg_labels = """0. gan sonraí
+ecoclimapsg_labels_irish = """0. gan sonraí
 1. farraige agus aigéin
 2. lochanna
 3. aibhneacha
@@ -158,9 +160,7 @@ ecoclimapsg_cmap = [
     (128, 128, 128),
 ]
 
-
 n_ecoclimapsg_labels = len(ecoclimapsg_labels)
-
 
 ecoclimapsg_label_hierarchy = {
     "water": [
@@ -217,21 +217,6 @@ ecoclimapsg_label_hierarchy = {
 }
 
 
-def parse_version_infos(path):
-    """Read all the fields from the file version-info.txt"""
-    version_file = os.path.join(path, "version-infos.txt")
-    assert os.path.isfile(
-        version_file
-    ), f"Missing version file. Please create file {version_file}'"
-    infos = {}
-    with open(version_file, "r") as f:
-        for l in f.readlines():
-            k, v = l.split("=")
-            infos[k] = v.split('"')[1]
-
-    return infos
-
-
 # BASE CLASSES
 # ============
 
@@ -248,6 +233,15 @@ class TorchgeoLandcover(tgd.RasterDataset):
     ----------
     transforms: Optional[Callable[[dict[str, Any]], dict[str, Any]]]
         A function/transform that takes an input sample and returns a transformed version
+
+    crs: `rasterio.crs.CRS`
+        Coordinate reference system in which the land cover will be transformed
+
+    res: float
+        Resolution in units of CRS
+
+    tgeo_init: bool
+        If False, the Rtree index will not be created. Faster but no access to data (useful e.g. for using plots only)
 
 
     Main attributes
@@ -285,7 +279,8 @@ class TorchgeoLandcover(tgd.RasterDataset):
     is_image = False
     element_size = 8  # Bytes per pixel
     separate_files = False
-    crs = None
+    # crs = None  # Native coordinate reference system
+    orig_crs = None  # Native coordinate reference system
     labels = []
     cmap = []
 
@@ -293,6 +288,14 @@ class TorchgeoLandcover(tgd.RasterDataset):
         self.n_labels = len(self.labels)
         if tgeo_init:
             super().__init__(self.path, crs=crs, res=res, transforms=transforms)
+
+        if crs is not None:
+            self.crs = crs
+        else:
+            self.crs = self.crs = self.orig_crs
+
+        if res is not None:
+            self.res = res
 
     def get_bytes_for_domain(self, qb):
         """Return the size in bytes that would be necessary to load the query domain (does not load anything)"""
@@ -321,8 +324,31 @@ class TorchgeoLandcover(tgd.RasterDataset):
         show_titles: bool, default=True
             True if a title is diplayed over the figure.
 
+        show_colorbar: bool, default=True
+            True if a title is diplayed over the figure.
+
+        title: str
+            If provided, the string given here is put as local title of the figure.
+
         suptitle: str
             If provided, the string given here is put as main title of the figure.
+
+
+        Returns
+        -------
+        fig, ax
+            Figure and axes of the plot
+
+        Example
+        -------
+        >>> import matplotlib.pyplot as plt
+        >>> from mmt.datasets import landcovers
+        >>> from mmt.utils import domains
+        >>> lc = landcovers.EcoclimapSG()
+        >>> qb = domains.dublin_city.to_tgbox(lc.crs)
+        >>> x = lc[qb]
+        >>> lc.plot(x)
+        >>> plt.show()
         """
         assert len(self.labels) == len(
             self.cmap
@@ -357,7 +383,6 @@ class TorchgeoLandcover(tgd.RasterDataset):
         if suptitle is not None:
             plt.suptitle(suptitle)
 
-        # fig.tight_layout()
         return fig, ax
 
     def _export_to_dirhdr(self, sample, ofn_dir=None):
@@ -473,7 +498,44 @@ class TorchgeoLandcover(tgd.RasterDataset):
         return ofn_npy
 
     def export(self, sample, ofn):
-        """Export a sample"""
+        """Export a sample.
+
+        The file format is determined by the extension of ofn. Currently, the
+        supported formats are 'dir', 'tif', 'nc', and 'npy'.
+
+
+        Parameters
+        ----------
+        sample : dict
+            Sample to export. The sample must contain 'mask' attribute, and 'mask'
+            must be a 2D numpy array.
+
+        ofn : str
+            Output filename.
+
+
+        Returns
+        -------
+        ofn : str
+            Path to the output file.
+
+
+        Example
+        -------
+        >>> from mmt.datasets import landcovers
+        >>> from mmt.utils import domains
+        >>> lc = landcovers.EcoclimapSG()
+        >>> qb = domains.dublin_city.to_tgbox(lc.crs)
+        >>> x = lc[qb]
+        >>> lc.export(x, "dublin_city_ecoclimapsg_2024.dir")
+        ('dublin_city_ecoclimapsg_2024.dir', 'dublin_city_ecoclimapsg_2024.hdr')
+        >>> lc.export(x, "dublin_city_ecoclimapsg_2024.nc")
+        'dublin_city_ecoclimapsg_2024.nc'
+        >>> lc.export(x, "dublin_city_ecoclimapsg_2024.tif")
+        'dublin_city_ecoclimapsg_2024.tif'
+        >>> lc.export(x, "dublin_city_ecoclimapsg_2024.npy")
+        'dublin_city_ecoclimapsg_2024.npy'
+        """
         if ofn.endswith(".dir"):
             return self._export_to_dirhdr(sample, ofn)
         elif ofn.endswith(".nc"):
@@ -489,39 +551,27 @@ class TorchgeoLandcover(tgd.RasterDataset):
 class ScoreMap(tgd.RasterDataset):
     """Abstract class for score dataset using TorchGeo.
 
-    This class is a [customised TorchGeo RasterDataset](https://torchgeo.readthedocs.io/en/latest/tutorials/custom_raster_dataset.html).
-    The customisation is in the precision of the path where to find the data and several
-    attributes that are common to all score maps classes.
+    Similar to TorchgeoLandcover, but for real-valued data instead of integer.
+    Consequently, they share most of attributes and methods.
+
 
 
     Parameters
     ----------
+    cutoff: float
+        Threshold for the score colormap (red below, green above)
+
     transforms: Optional[Callable[[dict[str, Any]], dict[str, Any]]]
         A function/transform that takes an input sample and returns a transformed version
 
-
-    Main attributes
-    ---------------
-    path: str
-        Absolute path to the root directory containing the data
-
-    filename_glob: str
-        Glob expression used to search for files
-
-    is_image: bool=True
-        Probabilities are seen as imagery to avoid casting data to integers
-
-    separate_files: bool=False
-        True if data is stored in a separate file for each band, else False.
-
     crs: `rasterio.crs.CRS`
-        Coordinate reference system in which the land cover is
+        Coordinate reference system in which the land cover will be transformed
 
+    res: float
+        Resolution in units of CRS
 
-    Main methods
-    ------------
-    __getitem__: Return a sample of data
-    plot: Plot a sample of data
+    tgeo_init: bool
+        If False, the Rtree index will not be created. Faster but no access to data (useful e.g. for using plots only)
     """
 
     path = ""
@@ -529,13 +579,11 @@ class ScoreMap(tgd.RasterDataset):
     is_image = True
     element_size = 32  # Bytes per pixel
     separate_files = False
-    crs = None
-    # cmap = LinearSegmentedColormap.from_list(
-        # "mycmap", [(0.0, "red"), (cutoff, "gainsboro"), (1, "green")]
-    # )
-    # cmap = [tuple(c[:3]) for c in cmap(np.linspace(0, 1, 100))]
+    orig_crs = None
 
-    def __init__(self, cutoff = 0.525, crs=None, res=None, transforms=None, tgeo_init=True):
+    def __init__(
+        self, cutoff=0.525, crs=None, res=None, transforms=None, tgeo_init=True
+    ):
         self.cutoff = cutoff
         cmap = LinearSegmentedColormap.from_list(
             "mycmap", [(0.0, "red"), (cutoff, "gainsboro"), (1, "green")]
@@ -543,6 +591,14 @@ class ScoreMap(tgd.RasterDataset):
         self.cmap = [tuple(c[:3]) for c in cmap(np.linspace(0, 1, 100))]
         if tgeo_init:
             super().__init__(self.path, crs=crs, res=res, transforms=transforms)
+
+        if crs is not None:
+            self.crs = crs
+        else:
+            self.crs = self.crs = self.orig_crs
+
+        if res is not None:
+            self.res = res
 
     def get_bytes_for_domain(self, qb):
         """Return the size in bytes that would be necessary to load the query domain (does not load anything)"""
@@ -568,13 +624,37 @@ class ScoreMap(tgd.RasterDataset):
         Parameters
         ----------
         sample: dict
-            Sample of data. Labels must be accessible under the 'mask' key.
+            Sample of data. Labels must be accessible under the 'image' key.
 
         show_titles: bool, default=True
             True if a title is diplayed over the figure.
 
+        show_colorbar: bool, default=True
+            True if a title is diplayed over the figure.
+
+        title: str
+            If provided, the string given here is put as local title of the figure.
+
         suptitle: str
             If provided, the string given here is put as main title of the figure.
+
+
+        Returns
+        -------
+        fig, ax
+            Figure and axes of the plot
+
+        Example
+        -------
+        >>> import matplotlib.pyplot as plt
+        >>> from mmt.datasets import landcovers
+        >>> from mmt.datasets import transforms as mmt_transforms
+        >>> from mmt.utils import domains
+        >>> sc = landcovers.ScoreECOSGplus(transforms=mmt_transforms.ScoreTransform(100))
+        >>> qb = domains.dublin_city.to_tgbox(sc.crs)
+        >>> x = sc[qb]
+        >>> sc.plot(x)
+        >>> plt.show()
         """
         if figax is None:
             fig, ax = plt.subplots(1, 1, figsize=(12, 12))
@@ -603,45 +683,18 @@ class ScoreMap(tgd.RasterDataset):
 class ProbaLandcover(tgd.RasterDataset):
     """Abstract class for land cover probability dataset using TorchGeo.
 
-    This class is a [customised TorchGeo RasterDataset](https://torchgeo.readthedocs.io/en/latest/tutorials/custom_raster_dataset.html).
-    The customisation is in the precision of the path where to find the data and several
-    attributes that are common to all land covers probability classes.
+    Similar to TorchgeoLandcover, but probabilities data instead of cover classes.
+    Consequently, they share most of attributes and methods.
 
 
     Parameters
     ----------
-    transforms: Optional[Callable[[dict[str, Any]], dict[str, Any]]]
-        A function/transform that takes an input sample and returns a transformed version
+    Same as TorchgeoLandcover.
 
 
-    Main attributes
-    ---------------
-    path: str
-        Absolute path to the root directory containing the data
-
-    filename_glob: str
-        Glob expression used to search for files
-
-    is_image: bool=True
-        Probabilities are seen as imagery to avoid casting data to integers
-
-    separate_files: bool=False
-        True if data is stored in a separate file for each band, else False.
-
-    crs: `rasterio.crs.CRS`
-        Coordinate reference system in which the land cover is
-
-    labels: list of str
-        Labels names
-
-    cmap: list of 3-tuple
-        Colormap for each
-
-
-    Main methods
-    ------------
-    __getitem__: Return a sample of data
-    plot: Plot a sample of data
+    Notes
+    -----
+    Not used in the paper, but useful for exploring the data.
     """
 
     path = ""
@@ -649,7 +702,7 @@ class ProbaLandcover(tgd.RasterDataset):
     is_image = True
     element_size = 32  # Bytes per pixel
     separate_files = False
-    crs = None
+    orig_crs = None
     labels = []
     cmap = []
 
@@ -657,6 +710,14 @@ class ProbaLandcover(tgd.RasterDataset):
         self.n_labels = len(self.labels)
         if tgeo_init:
             super().__init__(self.path, crs=crs, res=res, transforms=transforms)
+
+        if crs is not None:
+            self.crs = crs
+        else:
+            self.crs = self.orig_crs
+
+        if res is not None:
+            self.res = res
 
     def get_bytes_for_domain(self, qb):
         """Return the size in bytes that would be necessary to load the query domain (does not load anything)"""
@@ -675,7 +736,7 @@ class ProbaLandcover(tgd.RasterDataset):
         suptitle: Optional[str] = None,
         figax=None,
     ):
-        """Plot a sample of data.
+        """Plot a sample of data: colors are the sum of labels original colors multiplied by their probability.
 
 
         Parameters
@@ -686,8 +747,31 @@ class ProbaLandcover(tgd.RasterDataset):
         show_titles: bool, default=True
             True if a title is diplayed over the figure.
 
+        show_colorbar: bool, default=True
+            True if a title is diplayed over the figure.
+
+        title: str
+            If provided, the string given here is put as local title of the figure.
+
         suptitle: str
             If provided, the string given here is put as main title of the figure.
+
+
+        Returns
+        -------
+        fig, ax
+            Figure and axes of the plot
+
+        Example
+        -------
+        >>> import matplotlib.pyplot as plt
+        >>> from mmt.datasets import landcovers
+        >>> from mmt.utils import domains
+        >>> lc = landcovers.EcoclimapSG()
+        >>> qb = domains.dublin_city.to_tgbox(lc.crs)
+        >>> x = lc[qb]
+        >>> lc.plot(x)
+        >>> plt.show()
         """
         assert len(self.labels) == len(
             self.cmap
@@ -822,6 +906,11 @@ class OpenStreetMap:
 
     default_patch_size: float, default=0.05
         Patch size in lon/lat degrees. Overwritten by plot argument, if provided.
+
+
+    Notes
+    -----
+    Not used in the paper.
     """
 
     def __init__(self, details=3, default_patch_size=0.05):
@@ -896,51 +985,81 @@ class OpenStreetMap:
 class CompositeMap(TorchgeoLandcover):
     """Composite map built with a bottom map, a top map, and an overwritting criterion.
     The composite map returns the top map if the criterion is met and the bottom if it is not.
-    
-    
+
+
+    Parameters
+    ----------
+    topmap: mmt.datasets.landcovers
+        Map to use when the criterion is met
+
+    bottommap: mmt.datasets.landcovers
+        Map to use when the criterion is not met
+
+    auxmap: mmt.datasets.landcovers, optional
+        Auxilary map used in the criterion
+
+
     Example
     -------
-    from mmt.datasets import landcovers
-    ecosg = landcovers.EcoclimapSG()
-    mstar = landcovers.SpecialistLabelsECOSGplus()
-    score = landcovers.ScoreECOSGplus(transforms = mmt_transforms.ScoreTransform(divide_by=100))
-    
-    compo = landcovers.CompositeMap(topmap = mstar, bottommap = ecosg)
+    >>> from mmt.datasets import transforms as mmt_transforms
+    >>> from mmt.datasets import landcovers
+    >>> from mmt.utils import domains
+    >>> qb = domains.dublin_city.to_tgbox()
+
+    # ECOSG+ as a composite map
+    >>> ecosg = landcovers.EcoclimapSG()
+    >>> mstar = landcovers.SpecialistLabelsECOSGplus()
+    >>> score = landcovers.ScoreECOSGplus(transforms = mmt_transforms.ScoreTransform(divide_by=100))
+    >>> compo = landcovers.CompositeMap(topmap = mstar, bottommap = ecosg, auxmap = score)
+    >>> x = compo[qb]
+
+    # ECOSG-ML as a composite map
+    >>> esgp = landcovers.EcoclimapSGplus()
+    >>> infres = landcovers.InferenceResults("path/to/inference_results")
+    >>> score = landcovers.ScoreECOSGplus(transforms = mmt_transforms.ScoreTransform(divide_by=100))
+    >>> compo = landcovers.CompositeMap(topmap = infres, bottommap = esgp, auxmap = score)
+    >>> x = compo[qb]
     """
+
     labels = ecoclimapsg_labels
     cmap = ecoclimapsg_cmap
-    
-    def __init__(self, topmap, bottommap, auxmap = None):
+
+    def __init__(self, topmap, bottommap, auxmap=None):
         self.topmap = topmap
         self.bottommap = bottommap
         self.auxmap = auxmap
-        
+
         if self.auxmap is None:
             self.maps = topmap & bottommap
         else:
             self.maps = topmap & bottommap & auxmap
-            
+
+        self._crs = self.maps.crs
+        self._res = self.maps.res
         self.index = self.maps.index
-        self.crs = self.maps.crs
-        self.res = self.maps.res
         self.n_labels = len(self.labels)
-    
+
     def __getitem__(self, qb):
         x = self.maps[qb]
         top = x["mask"][0]
         bottom = x["mask"][1]
-        
+
         if self.auxmap is None:
             aux = None
         elif self.auxmap.is_image:
             aux = x["image"]
         else:
             aux = x["mask"][2]
-        
-        return {"mask": torch.where(self.criterion(top, aux), top, bottom)}
-    
+
+        return {
+            "mask": torch.where(self.criterion(top, aux), top, bottom),
+            "bbox": qb,
+            "crs": self.crs,
+        }
+
     def criterion(self, top, aux):
         return top != 0
+
 
 # CHILD CLASSES
 # =============
@@ -948,16 +1067,13 @@ class CompositeMap(TorchgeoLandcover):
 
 class EcoclimapSG(TorchgeoLandcover):
     path = os.path.join(mmt_repopath, "data", "tiff_data", "ECOCLIMAP-SG")
-    filename_glob = "ECOCLIMAP-SG-Eurat.tif"
     labels = ecoclimapsg_labels
     cmap = ecoclimapsg_cmap
-    crs = rasterio.crs.CRS.from_epsg(4326)
+    orig_crs = rasterio.crs.CRS.from_epsg(4326)
 
 
 class ESAWorldCover(TorchgeoLandcover):
-    path = os.path.join(
-        mmt_repopath, "data", "tiff_data", "ESA-WorldCover-2021"
-    )  # , "ESA_WorldCover_10m_2021_v200_60deg_macrotile_N30E000")
+    path = os.path.join(mmt_repopath, "data", "tiff_data", "ESA-WorldCover-2021")
     labels = [
         "No data",
         "Tree cover",
@@ -986,71 +1102,10 @@ class ESAWorldCover(TorchgeoLandcover):
         (0, 207, 117),
         (250, 230, 160),
     ]
-    crs = rasterio.crs.CRS.from_epsg(4326)
+    orig_crs = rasterio.crs.CRS.from_epsg(4326)
 
 
-class EcoclimapSGplus(TorchgeoLandcover):
-    path = os.path.join(
-        mmt_repopath,
-        "data",
-        "tiff_data",
-        "ECOCLIMAP-SG-plus",
-        f"ecosgp-labels-v{default_ecosgplus_version}",
-    )
-    labels = ecoclimapsg_labels
-    cmap = ecoclimapsg_cmap
-    crs = rasterio.crs.CRS.from_string(parse_version_infos(path)["crs"])
-
-    def __init__(self, version=default_ecosgplus_version, **kwargs):
-        super().__init__(**kwargs)
-        self.path = os.path.join(
-            os.path.dirname(self.path),
-            os.path.basename(self.path).replace(
-                f"-v{default_ecosgplus_version}", f"-v{version}"
-            ),
-        )
-
-    def get_version(self):
-        """Read the version from the file version-info.txt"""
-        version_file = os.path.join(self.path, "version-infos.txt")
-        assert os.path.isfile(
-            version_file
-        ), f"Missing version file. Please create file {version_file} with a line 'version=xxx'"
-        with open(version_file, "r") as f:
-            for l in f.readlines():
-                if "version=" in l:
-                    return l.split('"')[1]
-
-
-class QualityFlagsECOSGplus(EcoclimapSGplus):
-    path = os.path.join(
-        mmt_repopath,
-        "data",
-        "tiff_data",
-        "ECOCLIMAP-SG-plus",
-        f"ecosgp-qflags-v{default_ecosgplus_version}",
-    )
-    labels = [
-        "0. no data",
-        "1. high agreement score + ECOSG",
-        "2. high agreement score",
-        "3. low agreement score + ECOSG",
-        "4. low agreement score",
-        "5. no mode match + ECOSG",
-        "6. no mode match",
-    ]
-    cmap = [
-        (0, 0, 0),
-        (134, 218, 134),
-        (60, 182, 60),
-        (255, 191, 191),
-        (255, 127, 127),
-        (255, 64, 64),
-        (255, 0, 0),
-    ]
-
-
-class InferenceResults(EcoclimapSGplus):
+class InferenceResults(EcoclimapSG):
     """ECOSG-like land cover maps (same labels) loaded from a given path"""
 
     def __init__(self, path, crs=None, res=None, transforms=None, tgeo_init=True):
@@ -1072,21 +1127,11 @@ class InferenceResultsProba(ProbaLandcover):
         super().__init__(crs=crs, res=res, transforms=transforms, tgeo_init=tgeo_init)
 
 
-class EcoclimapSGML(EcoclimapSGplus):
-    """ECOCLIMAP-SG-ML land cover map. Release merge between ECOSG+ and inference results"""
+class SpecialistLabelsECOSGplus(EcoclimapSG):
+    """Best-guess map from specialist maps (ECOSG+ before gap-filling with ECOSG)
 
-    path = os.path.join(
-        mmt_repopath,
-        "data",
-        "tiff_data",
-        "ECOCLIMAP-SG-ML",
-        "tif",
-        f"ECOCLIMAP-SG-ML-v{default_ecosgml_version}",
-    )
-
-
-class SpecialistLabelsECOSGplus(EcoclimapSGplus):
-    """Identified secondary labels from specialist maps (ECOSG+ before gap-filling with ECOSG)"""
+    See Bessardon et al. (2024), Equation 9
+    """
 
     path = os.path.join(
         mmt_repopath,
@@ -1112,142 +1157,13 @@ class ScoreECOSGplus(ScoreMap):
     crs = rasterio.crs.CRS.from_epsg(4326)
 
 
-class EcoclimapSGplusV2(EcoclimapSGplus):
-    """ECOCLIMAP-SG+ version 2.
-
-    Version 2 merges the labels of `SpecialistLabelsECOSGplus` and `EcoclimapSG`
-    according to the score values from `ScoreECOSGplus`. Where score values
-    are higher than the `score_min` parameter, the label are the ones from
-    `SpecialistLabelsECOSGplus`. Elsewhere, they are the ones from `EcoclimapSG`.
-
-    A sample returned by this class will have the land cover labels in the
-    'mask' entry and the score values in the 'image' entry.
-
-
-    Parameters
-    ----------
-    score_min: float
-        Score threshold to take `SpecialistLabelsECOSGplus` or `EcoclimapSG` labels
-
-    kwargs: Any parameters of the classes `SpecialistLabelsECOSGplus`, `ScoreECOSGplus` and `EcoclimapSG`
-
-
-    Examples
-    --------
-    >>> from mmt.datasets import landcovers
-    >>> from mmt.utils import domains
-    >>> qb = domains.dublin_city.to_tgbox()
-    >>> esgpv2 = landcovers.EcoclimapSGplusV2()
-    Converting EcoclimapSG res from 0.002777777777777778 to 0.0005389891704717129
-    Converting EcoclimapSGplusV2 res from 0.0 to 0.0005389891704717129
-    >>> x = esgpv2[qb]
-    >>> x["mask"]   # -> label values
-    tensor([[[32, 32, 32,  ..., 29, 29, 29],
-             [32, 32, 32,  ..., 29, 29, 29],
-             [32, 32, 32,  ..., 29, 29, 29],
-             ...,
-             [29, 29, 29,  ..., 29, 29, 29],
-             [29, 29, 29,  ..., 29, 29, 29],
-             [29, 29, 29,  ..., 29, 29, 29]]])
-    >>> x["image"]  # -> score values
-    tensor([[[0.4406, 0.5213, 0.4047,  ..., 0.7823, 0.7661, 0.7371],
-             [0.3987, 0.4311, 0.4547,  ..., 0.7891, 0.6753, 0.7673],
-             [0.3943, 0.4552, 0.4740,  ..., 0.7654, 0.7658, 0.7748],
-             ...,
-             [0.7549, 0.7787, 0.7331,  ..., 0.7686, 0.7779, 0.4826],
-             [0.7808, 0.7807, 0.7534,  ..., 0.7669, 0.7141, 0.4752],
-             [0.7598, 0.7286, 0.7288,  ..., 0.7387, 0.6076, 0.4138]]])
-    """
-
-    path = os.path.join(mmt_repopath, "data", "tiff_data", "ECOCLIMAP-SG-plus", "v2")
-    element_size = 32 + 8  # Bytes per pixel
-
-    def __init__(
-        self, score_min=0.525, crs=None, res=None, transforms=None, tgeo_init=True
-    ):
-        self.score_min = score_min
-
-        scoremap = ScoreECOSGplus(
-            transforms=mmt_transforms.ScoreTransform(divide_by=100),
-            crs=crs,
-            res=res,
-            tgeo_init=tgeo_init,
-        )
-        if res is not None:
-            scoremap.res = res
-        if crs is not None:
-            scoremap.crs = crs
-
-        self.maps = (
-            scoremap
-            & SpecialistLabelsECOSGplus(
-                crs=crs, res=res, transforms=transforms, tgeo_init=tgeo_init
-            )
-            & EcoclimapSG(crs=crs, res=res, transforms=transforms, tgeo_init=tgeo_init)
-        )
-        self.index = self.maps.index
-        self.crs = self.maps.crs
-        self.res = self.maps.res
-        self.n_labels = len(self.labels)
-
-    def __getitem__(self, qb):
-        x = self.maps[qb]
-        esgp, score = self.getitem_from_data(x["image"], x["mask"][0], x["mask"][1])
-
-        return {"mask": esgp, "image": score}
-
-    def getitem_from_data(self, score, splab, ecosg):
-        """Perform the substitution of labels where the score is not high enough.
-
-
-        Parameters
-        ----------
-        score: ndarray of shape (nx, ny)
-            Matrix of score values
-
-        splab: ndarray of shape (nx, ny)
-            Matrix of specialist labels (the M* map)
-
-        ecosg: ndarray of shape (nx, ny)
-            Matrix of ECOSG labels
-
-
-        Returns
-        -------
-        esgp: ndarray of shape (nx, ny)
-            Matrix of ECOSG+ labels (M* where score is above threshold, ECOSG elsewhere)
-
-        score: ndarray of shape (nx, ny)
-            Matrix of score values with 0 where M* has missing data
-        """
-        # Set score to 0 when specialist maps give no data
-        score = torch.where(splab == 0, 0, score)
-
-        # Take specialist maps where score is above threshold, ECOSG elsewhere
-        esgp = torch.where(score > self.score_min, splab, ecosg)
-
-        return esgp, score
-
-    def __repr__(self):
-        return repr(self.maps)
-
-    def get_version(self):
-        return "2.0"
-
-
-class EcoclimapSGplusV2p1(CompositeMap):
+class EcoclimapSGplus(CompositeMap):
     """ECOSG+ as a CompositeMap"""
+
     def __init__(self, score_min=0.525, crs=None, res=None, tgeo_init=True):
         self.score_min = score_min
-        
-        topmap = SpecialistLabelsECOSGplus(
-            crs=crs, res=res, tgeo_init=tgeo_init
-        )
-        if res is not None:
-            topmap.res = res
-        if crs is not None:
-            topmap.crs = crs
-        
+
+        topmap = SpecialistLabelsECOSGplus(crs=crs, res=res, tgeo_init=tgeo_init)
         bottommap = EcoclimapSG(crs=crs, res=res, tgeo_init=tgeo_init)
         auxmap = ScoreECOSGplus(
             transforms=mmt_transforms.ScoreTransform(divide_by=100),
@@ -1256,53 +1172,88 @@ class EcoclimapSGplusV2p1(CompositeMap):
             tgeo_init=tgeo_init,
         )
         super().__init__(topmap, bottommap, auxmap)
-        
+
     def criterion(self, top, aux):
         return torch.logical_and(top != 0, aux > self.score_min)
 
 
-class EcoclimapSGMLv2(CompositeMap):
-    """ECOSG-ML as a CompositeMap from InferenceResults"""
-    def __init__(self, path_to_infres, crs=None, res=None, tgeo_init=True):
-        
+class EcoclimapSGMLcomposite(CompositeMap):
+    """ECOSG-ML as a CompositeMap from InferenceResults
+
+    Allows to modify the score threshold, but takes only the member provided at the inference path.
+
+
+    Parameters
+    ----------
+    path_to_infres: str
+        Path to the InferenceResults tiff files
+
+    score_lim: float
+        Score threshold
+
+    crs: `rasterio.crs.CRS`
+        Coordinate reference system in which the land cover will be transformed
+
+    res: float
+        Resolution in units of CRS
+
+    tgeo_init: bool
+        If False, the Rtree index will not be created. Faster but no access to data (useful e.g. for using plots only)
+    """
+
+    def __init__(
+        self, path_to_infres, score_lim=0.3, crs=None, res=None, tgeo_init=True
+    ):
+
         assert os.path.isdir(path_to_infres), f"No directory found at {path_to_infres}"
-        
+
+        self.score_lim = score_lim
+
         topmap = InferenceResults(
             path=path_to_infres, crs=crs, res=res, tgeo_init=tgeo_init
         )
-        if res is not None:
-            topmap.res = res
-        if crs is not None:
-            topmap.crs = crs
-        
         auxmap = ScoreECOSGplus(
+            cutoff=self.score_lim,
             transforms=mmt_transforms.ScoreTransform(divide_by=100),
             crs=crs,
             res=res,
             tgeo_init=tgeo_init,
         )
-        self.score_min = auxmap.cutoff
-        
-        bottommap = EcoclimapSGplusV2p1(
-            score_min=self.score_min, crs=crs, res=res, tgeo_init=tgeo_init
+        bottommap = EcoclimapSGplus(
+            score_min=self.score_lim, crs=crs, res=res, tgeo_init=tgeo_init
         )
-        
-        bottommap = EcoclimapSG(crs=crs, res=res, tgeo_init=tgeo_init)
+
         super().__init__(topmap, bottommap, auxmap)
-        
+
     def criterion(self, top, aux):
-        return torch.logical_and(top != 0, aux < self.score_min)
+        return torch.logical_and(top != 0, aux < self.score_lim)
 
 
-class EcoclimapSGMLv3(TorchgeoLandcover):
-    """ECOSG-ML with all members"""
+class EcoclimapSGML(EcoclimapSG):
+    """ECOSG-ML with all members
+
+    Score threshold fixed at the value which created the TIF files, but easy to switch the members
+
+
+    Parameters
+    ----------
+    member: float or int
+        Member (integer) or `u` value (float) to use
+
+    crs: `rasterio.crs.CRS`
+        Coordinate reference system in which the land cover will be transformed
+
+    res: float
+        Resolution in units of CRS
+
+    tgeo_init: bool
+        If False, the Rtree index will not be created. Faster but no access to data (useful e.g. for using plots only)
+    """
+
     path = os.path.join(mmt_repopath, "data", "tiff_data", "ECOCLIMAP-SG-ML")
-    labels = ecoclimapsg_labels
-    cmap = ecoclimapsg_cmap
-    crs = rasterio.crs.CRS.from_epsg(4326)
     n_members = 6
-    
-    def __init__(self, member = 0, crs=None, res=None, transforms=None, tgeo_init=True):
+
+    def __init__(self, member=0, crs=None, res=None, transforms=None, tgeo_init=True):
         if member in [0, None]:
             self.u = None
             self._member = 0
@@ -1323,35 +1274,72 @@ class EcoclimapSGMLv3(TorchgeoLandcover):
             self._member = 5
         else:
             raise ValueError(f"Unknown member specification {member}")
-        
-        self.path = os.path.join(self.path, "ecosgml-v2.0-mb" + str(self.member).zfill(3))
+
+        self.path = os.path.join(
+            self.path, "ecosgml-v2.0-mb" + str(self.member).zfill(3)
+        )
         super().__init__(crs=crs, res=res, transforms=transforms, tgeo_init=tgeo_init)
-    
+
     @property
     def member(self):
         return self._member
-    
+
     @member.setter
     def member(self, newmember):
         self.path = os.path.dirname(self.path)
-        self.__init__(member=newmember, crs=self.crs, res=self.res, transforms=self.transforms)
-    
+        self.__init__(
+            member=newmember, crs=self.crs, res=self.res, transforms=self.transforms
+        )
+
     def plot_all_members(
         self,
         qb: tgd.BoundingBox,
         suptitle: Optional[str] = None,
     ):
+        """Plot all members on a given domain. Conversely to other landcovers.plot methods, this one takes a BoundingBox as input.
+
+
+        Parameters
+        ----------
+        qb: BoundingBox
+            Domain to be plotted
+
+        suptitle: str
+            If provided, the string given here is put as main title of the figure.
+
+
+        Returns
+        -------
+        fig, ax
+            Figure and axes of the plot
+
+        Example
+        -------
+        >>> from mmt.datasets import landcovers
+        >>> from mmt.utils import domains
+        >>> lc = landcovers.EcoclimapSGML()
+        >>> qb = domains.dublin_city.to_tgbox(lc.crs)
+        >>> fig, axs = lc.plot_all_members(qb)
+        >>> fig.show()
+        """
         fig, axs = plt.subplots(2, 3, figsize=(12, 12))
         for mb, ax in enumerate(axs.flatten()):
             self.member = mb
             # self.path = os.path.dirname(self.path)
             # self.__init__(member=mb, crs=self.crs, res=self.res, transforms=self.transforms)
             x = self[qb]
-            fig, ax = self.plot(x, title = f"Member {mb} (u={self.u})", show_colorbar = False, figax = (fig, ax))
-        
+            fig, ax = self.plot(
+                x,
+                title=f"Member {mb} (u={self.u})",
+                show_colorbar=False,
+                figax=(fig, ax),
+            )
+
         if suptitle is not None:
             plt.suptitle(suptitle)
-            
+
         fig.tight_layout()
         return fig, axs
+
+
 # EOF
