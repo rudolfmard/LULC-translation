@@ -483,6 +483,14 @@ bakar_bay_croatia = GeoRectangle([14.5263, 14.5864, 45.266, 45.3126])
 plouguernau_estuary = GeoRectangle([-4.583359,-4.492722,48.567861,48.633022])
 # Large town, river to lake transition
 geneva = GeoRectangle([6.092434,6.202126,46.163782,46.239702])
+# LCZ1?
+london_city = GeoRectangle([-0.117073,-0.067978,51.498485,51.531280])
+# Low quality score
+lecce_italy = GeoRectangle([18.091049,18.277130,40.254377,40.412973])
+rural_andalousia = GeoRectangle([-4.293423,-4.235573,36.836493,36.885387])
+elhichria_tunisia = GeoRectangle([9.390907,9.509354,34.832687,34.921408])
+subotica_serbia = GeoRectangle([19.620895,19.814529,46.020330,46.176502])
+iziaslav_ukraine = GeoRectangle([26.711884,26.902084,50.037297,50.178657])
 
 # Rare labels locations
 # Obtained with `python search_rare_labels.py`
