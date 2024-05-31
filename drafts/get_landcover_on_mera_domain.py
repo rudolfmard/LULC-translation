@@ -7,6 +7,7 @@ Export land cover on MERA domain.
 
 import os
 import yaml
+import shutil
 
 import easydict
 import rasterio
@@ -26,7 +27,7 @@ merageomfile = (
 )
 mllamdataroot = "/home/trieutord/Works/neural-lam/data/mera_example"
 xyfile = "/home/trieutord/Works/mera-explorer/mera_explorer/data/nwp_xy.npy"
-orofile = os.path.join(mllamdataroot, "static", "surface_geopotential.npy")
+orofile = "/home/trieutord/Works/mera-explorer/mera_explorer/data/orography.npy"
 
 with open(merageomfile, "r") as f:
     geom = yaml.safe_load(f)
@@ -83,8 +84,8 @@ oro = tgd.RasterDataset("/home/trieutord/Works/mera-explorer/mera_explorer/data"
 
 # Directly from the TIF file
 #---------------------------
-with rasterio.open("/home/trieutord/Works/mera-explorer/mera_explorer/data/mera_orography.tif", "r") as src:
-    z_tiff = src.read(1)
+with rasterio.open("/home/trieutord/Works/mera-explorer/mera_explorer/data/mera_surface_geopotential.tif", "r") as src:
+    z_tiff = src.read(1)/9.81
     tif_trans = src.transform
     tif_bounds = src.bounds
 
@@ -117,6 +118,7 @@ qb = oro.bounds
 x = both[qb]
 print(f"Loaded {x['mask'].shape}, {x['image'].shape} from {lc.__class__.__name__}")
 z_tgeo = rsz(x["image"]).squeeze()
+print(f"||z_grib - z_tgeo|| = {np.abs(z_grib - z_tgeo.numpy()/9.81).mean()}")
 
 # 2. Land cover
 qb = tgd.BoundingBox(minx=ll[0], maxx=ur[0], miny=ll[1], maxy=ur[1], mint=0, maxt=10e8)
@@ -135,8 +137,9 @@ fig = plt.figure()
 ax = plt.subplot(projection=ccrs.PlateCarree())
 ax.set_extent([-22, 15, 40, 65])
 ax.coastlines(resolution="50m", color="black", linewidth=0.5)
-ax.pcolormesh(xy[0], xy[1], c_tgeo, transform = datacrs, alpha = 0.5)
-ax.pcolormesh(xy[0], xy[1], z_tgeo, transform = datacrs, alpha = 0.5, cmap="terrain")
+ax.pcolormesh(xy[0], xy[1], c_tgeo, transform = datacrs, alpha = 0.9, cmap="YlGn")
+ax.pcolormesh(xy[0], xy[1], z_tgeo, transform = datacrs, alpha = 0.5, cmap="Reds")
+ax.pcolormesh(xy[0], xy[1], z_grib, transform = datacrs, alpha = 0.5, cmap="Blues")
 # ax.pcolormesh(xy[0], xy[1], rsz(x["image"]).squeeze() - z_grib, transform = datacrs)
 # ax.pcolormesh(xy[0], xy[1], z_grib, transform = datacrs)
 fig.show()
@@ -155,3 +158,8 @@ for mb in range(lc.n_members):
     c_tgeo = rsz(x["mask"]).squeeze()
     lc.export({"mask":c_tgeo}, lcnpy_file)
     print("Written: ", lcnpy_file)
+
+shutil.copy(orofile, "/data/trieutord/Marwa/npy/mera.orography.npy")
+print("Written: ", "/data/trieutord/Marwa/npy/mera.orography.npy")
+shutil.copy(xyfile, "/data/trieutord/Marwa/npy/mera.geographic_coordinates.npy")
+print("Written: ", "/data/trieutord/Marwa/npy/mera.geographic_coordinates.npy")
