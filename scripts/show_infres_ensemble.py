@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 """Multiple land-cover/land-use Maps Translation (MMT)
 
-Generation of land cover members on few patches
+Generation of land cover members on few patches.
 
-python -i show_ensembles.py --weights v2outofbox2 --u 0.82,0.11,0.47,0.34,0.65
+python -i show_infres_ensemble.py --weights v2outofbox2 --u 0.82,0.11,0.47,0.34,0.65
 """
 
 import argparse
@@ -20,13 +20,12 @@ from mmt.datasets import transforms as mmt_transforms
 from mmt.inference import translators
 from mmt.utils import domains, misc
 
-
 # Argument parsing
 # ----------------
 parser = argparse.ArgumentParser(
-    prog="show_ensembles",
+    prog="show_infres_ensemble",
     description="Generation of land cover members on few patches",
-    epilog="Example: python -i show_ensembles.py --weights mmt-weights-v1.0.ckpt --cpu",
+    epilog="Example: python -i show_infres_ensemble.py --weights mmt-weights-v2.0.ckpt --u 0.82,0.11,0.47,0.34,0.65",
 )
 parser.add_argument(
     "--locations",
@@ -59,6 +58,7 @@ parser.add_argument(
     "--cpu", help="Perform inference on CPU", action="store_true", default=False
 )
 args = parser.parse_args()
+print(f"Executing {sys.argv[0]} from {os.getcwd()} with args={args}")
 
 # Default resolution is the one of ESA World Cover (~10m)
 res = 8.333e-5
@@ -84,7 +84,7 @@ for i, domainname in enumerate(locations):
         qb = dom.centred_fixed_size(n_px, res).to_tgbox()
     else:
         qb = dom.to_tgbox()
-    
+
     print(f"Location {domainname} (lon, lat): {dom.central_point()}")
     for j, u_value in enumerate(u_values):
         tr.u = u_value
@@ -100,7 +100,12 @@ for ax, col in zip(axs[0], cols):
     ax.set_title(col)
 
 figname = f"_".join(
-    [f"ensemble", weights, "-".join([str(u) for u in u_values]), "-".join([loc[:3] for loc in locations])]
+    [
+        f"ensemble",
+        weights,
+        "-".join([str(u) for u in u_values]),
+        "-".join([loc[:3] for loc in locations]),
+    ]
 )
 title = f"Ensemble generation for {weights}"
 fig.suptitle(title)

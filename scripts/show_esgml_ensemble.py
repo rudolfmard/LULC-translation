@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 """Multiple land-cover/land-use Maps Translation (MMT)
 
-Generation of land cover members on few patches
+Generation of land cover members on few patches. Same as drafts/show_ensembles.py but with the ECOSG-ML already exported.
 
-python -i show_ensembles2.py --weights v2outofbox2 --u 0.82,0.11,0.47,0.34,0.65
+python -i show_esgml_ensemble.py --locations portugese_crops,elmenia_algeria,iziaslav_ukraine,elhichria_tunisia,rural_andalousia --npx 1200
 """
 
 import argparse
@@ -15,17 +15,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from mmt import _repopath_ as mmt_repopath
-from mmt.datasets import landcovers
-from mmt.datasets import transforms as mmt_transforms
-from mmt.utils import domains, misc
+from mmt.utils import domains, misc, aliases
 
 
 # Argument parsing
 # ----------------
 parser = argparse.ArgumentParser(
-    prog="show_ensembles2",
+    prog="show_esgml_ensemble",
     description="Generation of land cover members on few patches",
-    epilog="Example: python -i show_ensembles2.py --locations portugese_crops,elmenia_algeria,geneva",
+    epilog="Example: python -i show_esgml_ensemble.py --locations portugese_crops,elmenia_algeria,iziaslav_ukraine,elhichria_tunisia,rural_andalousia --npx 1200",
 )
 parser.add_argument(
     "--locations",
@@ -45,6 +43,7 @@ parser.add_argument(
     "--savefig", help="Save the figures instead of plotting them", action="store_true"
 )
 args = parser.parse_args()
+print(f"Executing {sys.argv[0]} from {os.getcwd()} with args={args}")
 
 # Default resolution is the one of ESA World Cover (~10m)
 res = 8.333e-5
@@ -55,8 +54,9 @@ locations = args.locations.split(",")
 
 # Load land cover maps
 # ----------------
-qscore = landcovers.ScoreECOSGplus(transforms = mmt_transforms.ScoreTransform(divide_by=100), cutoff=0.3)
-esgml = landcovers.EcoclimapSGMLv3()
+qscore = aliases.get_landcover_from_alias("qscore", cutoff=0.3)
+esgml = aliases.get_landcover_from_alias("EcoclimapSGML")
+
 u_values = np.zeros(esgml.n_members)
 fig, axs = plt.subplots(len(locations), esgml.n_members + 1, figsize=(12, 16))
 for i, domainname in enumerate(locations):
