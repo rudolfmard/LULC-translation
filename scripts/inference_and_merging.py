@@ -5,6 +5,11 @@
 Run inference and merge with ECOSG+ on large domains
 
 
+Testing
+-------
+python inference_and_merging.py --weights v2outofbox2 --domainname montpellier_agglo --outputs tests
+
+
 Run on a large domain
 ----------------------
 python inference_and_merging.py --weights v2outofbox2 --domainname eurat
@@ -26,7 +31,7 @@ from mmt.inference import translators
 
 # Configs
 #------------
-default_output = os.path.join(mmt_repopath, "data", "outputs", "v2")
+default_output = os.path.join(mmt_repopath, "data", "outputs", "tests")
 
 parser = argparse.ArgumentParser(
     prog="inference_and_merging",
@@ -128,4 +133,4 @@ if not args.skip_merging:
         n_cluster_files = n_cluster_files2, # Set to 0 to avoid clustering (only copy from tmp_dir to output_dir)
     )
 
-print(f"Plot it: python -i ../scripts/look_at_map.py --lcpath {merging_dump_dir}")
+print(f"Plot it: python -i look_at_map.py --lcname {merging_dump_dir}")
