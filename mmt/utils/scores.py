@@ -16,8 +16,8 @@ from torch import tensor
 from tqdm import tqdm
 
 from mmt import _repopath_ as mmt_repopath
-from mmt.datasets.landcovers import (ecoclimapsg_label_hierarchy,
-                                     ecoclimapsg_labels)
+from mmt.datasets.landcovers import (ECOCLIMAPSG_LABEL_HIERARCHY,
+                                     ECOCLIMAPSG_LABELS)
 from mmt.inference import io
 from mmt.utils import misc
 
@@ -60,7 +60,7 @@ def pprint_oaccuracies(cmxs):
 """
     for method, cmx in cmxs.items():
         oa1 = str(
-            np.round(oaccuracy(sum_primary_labels(cmx, ecoclimapsg_label_hierarchy)), 3)
+            np.round(oaccuracy(sum_primary_labels(cmx, ECOCLIMAPSG_LABEL_HIERARCHY)), 3)
         )
         oa2 = str(
             np.round(
@@ -78,7 +78,7 @@ def pprint_oaccuracies(cmxs):
     print(msg)
 
 
-def sum_primary_labels(cmx, label_hierarchy=ecoclimapsg_label_hierarchy):
+def sum_primary_labels(cmx, label_hierarchy=ECOCLIMAPSG_LABEL_HIERARCHY):
     """Return the confusion matrix for primary labels
 
 
@@ -215,7 +215,9 @@ def perlabel_scores(cmx, scores=["user_accuracy", "prod_accuracy", "f1score"]):
         https://en.wikipedia.org/wiki/Confusion_matrix
     """
     labels = [s[1:] for s in cmx.index]
-    plscores = pd.DataFrame(index=labels, columns=scores + ["support", "support_frac"], dtype=float)
+    plscores = pd.DataFrame(
+        index=labels, columns=scores + ["support", "support_frac"], dtype=float
+    )
     for k, l in enumerate(labels):
         with warnings.catch_warnings(category=RuntimeWarning):
             warnings.simplefilter("ignore")
@@ -229,9 +231,9 @@ def perlabel_scores(cmx, scores=["user_accuracy", "prod_accuracy", "f1score"]):
                 plscores.loc[l, "f1score"] = (
                     2 * precision * recall / (precision + recall)
                 )
-            
+
             plscores.loc[l, "support"] = cmx.iloc[k, :].sum()
-            plscores.loc[l, "support_frac"] = cmx.iloc[k, :].sum()/cmx.sum().sum()
+            plscores.loc[l, "support_frac"] = cmx.iloc[k, :].sum() / cmx.sum().sum()
 
     return plscores
 
@@ -257,7 +259,9 @@ def permethod_scores(cmxs, scorename="f1score"):
     """
     labels = [s[1:] for s in list(cmxs.values())[0].index]
     pmscores = pd.DataFrame(
-        index=labels, columns=list(cmxs.keys()) + ["support", "support_frac", "best_" + scorename], dtype=float
+        index=labels,
+        columns=list(cmxs.keys()) + ["support", "support_frac", "best_" + scorename],
+        dtype=float,
     )
     for method, cmx in cmxs.items():
         pls = perlabel_scores(cmx)
@@ -389,7 +393,7 @@ def compute_confusion_matrix(translator, h5f, n_patches):
 
 def _pandafy(cmx):
     """Convert ndarray confusion matrix to Pandas data frame"""
-    true_lnames, pred_lnames = prefix_labels(ecoclimapsg_labels)
+    true_lnames, pred_lnames = prefix_labels(ECOCLIMAPSG_LABELS)
     if isinstance(cmx, dict):
         return {
             k: pd.DataFrame(data=v, index=true_lnames, columns=pred_lnames)
@@ -402,6 +406,8 @@ def _pandafy(cmx):
 def look_in_cache_else_compute(translator, h5f, n_patches, pandas=True):
     """Look in the cache if these scores have been previously computed and
     compute them if they have not.
+
+    TODO: change for the mmt.utils.misc.memoize decorator
 
 
 

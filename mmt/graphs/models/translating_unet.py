@@ -1,8 +1,9 @@
-import torch.nn as nn
+raise DeprecationWarning(f"{__name__}: This module is deprecated")
 import torch
+import torch.nn as nn
+from graphs.models.custom_layers.double_conv import DoubleConv
 from graphs.models.custom_layers.down_block import Down
 from graphs.models.custom_layers.up_block import Up
-from graphs.models.custom_layers.double_conv import DoubleConv
 
 
 class PosEnc(nn.Module):

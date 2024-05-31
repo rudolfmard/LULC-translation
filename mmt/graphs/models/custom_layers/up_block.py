@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
+from torch import cat, tensor
 from torch.nn.functional import pad
-from torch import tensor, cat
 
 from mmt.graphs.models.custom_layers import double_conv
 

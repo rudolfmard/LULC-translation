@@ -4,8 +4,8 @@ import torch.nn as nn
 
 class DoubleConv(nn.Module):
     """(convolution => [BN] => ReLU) * 2 if num group=None Instance norm, if num group=1 Layer norm
-    
-    
+
+
     Examples
     --------
     >>> dc = DoubleConv(in_channels = 12, out_channels = 20)

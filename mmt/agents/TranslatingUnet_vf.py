@@ -1,25 +1,24 @@
 """
 Mnist Main agent, as mentioned in the tutorial
 """
-import numpy as np
-from sklearn.metrics import confusion_matrix
-import shutil
-import torch
-from torch import nn
-import torch.optim as optim
+
+raise DeprecationWarning(f"{__name__}: This module is deprecated")
+
 import json
-
-from agents.base import BaseAgent
-
-from datasets.landcover_to_landcover import LandcoverToLandcoverDataLoader
-
-from utils.misc import print_cuda_statistics
-
+import shutil
+import sys
 from os.path import join
 
-from utils.plt_utils import plt_loss2 as plt_loss
+import numpy as np
+import torch
+import torch.optim as optim
+from agents.base import BaseAgent
+from datasets.landcover_to_landcover import LandcoverToLandcoverDataLoader
+from sklearn.metrics import confusion_matrix
+from torch import nn
+from utils.misc import print_cuda_statistics
 from utils.plt_utils import PltPerClassMetrics
-
+from utils.plt_utils import plt_loss2 as plt_loss
 from utils.tensorboardx_utils import tensorboard_summary_writer
 
 
@@ -55,7 +54,8 @@ class TranslatingUnetVfAgent(BaseAgent):
         if (
             self.real_patch_sizes[0] // self.real_patch_sizes[1] == 10
         ):  # self.config.datasets==["2.hdf5","cgls.hdf5"] or self.config.datasets==["2.hdf5","1.hdf5"]:
-            from graphs.models.translating_unet import TranslatingUnetOSOten as EncDec
+            from graphs.models.translating_unet import \
+                TranslatingUnetOSOten as EncDec
 
             # define models
             self.models = EncDec(
@@ -64,7 +64,8 @@ class TranslatingUnetVfAgent(BaseAgent):
         elif (
             self.real_patch_sizes[0] // self.real_patch_sizes[1] == 2
         ):  # self.config.datasets==["2.hdf5","3.hdf5"]:
-            from graphs.models.translating_unet import TranslatingUnettwo as EncDec
+            from graphs.models.translating_unet import \
+                TranslatingUnettwo as EncDec
 
             # define models
             self.models = EncDec(
@@ -73,7 +74,8 @@ class TranslatingUnetVfAgent(BaseAgent):
         elif (
             self.real_patch_sizes[0] // self.real_patch_sizes[1] == 1
         ):  # self.config.datasets==["ocsge_o.hdf5","ocsge_u.hdf5"]:
-            from graphs.models.translating_unet import TranslatingUnetsame as EncDec
+            from graphs.models.translating_unet import \
+                TranslatingUnetsame as EncDec
 
             # define models
             self.models = EncDec(
@@ -82,7 +84,8 @@ class TranslatingUnetVfAgent(BaseAgent):
         elif (
             self.real_patch_sizes[0] // self.real_patch_sizes[1] == 4
         ):  # self.config.datasets==["ocsge_o.hdf5","3.hdf5"] or self.config.datasets==["ocsge_u.hdf5","3.hdf5"]:
-            from graphs.models.translating_unet import TranslatingUnetfour as EncDec
+            from graphs.models.translating_unet import \
+                TranslatingUnetfour as EncDec
 
             # define models
             self.models = EncDec(
@@ -91,7 +94,8 @@ class TranslatingUnetVfAgent(BaseAgent):
         elif (
             self.real_patch_sizes[0] // self.real_patch_sizes[1] == 20
         ):  # self.config.datasets==["ocsge_u.hdf5","1.hdf5"]:
-            from graphs.models.translating_unet import TranslatingUnettwenty as EncDec
+            from graphs.models.translating_unet import \
+                TranslatingUnettwenty as EncDec
 
             # define models
             self.models = EncDec(
@@ -100,14 +104,16 @@ class TranslatingUnetVfAgent(BaseAgent):
         elif (
             self.real_patch_sizes[0] // self.real_patch_sizes[1] == 5
         ):  # self.config.datasets==["ocsge_u.hdf5","1.hdf5"]:
-            from graphs.models.translating_unet import TranslatingUnetfive as EncDec
+            from graphs.models.translating_unet import \
+                TranslatingUnetfive as EncDec
 
             # define models
             self.models = EncDec(
                 input_channels[0], output_channels[1], self.real_patch_sizes[0]
             )
         elif self.real_patch_sizes[0] // self.real_patch_sizes[1] < 1:
-            from graphs.models.translating_unet import TranslatingUnetReduce as EncDec
+            from graphs.models.translating_unet import \
+                TranslatingUnetReduce as EncDec
 
             # define models
             self.models = EncDec(

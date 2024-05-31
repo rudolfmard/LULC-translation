@@ -1,7 +1,9 @@
+raise DeprecationWarning(f"{__name__}: This module is deprecated")
 import os
-from torch.utils.tensorboard import SummaryWriter
 import subprocess
 import time
+
+from torch.utils.tensorboard import SummaryWriter
 
 
 def tensorboard_summary_writer(config, comment):

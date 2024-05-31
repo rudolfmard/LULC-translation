@@ -1,13 +1,14 @@
-import matplotlib.pyplot as plt
-import numpy as np
-import matplotlib.cm as cm
-import matplotlib.patches as mpatches
-import seaborn as sns
-from torch.nn import Softmax2d
-import torch
 import os
+
 import cartopy.crs as ccrs
 import cartopy.io.img_tiles as cimgt
+import matplotlib.cm as cm
+import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
+import torch
+from torch.nn import Softmax2d
 
 coloring = {
     "esawc.hdf5": cm.Set1.colors[0],
@@ -35,6 +36,10 @@ storeImages = False
 
 
 class plt_loss(object):
+    raise DeprecationWarning(
+        f"{__name__}.{self.__class__.__name__}: This class is deprecated"
+    )
+
     def __call__(
         self, train_loss, valid_loss, figsize=(10, 10), savefig=None, display=False
     ):
@@ -95,7 +100,11 @@ class plt_loss2(object):
 
 
 class plt_loss3(object):
+
     def __init__(self, loss={}):
+        raise DeprecationWarning(
+            f"{__name__}.{self.__class__.__name__}: This class is deprecated"
+        )
         self.loss = loss
 
     def _setloss(self, l):
@@ -206,6 +215,10 @@ class PltPerClassMetrics(object):
 
 
 class plt_kappa(object):
+    raise DeprecationWarning(
+        f"{__name__}.{self.__class__.__name__}: This class is deprecated"
+    )
+
     def __call__(
         self, train_kappa, valid_kappa, figsize=(10, 10), savefig=None, display=False
     ):
@@ -230,6 +243,10 @@ class plt_kappa(object):
 
 
 class plt_scatter(object):
+    raise DeprecationWarning(
+        f"{__name__}.{self.__class__.__name__}: This class is deprecated"
+    )
+
     def __call__(
         self,
         X,
@@ -260,6 +277,9 @@ class plt_scatter(object):
 
 class plt_image(object):
     def __init__(self):
+        raise DeprecationWarning(
+            f"{__name__}.{self.__class__.__name__}: This class is deprecated"
+        )
         pass
 
     def masks_to_img(self, masks):
@@ -443,23 +463,28 @@ class plt_image(object):
         plt.close(fig)
         fig = None
 
-def plot_confusion_matrix(dfcmx, accuracy_in_corner = False, annot=False, figname=None, figtitle=None):
+
+def plot_confusion_matrix(
+    dfcmx, accuracy_in_corner=False, annot=False, figname=None, figtitle=None
+):
     """Heatmap of the confusion matrix coefficients"""
-    
+
     if figtitle is None:
         figtitle = "Confusion matrix"
     if figname is None:
         figname = "onepatchplot"
-    
-    fig = plt.figure(figsize=(12,10))
-    ax = sns.heatmap(dfcmx, annot=annot, cmap=sns.cubehelix_palette(as_cmap=True), vmin=0, vmax=1)
+
+    fig = plt.figure(figsize=(12, 10))
+    ax = sns.heatmap(
+        dfcmx, annot=annot, cmap=sns.cubehelix_palette(as_cmap=True), vmin=0, vmax=1
+    )
     ax.set_title(figtitle)
     ax.set_xlabel("Prediction")
     ax.set_ylabel("Reference")
     if accuracy_in_corner:
         nx, ny = dfcmx.shape
-        oa = np.round(np.diag(dfcmx.values).sum()/dfcmx.values.sum(), 3)
-        ax.text(0.8*nx, 0.1*ny, f"OA={oa}", fontsize=18)
+        oa = np.round(np.diag(dfcmx.values).sum() / dfcmx.values.sum(), 3)
+        ax.text(0.8 * nx, 0.1 * ny, f"OA={oa}", fontsize=18)
     fig.add_axes(ax)
     if storeImages:
         figpath = os.path.join(figureDir, figname + fmtImages)
@@ -470,34 +495,36 @@ def plot_confusion_matrix(dfcmx, accuracy_in_corner = False, annot=False, fignam
         plt.show(block=False)
 
 
-def patches_over_domain(qdom, bboxs, zoomout=3, background="osm", details=8, figname=None, figtitle=None):
+def patches_over_domain(
+    qdom, bboxs, zoomout=3, background="osm", details=8, figname=None, figtitle=None
+):
     """Locate the patch on a map.
-    
-    
+
+
     Parameters
     ----------
     qdom: `wopt.domains.GeoRectangle` or (2,2)-tuple
         Query domain bounding box (upper-left, lower-right) to be located.
         Will be displayed in red.
-    
+
     bboxs: list of `wopt.domains.GeoRectangle`
         List of bounding boxes covering the domain. Will be displayed in blue
-    
+
     zoomout: float
         Zoom-out level (coefficient applied to the size of `bbox` on both
         dimensions). The higher the larger will be the backgournd extent
-    
+
     background: {"osm", "terrain"}
         The map to be drawn in background, Select "osm" for Open Street Map
         features. Select "terrain" for terrain elevation.
-    
+
     details: int, default=8
         Level of details to be displayed in the background. The higher
         the more detailed is the backgound but the heavier is the figure
-    
+
     figname: str
         Name of the figure to be saved
-        
+
     figtitle: str
         Title of the figure
     """
@@ -505,31 +532,39 @@ def patches_over_domain(qdom, bboxs, zoomout=3, background="osm", details=8, fig
         figtitle = f"Patches location over {background} background"
     if figname is None:
         figname = f"patches_over_{background}"
-    
+
     if hasattr(qdom, "to_tlbr"):
         (ulx, uly), (lrx, lry) = qdom.to_tlbr()
     else:
         (ulx, uly), (lrx, lry) = qdom
-    
-    dlat = abs(uly-lry)
-    dlon = abs(ulx-lrx)
-    locextent = [ulx - zoomout*dlon, lrx + zoomout*dlon, lry - zoomout*dlat, uly + zoomout*dlat]
-    xticks = np.linspace(locextent[0],locextent[1],5)
-    yticks = np.linspace(locextent[2],locextent[3],5)
-    
+
+    dlat = abs(uly - lry)
+    dlon = abs(ulx - lrx)
+    locextent = [
+        ulx - zoomout * dlon,
+        lrx + zoomout * dlon,
+        lry - zoomout * dlat,
+        uly + zoomout * dlat,
+    ]
+    xticks = np.linspace(locextent[0], locextent[1], 5)
+    yticks = np.linspace(locextent[2], locextent[3], 5)
+
     if background in ["osm", "OSM"]:
         background_image = cimgt.OSM()
     elif background in ["terrain", "relief", "stamen"]:
-        background_image = cimgt.Stamen('terrain-background')
+        background_image = cimgt.Stamen("terrain-background")
     else:
         raise ValueError(f"Unknown background: {background}")
-    
-    fig = plt.figure(figsize=(20,15))
+
+    fig = plt.figure(figsize=(20, 15))
     ax = fig.add_subplot(1, 1, 1, projection=background_image.crs)
     rectangle = mpatches.Rectangle(
         xy=[ulx, lry],
-        width=dlon, height=dlat,
-        facecolor='red',alpha=0.2, transform=ccrs.PlateCarree()
+        width=dlon,
+        height=dlat,
+        facecolor="red",
+        alpha=0.2,
+        transform=ccrs.PlateCarree(),
     )
     ax.set_extent(locextent)
     ax.add_image(background_image, details)
@@ -539,21 +574,24 @@ def patches_over_domain(qdom, bboxs, zoomout=3, background="osm", details=8, fig
             (ulx, uly), (lrx, lry) = bbox.to_tlbr()
         else:
             (ulx, uly), (lrx, lry) = bbox
-        dlat = abs(uly-lry)
-        dlon = abs(ulx-lrx)
+        dlat = abs(uly - lry)
+        dlon = abs(ulx - lrx)
         rectangle = mpatches.Rectangle(
             xy=[ulx, lry],
-            width=dlon, height=dlat,
-            facecolor='blue',alpha=0.5, transform=ccrs.PlateCarree()
+            width=dlon,
+            height=dlat,
+            facecolor="blue",
+            alpha=0.5,
+            transform=ccrs.PlateCarree(),
         )
         ax.add_patch(rectangle)
     ax.set_title(figtitle)
-    ax.set_xticks(xticks, crs = ccrs.PlateCarree())
-    ax.set_yticks(yticks, crs = ccrs.PlateCarree())
-    ax.set_xticklabels(np.round(xticks,3))
-    ax.set_yticklabels(np.round(yticks,3))
+    ax.set_xticks(xticks, crs=ccrs.PlateCarree())
+    ax.set_yticks(yticks, crs=ccrs.PlateCarree())
+    ax.set_xticklabels(np.round(xticks, 3))
+    ax.set_yticklabels(np.round(yticks, 3))
     fig.tight_layout()
-        
+
     if storeImages:
         figpath = os.path.join(figureDir, figname + fmtImages)
         plt.savefig(figpath)

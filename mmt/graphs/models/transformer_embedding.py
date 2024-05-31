@@ -1,51 +1,57 @@
-from torch import nn
+raise DeprecationWarning(f"{__name__}: This module is deprecated")
+
 import torch
 import torch.utils.checkpoint as checkpoint
+from torch import nn
 
-from mmt.graphs.models.custom_layers import down_block
-from mmt.graphs.models.custom_layers import up_block
-from mmt.graphs.models.custom_layers import double_conv
+from mmt.graphs.models.custom_layers import double_conv, down_block, up_block
 
 Down = down_block.Down
 Up = up_block.Up
 DoubleConv = double_conv.DoubleConv
 
+
 class CrossChannelAttention(nn.Module):
     """Module computing attention across channels"""
+
     def __init__(self, in_channels, qk_channels=10):
         super(CrossChannelAttention, self).__init__()
         self.query_conv = nn.Conv2d(in_channels, qk_channels, kernel_size=1)
         self.key_conv = nn.Conv2d(in_channels, qk_channels, kernel_size=1)
         self.value_conv = nn.Conv2d(in_channels, in_channels, kernel_size=1)
         self.gamma = nn.Parameter(torch.zeros(1))
-    
+
     def forward(self, x):
-        q = self.query_conv(x).permute(0,3,2,1)
-        k = self.key_conv(x).permute(0,3,2,1)
-        v = self.value_conv(x).permute(0,3,2,1)
-        attention = nn.functional.scaled_dot_product_attention(q, k, v).permute(0,3,2,1)
+        q = self.query_conv(x).permute(0, 3, 2, 1)
+        k = self.key_conv(x).permute(0, 3, 2, 1)
+        v = self.value_conv(x).permute(0, 3, 2, 1)
+        attention = nn.functional.scaled_dot_product_attention(q, k, v).permute(
+            0, 3, 2, 1
+        )
         out = self.gamma * attention + x
         return out
-    
-    def check_shapes(self, x = None):
+
+    def check_shapes(self, x=None):
         """Display shapes of some tensors"""
         if x is None:
             x = torch.rand(10, 3, 600, 300)
             print(f"Random input: x = {x.shape}")
         else:
             print(f"Given input: x = {x.shape}")
-        
-        q = self.query_conv(x).permute(0,3,2,1).contiguous()
+
+        q = self.query_conv(x).permute(0, 3, 2, 1).contiguous()
         print(f"q = {q.shape}")
-        k = self.key_conv(x).permute(0,3,2,1).contiguous()
+        k = self.key_conv(x).permute(0, 3, 2, 1).contiguous()
         print(f"k = {k.shape}")
-        v = self.value_conv(x).permute(0,3,2,1).contiguous()
+        v = self.value_conv(x).permute(0, 3, 2, 1).contiguous()
         print(f"v = {v.shape}")
-        attention = nn.functional.scaled_dot_product_attention(q, k, v).permute(0,3,2,1)
+        attention = nn.functional.scaled_dot_product_attention(q, k, v).permute(
+            0, 3, 2, 1
+        )
         print(f"attention = {attention.shape}")
         out = self.gamma * attention + x
         print(f"out = {out.shape}")
-        
+
 
 class AtrouMMU(nn.Module):
     def __init__(self, inf, scale_factor=10, bias=False):
@@ -120,51 +126,68 @@ class Upsample(nn.Module):
             x, scale_factor=self.scale_factor, mode=self.mode
         )
 
+
 class CrossResolutionAttention(nn.Module):
-    def __init__(self, in_channels, out_channels, resize = 1):
+    def __init__(self, in_channels, out_channels, resize=1):
         super().__init__()
-        print(f"Init {self.__class__.__name__} with in_channels={in_channels}, out_channels={out_channels}, resize = {resize}")
+        print(
+            f"Init {self.__class__.__name__} with in_channels={in_channels}, out_channels={out_channels}, resize = {resize}"
+        )
         if resize is None:
             resize = 1
-        
-        self.query_conv = nn.Conv2d(in_channels, out_channels, kernel_size=resize, stride = resize)
-        self.key_conv = nn.Conv2d(in_channels, out_channels, kernel_size=resize, stride = resize)
-        self.value_conv = nn.Conv2d(in_channels, out_channels, kernel_size=resize, stride = resize)
-    
+
+        self.query_conv = nn.Conv2d(
+            in_channels, out_channels, kernel_size=resize, stride=resize
+        )
+        self.key_conv = nn.Conv2d(
+            in_channels, out_channels, kernel_size=resize, stride=resize
+        )
+        self.value_conv = nn.Conv2d(
+            in_channels, out_channels, kernel_size=resize, stride=resize
+        )
+
     def forward(self, x):
-        q = self.query_conv(x).permute(0,3,2,1).contiguous()
-        k = self.key_conv(x).permute(0,3,2,1).contiguous()
-        v = self.value_conv(x).permute(0,3,2,1).contiguous()
-        attention = nn.functional.scaled_dot_product_attention(q, k, v).permute(0,3,2,1)
+        q = self.query_conv(x).permute(0, 3, 2, 1).contiguous()
+        k = self.key_conv(x).permute(0, 3, 2, 1).contiguous()
+        v = self.value_conv(x).permute(0, 3, 2, 1).contiguous()
+        attention = nn.functional.scaled_dot_product_attention(q, k, v).permute(
+            0, 3, 2, 1
+        )
         return attention
-    
-    def check_shapes(self, x = None):
+
+    def check_shapes(self, x=None):
         """Display shapes of some tensors"""
         if x is None:
             x = torch.rand(10, 3, 600, 300)
             print(f"Random input: x = {x.shape}")
         else:
             print(f"Given input: x = {x.shape}")
-        
-        q = self.query_conv(x).permute(0,3,2,1)
+
+        q = self.query_conv(x).permute(0, 3, 2, 1)
         print(f"q = {q.shape}")
-        k = self.key_conv(x).permute(0,3,2,1)
+        k = self.key_conv(x).permute(0, 3, 2, 1)
         print(f"k = {k.shape}")
-        v = self.value_conv(x).permute(0,3,2,1)
+        v = self.value_conv(x).permute(0, 3, 2, 1)
         print(f"v = {v.shape}")
-        attention = nn.functional.scaled_dot_product_attention(q, k, v).permute(0,3,2,1)
+        attention = nn.functional.scaled_dot_product_attention(q, k, v).permute(
+            0, 3, 2, 1
+        )
         print(f"attention = {attention.shape}")
 
 
 class InterpConv(nn.Module):
-    def __init__(self, in_channels, out_channels, resize, kernel_size = 1, mode="bilinear"):
+    def __init__(
+        self, in_channels, out_channels, resize, kernel_size=1, mode="bilinear"
+    ):
         super().__init__()
         if resize is None:
             resize = 1
-        
+
         self.scale_factor = kernel_size * resize
         self.mode = mode
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size = kernel_size, stride = kernel_size)
+        self.conv = nn.Conv2d(
+            in_channels, out_channels, kernel_size=kernel_size, stride=kernel_size
+        )
 
     def forward(self, x):
         x = torch.nn.functional.interpolate(
@@ -175,67 +198,81 @@ class InterpConv(nn.Module):
 
 
 class AttnInterpAttn(nn.Module):
-    def __init__(self, in_channels, out_channels, resize = 1):
+    def __init__(self, in_channels, out_channels, resize=1):
         super().__init__()
-        print(f"Init {self.__class__.__name__} with in_channels={in_channels}, out_channels={out_channels}, resize = {resize}")
-        
+        print(
+            f"Init {self.__class__.__name__} with in_channels={in_channels}, out_channels={out_channels}, resize = {resize}"
+        )
+
         self.attn1 = CrossChannelAttention(in_channels)
-        self.interp = InterpConv(in_channels, out_channels, resize = resize)
+        self.interp = InterpConv(in_channels, out_channels, resize=resize)
         self.attn2 = CrossChannelAttention(out_channels)
-        
+
     def forward(self, x):
         x = self.attn1(x)
         x = self.interp(x)
         x = self.attn2(x)
         return x
 
+
 class AutoEncoder2(nn.Module):
-    def __init__(self, in_channels, out_channels, emb_channels = 50, resize = 1):
+    def __init__(self, in_channels, out_channels, emb_channels=50, resize=1):
         super().__init__()
         if resize is None:
             resize = 1
-        
-        self.encoder = AttnInterpAttn(in_channels, emb_channels, resize = 1/resize)
-        self.decoder = AttnInterpAttn(emb_channels, out_channels, resize = resize)
-        
+
+        self.encoder = AttnInterpAttn(in_channels, emb_channels, resize=1 / resize)
+        self.decoder = AttnInterpAttn(emb_channels, out_channels, resize=resize)
+
     def forward(self, x):
         emb = self.encoder(x)
         return emb, self.decoder(emb)
 
+
 class AttentionEncoder(nn.Module):
-    def __init__(self, in_channels, out_channels, resize = 1):
+    def __init__(self, in_channels, out_channels, resize=1):
         super().__init__()
-        print(f"Init {self.__class__.__name__} with in_channels={in_channels}, out_channels={out_channels}, resize = {resize}")
+        print(
+            f"Init {self.__class__.__name__} with in_channels={in_channels}, out_channels={out_channels}, resize = {resize}"
+        )
         if resize is None:
             resize = 1
-        
+
         self.attn1 = CrossChannelAttention(in_channels, in_channels)
-        self.attn2 = CrossResolutionAttention(in_channels=in_channels, out_channels=out_channels, resize=resize)
+        self.attn2 = CrossResolutionAttention(
+            in_channels=in_channels, out_channels=out_channels, resize=resize
+        )
         self.attn3 = CrossChannelAttention(out_channels, out_channels)
-        
+
     def forward(self, x):
         x = self.attn1(x)
         x = self.attn2(x)
         x = self.attn3(x)
         return x
 
+
 class AttentionDecoder(nn.Module):
-    def __init__(self, in_channels, out_channels, resize = 1):
+    def __init__(self, in_channels, out_channels, resize=1):
         super().__init__()
-        print(f"Init {self.__class__.__name__} with in_channels={in_channels}, out_channels={out_channels}, resize = {resize}")
+        print(
+            f"Init {self.__class__.__name__} with in_channels={in_channels}, out_channels={out_channels}, resize = {resize}"
+        )
         if resize is None:
             resize = 1
-        
+
         self.attn1 = CrossChannelAttention(in_channels, in_channels)
-        self.attn2 = CrossResolutionAttention(in_channels=in_channels, out_channels=out_channels, resize=resize)
+        self.attn2 = CrossResolutionAttention(
+            in_channels=in_channels, out_channels=out_channels, resize=resize
+        )
         self.attn3 = CrossChannelAttention(out_channels, out_channels)
-        
+
     def forward(self, x):
         x = self.attn1(x)
         x = self.attn2(x)
         x = self.attn3(x)
         return x
-    
+
+
 class SimpleDecoder(nn.Module):
     """
     This class represents the tail of ResNet. It performs a global pooling and maps the output to the
@@ -272,9 +309,7 @@ class SimpleDecoder(nn.Module):
                 f"conv_{i}",
                 nn.Conv2d(inc, nf, kernel_size=3, padding=1, bias=bias),
             )
-            self.decoder.add_module(
-                f"groupnorm_{i}", nn.GroupNorm(num_groups, nf)
-            )
+            self.decoder.add_module(f"groupnorm_{i}", nn.GroupNorm(num_groups, nf))
             self.decoder.add_module(f"relu_{i}", nn.ReLU(inplace=True))
             inc = nf
         self.decoder.add_module(f"attn_{depth}f", CrossChannelAttention(inc, 10))
@@ -283,6 +318,7 @@ class SimpleDecoder(nn.Module):
     def forward(self, x):
         x = self.decoder(x)
         return x
+
 
 class SimpleAttentionDecoder(nn.Module):
     """
@@ -303,23 +339,23 @@ class SimpleAttentionDecoder(nn.Module):
     ):
         super().__init__()
         self.resize = resize
-        
+
         if num_groups is None:
             num_groups = nf
-            
+
         if resize is not None:
             if atrou:
                 self.pool = AtrouMMU(in_features, scale_factor=resize, bias=bias)
             else:
                 self.pool = nn.MaxPool2d(resize)
-        
+
         self.attn1 = CrossChannelAttention(in_features, 10)
         self.conv1 = nn.Conv2d(in_features, n_classes, 1)
-        
+
     def forward(self, x):
         if self.resize is not None:
             x = self.pool(x)
-            
+
         # x = self.attn1(x)
         x = self.conv1(x)
         return x
@@ -345,7 +381,7 @@ class AttentionUNet(nn.Module):
         self.embedding_dim = embedding_dim
         self.cross_channel_attention = CrossChannelAttention(number_feature_map, 10)
         cca = self.cross_channel_attention
-        
+
         if resize is not None:
             self.inc = nn.Sequential(
                 Upsample(scale_factor=resize, mode="nearest"),
@@ -383,7 +419,7 @@ class AttentionUNet(nn.Module):
                     factor=pooling_factors[2],
                     bias=bias,
                 ),
-                CrossChannelAttention(number_feature_map, 10)
+                CrossChannelAttention(number_feature_map, 10),
             )
             self.down4 = nn.Sequential(
                 Down(
@@ -394,23 +430,23 @@ class AttentionUNet(nn.Module):
                     factor=pooling_factors[3],
                     bias=bias,
                 ),
-                CrossChannelAttention(number_feature_map, 10)
+                CrossChannelAttention(number_feature_map, 10),
             )
             # self.down3 = Down(
-                # number_feature_map,
-                # number_feature_map,
-                # mode=down_mode,
-                # num_groups=num_groups,
-                # factor=pooling_factors[2],
-                # bias=bias,
+            # number_feature_map,
+            # number_feature_map,
+            # mode=down_mode,
+            # num_groups=num_groups,
+            # factor=pooling_factors[2],
+            # bias=bias,
             # )
             # self.down4 = Down(
-                # number_feature_map,
-                # number_feature_map,
-                # mode=down_mode,
-                # num_groups=num_groups,
-                # factor=pooling_factors[3],
-                # bias=bias,
+            # number_feature_map,
+            # number_feature_map,
+            # mode=down_mode,
+            # num_groups=num_groups,
+            # factor=pooling_factors[3],
+            # bias=bias,
             # )
             self.down5 = Down(
                 number_feature_map,
@@ -520,7 +556,7 @@ class AttentionUNet(nn.Module):
                     factor=pooling_factors[-2],
                     bias=bias,
                 ),
-                CrossChannelAttention(number_feature_map, 10)
+                CrossChannelAttention(number_feature_map, 10),
             )
             self.up3 = nn.Sequential(
                 Up(
@@ -531,7 +567,7 @@ class AttentionUNet(nn.Module):
                     factor=pooling_factors[-3],
                     bias=bias,
                 ),
-                CrossChannelAttention(number_feature_map, 10)
+                CrossChannelAttention(number_feature_map, 10),
             )
             self.up4 = Up(
                 4 * number_feature_map,
@@ -573,7 +609,7 @@ class AttentionUNet(nn.Module):
         x = self.up4(x, x2)
         x = self.up5(x, x1)
         return self.outc(x)
-    
+
     def classical_forward(self, x):
         x1, x2, x3, x4, x5, x6 = self.encoder_part(x)
         return self.decoder_part(x1, x2, x3, x4, x5, x6)
@@ -617,12 +653,16 @@ class TransformerEmbedding(nn.Module):
         super().__init__()
         if number_feature_map is not None:
             n_channels_hiddenlay = number_feature_map
-            print(f"<{self.__class__.__name__}>mmt-0.2 API changes: 'number_feature_map' is now renamed 'n_channels_hiddenlay'. Please use it for now on. Current value: n_channels_hiddenlay={n_channels_hiddenlay}")
-        
+            print(
+                f"<{self.__class__.__name__}>mmt-0.2 API changes: 'number_feature_map' is now renamed 'n_channels_hiddenlay'. Please use it for now on. Current value: n_channels_hiddenlay={n_channels_hiddenlay}"
+            )
+
         if embedding_dim is not None:
             n_channels_embedding = embedding_dim
-            print(f"<{self.__class__.__name__}>mmt-0.2 API changes: 'embedding_dim' is now renamed 'n_channels_hiddenlay'. Please use it for now on. Current value: n_channels_embedding={n_channels_embedding}")
-        
+            print(
+                f"<{self.__class__.__name__}>mmt-0.2 API changes: 'embedding_dim' is now renamed 'n_channels_hiddenlay'. Please use it for now on. Current value: n_channels_embedding={n_channels_embedding}"
+            )
+
         if not isinstance(resize, list):
             enc_resize = resize
             dec_resize = resize
@@ -654,21 +694,21 @@ class TransformerEmbedding(nn.Module):
             resize=dec_resize,
         )
         # self.decoder = decoder(
-            # in_dec,
-            # n_classes,
-            # depth=decoder_depth,
-            # num_groups=num_groups,
-            # nf=number_feature_map,
-            # resize=dec_resize,
-            # atrou=decoder_atrou,
-            # bias=bias,
+        # in_dec,
+        # n_classes,
+        # depth=decoder_depth,
+        # num_groups=num_groups,
+        # nf=number_feature_map,
+        # resize=dec_resize,
+        # atrou=decoder_atrou,
+        # bias=bias,
         # )
-        
+
         if resize is None:
             resize = 1
-        self.encoder = AttnInterpAttn(in_channels, embedding_dim, resize = 1/resize)
-        self.decoder = AttnInterpAttn(embedding_dim, n_classes, resize = resize)
-        
+        self.encoder = AttnInterpAttn(in_channels, embedding_dim, resize=1 / resize)
+        self.decoder = AttnInterpAttn(embedding_dim, n_classes, resize=resize)
+
         self.forward_method = self.classical_forward
         if memory_monger:
             self.dummy_tensor = torch.ones(1, dtype=torch.float32, requires_grad=True)

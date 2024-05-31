@@ -4,21 +4,21 @@
 
 Dataset and dataloaders
 """
-import os
-from torch.utils.data import DataLoader
-import imageio
-from torch.utils.data import Dataset
-import numpy as np
 import json
-import torch
-import matplotlib.pyplot as plt
-from torchvision.transforms import Compose
-import h5py
-from sklearn.decomposition import PCA
-from matplotlib.colors import LinearSegmentedColormap
+import os
 
-from mmt.datasets import transforms
+import h5py
+import imageio
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+from matplotlib.colors import LinearSegmentedColormap
+from sklearn.decomposition import PCA
+from torch.utils.data import DataLoader, Dataset
+from torchvision.transforms import Compose
+
 from mmt import _repopath_ as mmt_repopath
+from mmt.datasets import transforms
 
 rmsuffix = transforms.rmsuffix
 
@@ -473,7 +473,7 @@ label_dict = {
         "Moss and lichen",
     ],
 }
-resolution_dict = { # Official geometric accuracy in metres
+resolution_dict = {  # Official geometric accuracy in metres
     "clc.hdf5": 100,
     "oso.hdf5": 10,
     "mos.hdf5": 5,
@@ -486,23 +486,28 @@ resolution_dict = { # Official geometric accuracy in metres
 }
 
 # cmap_dict.update(
-    # {
-        # f"{lcname}-{subset}.hdf5":cmap_dict[lcname + ".hdf5"]
-        # for lcname in ["esawc", "ecosg", "esgp"]
-        # for subset in ["train", "test", "val"]
-    # }
+# {
+# f"{lcname}-{subset}.hdf5":cmap_dict[lcname + ".hdf5"]
+# for lcname in ["esawc", "ecosg", "esgp"]
+# for subset in ["train", "test", "val"]
+# }
 # )
 # label_dict.update(
-    # {
-        # f"{lcname}-{subset}.hdf5":label_dict[lcname + ".hdf5"]
-        # for lcname in ["esawc", "ecosg", "esgp"]
-        # for subset in ["train", "test", "val"]
-    # }
+# {
+# f"{lcname}-{subset}.hdf5":label_dict[lcname + ".hdf5"]
+# for lcname in ["esawc", "ecosg", "esgp"]
+# for subset in ["train", "test", "val"]
+# }
 # )
+
 
 class EEEmapsDataset(Dataset):
     """Dataset providing ESAWorldCover, EcoclimapSG and EcoclimapSGplus patches (EEE)"""
-    def __init__(self, path, mode = "train", transform = None):
+
+    def __init__(self, path, mode="train", transform=None):
+        raise DeprecationWarning(
+            f"{__name__}.{self.__class__.__name__}: This class is deprecated"
+        )
         self.path = path
         self.mode = mode
         self.transform = transform
@@ -512,27 +517,29 @@ class EEEmapsDataset(Dataset):
             )
             for lc in ["esawc", "esgp", "ecosg"]
         }
-    
+
     def __len__(self):
         return len(self.h5f["esawc"])
-    
+
     def __getitem__(self, idx):
         idx = str(idx)
         sample = {
-            lc: torch.Tensor(self.h5f[lc][idx][:]).long() for lc in ["esawc", "esgp", "ecosg"]
+            lc: torch.Tensor(self.h5f[lc][idx][:]).long()
+            for lc in ["esawc", "esgp", "ecosg"]
         }
         sample["coordinate"] = (
             self.h5f["esgp"][idx].attrs["x_coor"],
-            self.h5f["esgp"][idx].attrs["y_coor"]
+            self.h5f["esgp"][idx].attrs["y_coor"],
         )
         if self.transform:
             sample = self.transform(sample)
-            
+
         return sample
-    
+
     def close_hdf5(self):
         for lc in ["esawc", "esgp", "ecosg"]:
             self.h5f[lc].close()
+
 
 class LandcoverToLandcover(Dataset):
     def __init__(
@@ -623,6 +630,7 @@ class LandcoverToLandcover(Dataset):
             sample = self.transform(sample)
         return sample
 
+
 class LandcoverToLandcoverNoJson(LandcoverToLandcover):
     def __init__(
         self,
@@ -637,7 +645,7 @@ class LandcoverToLandcoverNoJson(LandcoverToLandcover):
         if "-" in source:
             source.replace("train", mode)
             target.replace("train", mode)
-            
+
         self.source = source
         self.target = target
         self.source_dataset_path = os.path.join(path, source)
@@ -652,24 +660,26 @@ class LandcoverToLandcoverNoJson(LandcoverToLandcover):
         with torch.no_grad():
             patch_id = self.list_patch_id[idx]
             sample = {"patch_id": float(patch_id)}
-            
+
             src = self.source_dataset.get(patch_id)
             sample["source_data"] = torch.tensor(
                 src[:].astype(np.int64), dtype=torch.long, device=self.device
-            ).unsqueeze(0)  # .astype(float)
+            ).unsqueeze(
+                0
+            )  # .astype(float)
             trg = self.target_dataset.get(patch_id)
             sample["target_data"] = torch.tensor(
                 trg[:].astype(np.int64), dtype=torch.long, device=self.device
             ).unsqueeze(0)
-            
+
             sample["coordinate"] = (
                 src.attrs["x_coor"].astype(float),
                 src.attrs["y_coor"].astype(float),
             )
-            
+
             sample["source_name"] = self.source
             sample["target_name"] = self.target
-            
+
         if self.transform:
             sample = self.transform(sample)
         return sample
@@ -680,7 +690,7 @@ class LandcoverToLandcoverDataLoader:
         self,
         config,
         datasets,
-        dataset_class = "LandcoverToLandcover",
+        dataset_class="LandcoverToLandcover",
         to_one_hot=True,
         pos_enc=False,
         ampli=True,
@@ -693,7 +703,7 @@ class LandcoverToLandcoverDataLoader:
         self.datadir = os.path.join(mmt_repopath, "data", "hdf5_data")
         self.device = "cuda" if config.cuda else "cpu"
         self.datasets = [rmsuffix(dataset) for dataset in datasets]
-        
+
         full_path_datasets = [
             os.path.join(self.datadir, dataset) for dataset in datasets
         ]
@@ -709,9 +719,11 @@ class LandcoverToLandcoverDataLoader:
                 self.input_channels.append(int(f.attrs["numberclasses"]) + 1)
                 self.output_channels.append(int(f.attrs["numberclasses"]) + 1)
                 self.nb_patch_per_dataset.append(len(f.keys()))
-                self.n_classes[rmsuffix(os.path.basename(fpds))] = int(f.attrs["numberclasses"])
+                self.n_classes[rmsuffix(os.path.basename(fpds))] = int(
+                    f.attrs["numberclasses"]
+                )
                 id_patch_per_dataset[fpds] = list(f.keys())
-            
+
         self.couple_patch_per_dataset = {}
         nested_dict_datasets = {}
         self.total_couple = 0
@@ -730,11 +742,10 @@ class LandcoverToLandcoverDataLoader:
                         innerdict_inter[os.path.basename(fptrg)] = inter
                         innerdict_none[rmsuffix(os.path.basename(fptrg))] = None
                         self.total_couple += len(inter)
-                    
-                
+
             self.couple_patch_per_dataset[os.path.basename(fpsrc)] = innerdict_inter
             nested_dict_datasets[rmsuffix(os.path.basename(fpsrc))] = innerdict_none
-        
+
         """At this point we have the following:
         
         couple_patch_per_dataset = {
@@ -769,7 +780,7 @@ class LandcoverToLandcoverDataLoader:
         self.nb_patch_per_dataset = (
             self.nb_patch_per_dataset / self.nb_patch_per_dataset.sum()
         )
-        
+
         dic_list_transform = {
             source: {target: [] for target, _ in targetval.items()}
             for source, targetval in nested_dict_datasets.items()
@@ -796,12 +807,12 @@ class LandcoverToLandcoverDataLoader:
                         transforms.CoordEnc(self.n_classes.keys())
                     )
                     # dic_list_transform[source][target].append(
-                        # transforms.ToLonLat(source_crs = "EPSG:2154")
+                    # transforms.ToLonLat(source_crs = "EPSG:2154")
                     # )
                     # dic_list_transform[source][target].append(
-                        # transforms.GeolocEncoder()
+                    # transforms.GeolocEncoder()
                     # )
-                
+
                 dic_list_train_transform[source][target] = Compose(
                     dic_list_train_transform[source][target]
                     + dic_list_transform[source][target]
@@ -818,7 +829,9 @@ class LandcoverToLandcoverDataLoader:
                     target,
                     val,
                     mode="train",
-                    transform=dic_list_train_transform[rmsuffix(source)][rmsuffix(target)],
+                    transform=dic_list_train_transform[rmsuffix(source)][
+                        rmsuffix(target)
+                    ],
                     device=self.device,
                 )
                 for target, val in targetval.items()
@@ -856,12 +869,12 @@ class LandcoverToLandcoverDataLoader:
             }
             for source, targetval in self.couple_patch_per_dataset.items()
         }
-        
+
         if self.device == "cpu":
             pin_memory = True
         else:
             pin_memory = False
-        
+
         self.train_loader = {
             source: {
                 target: DataLoader(
@@ -870,7 +883,7 @@ class LandcoverToLandcoverDataLoader:
                     shuffle=True,
                     num_workers=num_workers,
                     pin_memory=pin_memory,
-                    persistent_workers = num_workers>0,
+                    persistent_workers=num_workers > 0,
                 )
                 for target, val in targetval.items()
             }
@@ -884,7 +897,7 @@ class LandcoverToLandcoverDataLoader:
                     shuffle=True,
                     num_workers=num_workers,
                     pin_memory=pin_memory,
-                    persistent_workers = num_workers>0,
+                    persistent_workers=num_workers > 0,
                 )
                 for target, val in targetval.items()
             }
@@ -898,7 +911,7 @@ class LandcoverToLandcoverDataLoader:
                     shuffle=True,
                     num_workers=num_workers,
                     pin_memory=pin_memory,
-                    persistent_workers = num_workers>0,
+                    persistent_workers=num_workers > 0,
                 )
                 for target, val in targetval.items()
             }
@@ -918,7 +931,7 @@ class LandcoverToLandcoverDataLoader:
         cmap="original",
         title=None,
     ):
-        
+
         with torch.no_grad():
             if len(inputs.shape) == 4:
                 inputs = torch.argmax(inputs[0], dim=0)
@@ -930,13 +943,13 @@ class LandcoverToLandcoverDataLoader:
             if title is None:
                 title = os.path.join(
                     self.config.paths.out_dir,
-                    f"Epoch_{epoch}_Source_{dataset_src}_Target_{dataset_tgt}.png"
+                    f"Epoch_{epoch}_Source_{dataset_src}_Target_{dataset_tgt}.png",
                 )
             else:
                 title = os.path.join(self.config.paths.out_dir, title)
-            
+
             # Start figure
-            #--------------
+            # --------------
             f, ax = plt.subplots(2, 2, figsize=(20, 20))
             # get discrete colormap
             if cmap == "default":
@@ -953,9 +966,9 @@ class LandcoverToLandcoverDataLoader:
                     np.array(cmap_dict[dataset_tgt]) / 255,
                     N=self.n_classes[dataset_tgt] + 1,
                 )
-            
+
             # Source
-            #--------
+            # --------
             m1 = ax[0][0].imshow(
                 inputs.cpu().long().numpy(),
                 cmap=cmap_src,
@@ -963,9 +976,9 @@ class LandcoverToLandcoverDataLoader:
                 vmax=self.n_classes[dataset_src] + 0.5,
             )
             ax[0][0].set_title("Source")
-            
+
             # Target
-            #--------
+            # --------
             m2 = ax[0][1].imshow(
                 targets.cpu().long().numpy(),
                 cmap=cmap_tgt,
@@ -973,9 +986,9 @@ class LandcoverToLandcoverDataLoader:
                 vmax=self.n_classes[dataset_tgt] + 0.5,
             )
             ax[0][1].set_title("Target")
-            
+
             # Translation
-            #-------------
+            # -------------
             m3 = ax[1][0].imshow(
                 outputs.cpu().long().numpy(),
                 cmap=cmap_tgt,
@@ -983,9 +996,9 @@ class LandcoverToLandcoverDataLoader:
                 vmax=self.n_classes[dataset_tgt] + 0.5,
             )
             ax[1][0].set_title("Translation")
-            
+
             # Embedding
-            #-----------
+            # -----------
             fmap_dim = embedding.shape[1]  # nchannel
             n_pix = embedding.shape[2]
             # we use a pca to project the embeddings to a RGB space
@@ -1005,9 +1018,9 @@ class LandcoverToLandcoverDataLoader:
             emb = color_vector.reshape((n_pix, n_pix, 3), order="F").transpose(1, 0, 2)
             m4 = ax[1][1].imshow((emb * 255).astype(np.uint8))
             ax[1][1].set_title("Embedding")
-            
+
             # Wrap-up
-            #---------
+            # ---------
             # tell the colorbar to tick at integers
             f.colorbar(
                 m1, ticks=np.arange(0, self.n_classes[dataset_src] + 1), ax=ax[0][0]
@@ -1019,7 +1032,7 @@ class LandcoverToLandcoverDataLoader:
                 m3, ticks=np.arange(0, self.n_classes[dataset_tgt] + 1), ax=ax[1][0]
             )
             # f.colorbar(m4,ax=ax[1][1])
-            acc = np.round((outputs == targets).sum().item()/targets.numel(), 3)
+            acc = np.round((outputs == targets).sum().item() / targets.numel(), 3)
             f.suptitle(
                 f"x={coordinate[0][0].item()}, y={coordinate[1][0].item()}, accuracy={acc}"
             )
@@ -1033,12 +1046,12 @@ class LandcoverToLandcoverDataLoader:
 
 
 class LandcoverToLandcoverDataLoaderNewPosenc(LandcoverToLandcoverDataLoader):
-    
+
     def __init__(
         self,
         config,
         datasets,
-        dataset_class = "LandcoverToLandcover",
+        dataset_class="LandcoverToLandcover",
         to_one_hot=True,
         pos_enc=False,
         ampli=True,
@@ -1047,11 +1060,14 @@ class LandcoverToLandcoverDataLoaderNewPosenc(LandcoverToLandcoverDataLoader):
         """
         :param config:
         """
+        raise DeprecationWarning(
+            f"{__name__}.{self.__class__.__name__}: This class is deprecated"
+        )
         self.config = config
         self.datadir = os.path.join(mmt_repopath, "data", "hdf5_data")
         self.device = "cuda" if config.cuda else "cpu"
         self.datasets = [rmsuffix(dataset) for dataset in datasets]
-        
+
         full_path_datasets = [
             os.path.join(self.datadir, dataset) for dataset in datasets
         ]
@@ -1068,9 +1084,11 @@ class LandcoverToLandcoverDataLoaderNewPosenc(LandcoverToLandcoverDataLoader):
                 self.input_channels.append(int(f.attrs["numberclasses"]) + 1)
                 self.output_channels.append(int(f.attrs["numberclasses"]) + 1)
                 self.nb_patch_per_dataset.append(len(f.keys()))
-                self.n_classes[rmsuffix(os.path.basename(fpds))] = int(f.attrs["numberclasses"])
+                self.n_classes[rmsuffix(os.path.basename(fpds))] = int(
+                    f.attrs["numberclasses"]
+                )
                 id_patch_per_dataset[fpds] = list(f.keys())
-            
+
         self.couple_patch_per_dataset = {}
         nested_dict_datasets = {}
         self.total_couple = 0
@@ -1089,11 +1107,10 @@ class LandcoverToLandcoverDataLoaderNewPosenc(LandcoverToLandcoverDataLoader):
                         innerdict_inter[os.path.basename(fptrg)] = inter
                         innerdict_none[rmsuffix(os.path.basename(fptrg))] = None
                         self.total_couple += len(inter)
-                    
-                
+
             self.couple_patch_per_dataset[os.path.basename(fpsrc)] = innerdict_inter
             nested_dict_datasets[rmsuffix(os.path.basename(fpsrc))] = innerdict_none
-        
+
         """At this point we have the following:
         
         couple_patch_per_dataset = {
@@ -1128,7 +1145,7 @@ class LandcoverToLandcoverDataLoaderNewPosenc(LandcoverToLandcoverDataLoader):
         self.nb_patch_per_dataset = (
             self.nb_patch_per_dataset / self.nb_patch_per_dataset.sum()
         )
-        
+
         dic_list_transform = {
             source: {target: [] for target, _ in targetval.items()}
             for source, targetval in nested_dict_datasets.items()
@@ -1152,12 +1169,12 @@ class LandcoverToLandcoverDataLoaderNewPosenc(LandcoverToLandcoverDataLoader):
                     )
                 if pos_enc:
                     # dic_list_transform[source][target].append(
-                        # transforms.ToLonLat(source_crs = "EPSG:2154")
+                    # transforms.ToLonLat(source_crs = "EPSG:2154")
                     # )
                     dic_list_transform[source][target].append(
                         transforms.GeolocEncoder()
                     )
-                
+
                 dic_list_train_transform[source][target] = Compose(
                     dic_list_train_transform[source][target]
                     + dic_list_transform[source][target]
@@ -1174,7 +1191,9 @@ class LandcoverToLandcoverDataLoaderNewPosenc(LandcoverToLandcoverDataLoader):
                     target,
                     val,
                     mode="train",
-                    transform=dic_list_train_transform[rmsuffix(source)][rmsuffix(target)],
+                    transform=dic_list_train_transform[rmsuffix(source)][
+                        rmsuffix(target)
+                    ],
                     device=self.device,
                 )
                 for target, val in targetval.items()
@@ -1212,12 +1231,12 @@ class LandcoverToLandcoverDataLoaderNewPosenc(LandcoverToLandcoverDataLoader):
             }
             for source, targetval in self.couple_patch_per_dataset.items()
         }
-        
+
         if self.device == "cpu":
             pin_memory = True
         else:
             pin_memory = False
-        
+
         self.train_loader = {
             source: {
                 target: DataLoader(
@@ -1226,7 +1245,7 @@ class LandcoverToLandcoverDataLoaderNewPosenc(LandcoverToLandcoverDataLoader):
                     shuffle=True,
                     num_workers=num_workers,
                     pin_memory=pin_memory,
-                    persistent_workers = num_workers>0,
+                    persistent_workers=num_workers > 0,
                 )
                 for target, val in targetval.items()
             }
@@ -1240,7 +1259,7 @@ class LandcoverToLandcoverDataLoaderNewPosenc(LandcoverToLandcoverDataLoader):
                     shuffle=True,
                     num_workers=num_workers,
                     pin_memory=pin_memory,
-                    persistent_workers = num_workers>0,
+                    persistent_workers=num_workers > 0,
                 )
                 for target, val in targetval.items()
             }
@@ -1254,10 +1273,12 @@ class LandcoverToLandcoverDataLoaderNewPosenc(LandcoverToLandcoverDataLoader):
                     shuffle=True,
                     num_workers=num_workers,
                     pin_memory=pin_memory,
-                    persistent_workers = num_workers>0,
+                    persistent_workers=num_workers > 0,
                 )
                 for target, val in targetval.items()
             }
             for source, targetval in self.test.items()
         }
+
+
 # EOF

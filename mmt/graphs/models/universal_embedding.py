@@ -1,10 +1,8 @@
-import torch.nn as nn
 import torch
+import torch.nn as nn
 import torch.utils.checkpoint as checkpoint
 
-from mmt.graphs.models.custom_layers import down_block
-from mmt.graphs.models.custom_layers import up_block
-from mmt.graphs.models.custom_layers import double_conv
+from mmt.graphs.models.custom_layers import double_conv, down_block, up_block
 
 Down = down_block.Down
 Up = up_block.Up
@@ -358,26 +356,27 @@ class DUNet(nn.Module):
 
     def MemoryMonged_forward(self, x):
         x1, x2, x3, x4, x5, x6 = checkpoint.checkpoint(
-            self.encoder_wrapper, x, self.dummy_tensor
+            self.encoder_wrapper,
+            x,
+            self.dummy_tensor,
             # self.encoder_part, x
         )
         return self.decoder_part(x1, x2, x3, x4, x5, x6)
 
     def forward(self, x):
         return self.forward_method(x)
-    
-    def check_shapes(self, x = None):
+
+    def check_shapes(self, x=None):
         """Display shapes of some tensors"""
         if x is None:
             x = torch.rand(10, 3, 60, 120)
             print(f"Random input: x = {x.shape}")
         else:
             print(f"Given input: x = {x.shape}")
-        
+
         states = self.encoder_part(x)
         for i, xx in enumerate(states):
             print(f"x{i} = {xx.shape}")
-        
 
 
 class UnivEmb(nn.Module):
@@ -405,18 +404,22 @@ class UnivEmb(nn.Module):
         tlm_p=0,
         bias=False,
         image_operator="mul",
-        n_px_input = None, # Not used. Added for API compatibility
-        n_px_embedding = None, # Not used. Added for API compatibility
+        n_px_input=None,  # Not used. Added for API compatibility
+        n_px_embedding=None,  # Not used. Added for API compatibility
     ):
         super().__init__()
         if number_feature_map is not None:
             n_channels_hiddenlay = number_feature_map
-            print(f"<{self.__class__.__name__}>mmt-0.2 API changes: 'number_feature_map' is now renamed 'n_channels_hiddenlay'. Please use it for now on. Current value: n_channels_hiddenlay={n_channels_hiddenlay}")
-        
+            print(
+                f"<{self.__class__.__name__}>mmt-0.2 API changes: 'number_feature_map' is now renamed 'n_channels_hiddenlay'. Please use it for now on. Current value: n_channels_hiddenlay={n_channels_hiddenlay}"
+            )
+
         if embedding_dim is not None:
             n_channels_embedding = embedding_dim
-            print(f"<{self.__class__.__name__}>mmt-0.2 API changes: 'embedding_dim' is now renamed 'n_channels_hiddenlay'. Please use it for now on. Current value: n_channels_embedding={n_channels_embedding}")
-        
+            print(
+                f"<{self.__class__.__name__}>mmt-0.2 API changes: 'embedding_dim' is now renamed 'n_channels_hiddenlay'. Please use it for now on. Current value: n_channels_embedding={n_channels_embedding}"
+            )
+
         if not isinstance(resize, list):
             enc_resize = resize
             dec_resize = resize

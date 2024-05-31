@@ -1,6 +1,7 @@
+raise DeprecationWarning(f"{__name__}: This module is deprecated")
+import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import LinearSegmentedColormap
-import matplotlib.pyplot as plt
 
 
 class ImageType(object):

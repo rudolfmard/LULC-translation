@@ -5,23 +5,28 @@
 Module with elements to build attention-augmented Unet-like auto-encoders
 """
 
+import math
+
 import numpy as np
 import torch
-import math
 from torch import nn
 from torchvision.transforms import Resize
 from torchvision.transforms.functional import InterpolationMode
+
 from mmt.graphs.models.custom_layers import down_block
 
 Down = down_block.Down
 
+
 def prime_factorization(n):
     """Return the prime factorization of `n`.
+
 
     Parameters
     ----------
     n : int
         The number for which the prime factorization should be computed.
+
 
     Returns
     -------
@@ -59,6 +64,7 @@ class UpConv(nn.Module):
 
     Will inflate the size of the image by the factor `resize`
 
+
     Example
     -------
     >>> up = UpConv(in_channels = 12, out_channels=17, resize = 3)
@@ -90,6 +96,7 @@ class DownConv(nn.Module):
 
     Will reduce the size of the image by the factor `resize`
 
+
     Example
     -------
     >>> down = DownConv(in_channels = 12, out_channels=17, resize = 3)
@@ -115,23 +122,24 @@ class DownConv(nn.Module):
         x = self.relu(x)
         return x
 
+
 class UpSC(nn.Module):
-    """Upscaling then DoubleConv with skip connection
-    
-    
+    """Upscaling then Conv2d with skip connection
+
+
     Parameters
     ----------
     in_channels: int
         Number of channels in the input data. Must be the sum of the channels in `x1` and `x2`
-        
+
     out_channels: int
         Number of channels in the output data
-    
+
     out_size: int
         Number of pixels in the input data
-    
-    
-    
+
+
+
     Examples
     --------
     >>> up = Up3(in_channels = 24, out_channels = 20, out_size = 100)
@@ -140,21 +148,24 @@ class UpSC(nn.Module):
     >>> up(x1, x2).shape
     torch.Size([16, 20, 100, 100])
     """
-    
-    def __init__(self, in_channels, out_channels, out_size, interp_mode = "bilinear"):
+
+    def __init__(self, in_channels, out_channels, out_size, interp_mode="bilinear"):
         super().__init__()
-        self.up = nn.Upsample(size = out_size, mode = interp_mode)
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, bias = False)
-    
+        self.up = nn.Upsample(size=out_size, mode=interp_mode)
+        self.conv = nn.Conv2d(
+            in_channels, out_channels, kernel_size=3, padding=1, bias=False
+        )
+
     def forward(self, x1, x2):
         x1 = self.up(x1)
         x = torch.cat([x2, x1], dim=1)
         return self.conv(x)
 
+
 class ConvInterp(nn.Module):
     """Conv + interpolation.
-    
-    
+
+
     Examples
     --------
     >>> ci = ConvInterp(in_channels = 12, out_channels = 20, out_size = 100)
@@ -162,19 +173,24 @@ class ConvInterp(nn.Module):
     >>> ci(x).shape
     torch.Size([16, 20, 100, 100])
     """
+
     def __init__(self, in_channels, out_channels, out_size, interp_mode="bilinear"):
         super().__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, bias = False)
-        self.interp = nn.Upsample(size = out_size, mode = interp_mode)
-        
+        self.conv = nn.Conv2d(
+            in_channels, out_channels, kernel_size=3, padding=1, bias=False
+        )
+        self.interp = nn.Upsample(size=out_size, mode=interp_mode)
+
     def forward(self, x):
         x = self.conv(x)
         x = self.interp(x)
         return x
 
+
 class CrossResolutionAttention(nn.Module):
     """Will reduce the size of the image by the factor `resize`
     If resize < 1, the image size is inflated by the factor int(1.0/resize)
+
 
     Example
     -------
@@ -565,36 +581,36 @@ class DownSelfattnInterpUp(nn.Module):
 
 class SelfattentionUnet(nn.Module):
     """DownConv + SelfAttention2 + Upsample + UpConv
-    
-    
+
+
     Parameters
     ----------
     in_channels: int
         Number of channels in the input data
-        
+
     out_channels: int
         Number of channels in the output data
-    
+
     in_size: int
         Number of pixels in the input data (only square images)
-    
+
     out_size: int
         Number of pixels in the input data (only square images)
-    
+
     h_channels: int
         Number of channels in the hidden layers
-    
+
     interp_mode: str
         Type of interpolation used in `nn.Upsample` (mode argument)
-        
+
     divide_size_by: int
         Factor to divise the spatial dimensions before applying attention layers
-        
+
     n_heads: int
         Number of head in the multi-head attention layer. Must satisfy
-        
-    
-    
+
+
+
     Examples
     --------
     >>> encoder = SelfattentionUnet(in_channels = 12, out_channels = 20, in_size = 60, out_size = 120)
@@ -602,7 +618,18 @@ class SelfattentionUnet(nn.Module):
     >>> encoder(x).shape
     torch.Size([16, 20, 120, 120])
     """
-    def __init__(self, in_channels, out_channels, in_size, out_size, h_channels = 32, interp_mode = "bilinear", divide_size_by = 10, n_heads = 4):
+
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        in_size,
+        out_size,
+        h_channels=32,
+        interp_mode="bilinear",
+        divide_size_by=10,
+        n_heads=4,
+    ):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -610,12 +637,23 @@ class SelfattentionUnet(nn.Module):
         self.out_size = out_size
         self.interp_mode = interp_mode
         self.divide_size_by = divide_size_by
-        
-        self.interp = ConvInterp(in_channels = in_channels, out_channels = h_channels, out_size = out_size, interp_mode = interp_mode)
-        self.down = Down(in_channels=h_channels, out_channels=h_channels, factor = divide_size_by)
-        self.attn = SelfAttention(in_channels=h_channels, size = out_size//divide_size_by)
-        self.up = UpSC(in_channels=2 * h_channels, out_channels=out_channels, out_size = out_size)
-        
+
+        self.interp = ConvInterp(
+            in_channels=in_channels,
+            out_channels=h_channels,
+            out_size=out_size,
+            interp_mode=interp_mode,
+        )
+        self.down = Down(
+            in_channels=h_channels, out_channels=h_channels, factor=divide_size_by
+        )
+        self.attn = SelfAttention(
+            in_channels=h_channels, size=out_size // divide_size_by
+        )
+        self.up = UpSC(
+            in_channels=2 * h_channels, out_channels=out_channels, out_size=out_size
+        )
+
     def forward(self, x):
         x0 = self.interp(x)
         x1 = self.down(x0)
@@ -823,7 +861,7 @@ class SelfattentionAutoencoder(nn.Module):
     >>> y.shape
     torch.Size([16, 27, 60, 60])
     """
-    
+
     def __init__(
         self,
         in_channels,
@@ -916,7 +954,7 @@ class SelfattentionUnetAutoencoder(nn.Module):
     >>> y.shape
     torch.Size([16, 27, 60, 60])
     """
-    
+
     def __init__(
         self,
         in_channels,
@@ -967,7 +1005,6 @@ class SelfattentionUnetAutoencoder(nn.Module):
         """Args `full` and `res` not used. Added for API compatibility"""
         emb = self.encoder(x)
         return emb, self.decoder(emb)
-
 
 
 # EOF
