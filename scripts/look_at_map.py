@@ -43,11 +43,6 @@ parser.add_argument(
     "--domainname", help="Geographical domain name (see mmt/utils/domains.py)"
 )
 parser.add_argument("--res", help="Resolution of the map (in degree)", default=None)
-# parser.add_argument(
-# "--lcpath",
-# help="Path to the directory with land cover TIF files. If provided, lcname will be forced to InferenceResults.",
-# default="",
-# )
 parser.add_argument(
     "--fillsea",
     help="Replace missing data by sea",
@@ -82,7 +77,6 @@ print(f"Executing {sys.argv[0]} from {os.getcwd()} with args={args}")
 lcname = args.lcname
 domainname = args.domainname
 res = args.res
-# lcpath = args.lcpath
 fillsea = args.fillsea
 fillneighbors = args.fillneighbors
 n_px = args.npx
@@ -92,23 +86,6 @@ if args.okwargs is not None:
     kwargs = {e.split("=")[0]: eval(e.split("=")[1]) for e in args.okwargs.split(",")}
 else:
     kwargs = dict()
-
-# if os.path.exists(lcpath):
-# lcname = "InferenceResults"
-# kwargs.update(path=lcpath)
-# else:
-# assert lcname not in [
-# None,
-# "InferenceResults",
-# ], f"Conflicting arguments: lcpath={lcpath} does not exist and lcname={lcname}"
-
-# if lcname == "ESAWorldCover":
-# kwargs.update(transforms=mmt_transforms.EsawcTransform())
-# fillsea = False
-
-# if lcname == "ScoreECOSGplus":
-# kwargs.update(transforms=mmt_transforms.ScoreTransform(divide_by=100))
-# fillsea = False
 
 if fillsea:
     kwargs.update(transforms=mmt_transforms.FillMissingWithSea(0, 1))
@@ -124,8 +101,6 @@ if res:
 # Loading map
 # -----------
 print(f"Loading {lcname} with")
-# lc_class = getattr(landcovers, lcname)
-# lcmap = lc_class(**kwargs)
 lcmap = aliases.get_landcover_from_alias(lcname, print_kwargs=True, **kwargs)
 print(f"Loaded: {lcmap.__class__.__name__} with crs={lcmap.crs}, res={lcmap.res}")
 

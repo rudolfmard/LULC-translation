@@ -57,55 +57,7 @@ locations = args.locations.split(",")
 lcnames = args.lcnames.split(",")
 device = "cpu" if args.cpu else "cuda"
 
-lcattrs = aliases.LANDCOVER_ALIASES
-# lcattrs = {
-# "esawc": {
-# "lcclass": "ESAWorldCover",
-# "kwargs": {
-# "transforms": mmt_transforms.EsawcTransform(),
-# },
-# "colname": "ESAWC",
-# },
-# "ecosg": {
-# "lcclass": "EcoclimapSG",
-# "kwargs": {},
-# "colname": "ECOSG",
-# },
-# "esgp": {
-# "lcclass": "EcoclimapSGplus",
-# "kwargs": {},
-# "colname": "ECOSG+",
-# },
-# "esgpv2": {
-# "lcclass": "EcoclimapSGplusV2",
-# "kwargs": {},
-# "colname": "ECOSG+v2",
-# },
-# "bguess": {
-# "lcclass": "SpecialistLabelsECOSGplus",
-# "kwargs": {},
-# "colname": "BGUESS",
-# },
-# "esgml": {
-# "lcclass": "EcoclimapSGML",
-# "kwargs": {},
-# "colname": "ECOSG-ML",
-# },
-# "qflags": {
-# "lcclass": "QualityFlagsECOSGplus",
-# "kwargs": {
-# "transforms": mmt_transforms.FillMissingWithSea(0, 6),
-# },
-# "colname": "QFLAGS",
-# },
-# "qscore": {
-# "lcclass": "ScoreECOSGplus",
-# "kwargs": {
-# "transforms": mmt_transforms.ScoreTransform(divide_by=100),
-# },
-# "colname": "QSCORE",
-# },
-# }
+
 # Default resolution is the one of ESA World Cover (~10m)
 res = 8.333e-5
 
@@ -114,22 +66,6 @@ res = 8.333e-5
 lcs = []
 for lcname in lcnames:
     lcs.append(aliases.get_landcover_from_alias(lcname))
-
-# lcs = []
-# for lcname in lcnames:
-# if lcname in lcattrs.keys():
-# lc_class = getattr(landcovers, lcattrs[lcname]["lcclass"])
-# lcs.append(lc_class(**lcattrs[lcname]["kwargs"]))
-# elif lcname == "ECOSG-ML":
-# tr = translators.EsawcToEsgpShowEnsemble(
-# checkpoint_path=misc.weights_to_checkpoint("v2outofbox2"), device=device
-# )
-# lcs.append(tr)
-# else:
-# tr = translators.EsawcToEsgpAsMap(
-# checkpoint_path=misc.weights_to_checkpoint(lcname), device=device
-# )
-# lcs.append(tr)
 
 print(f"Landcovers loaded with native CRS and resolution")
 
@@ -149,6 +85,7 @@ for i, domainname in enumerate(locations):
         lc.plot(x, figax=(fig, axs[i, j]), show_titles=False, show_colorbar=False)
 
 
+lcattrs = aliases.LANDCOVER_ALIASES
 [ax.axis("off") for ax in axs.ravel()]
 cols = []
 for lcname in lcnames:
