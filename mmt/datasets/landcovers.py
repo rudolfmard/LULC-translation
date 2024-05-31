@@ -41,7 +41,6 @@ import rasterio
 import torch
 import torchgeo.datasets as tgd
 from matplotlib.colors import LinearSegmentedColormap, ListedColormap
-
 from mmt import _repopath_ as mmt_repopath
 from mmt.datasets import transforms as mmt_transforms
 from mmt.utils import domains, misc
@@ -219,6 +218,7 @@ ECOCLIMAPSG_LABEL_HIERARCHY = {
 
 # BASE CLASSES
 # ============
+
 
 class TorchgeoLandcover(tgd.RasterDataset):
     """Abstract class for land cover dataset using TorchGeo.

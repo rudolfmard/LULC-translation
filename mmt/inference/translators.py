@@ -317,8 +317,13 @@ class EsawcToEsgp(MapTranslator):
 class EsawcToEsgpAsMap(EsawcToEsgp, landcovers.InferenceResults):
     """Map translator with plotting methods inherited from a land cover class
     
+    Allow to visualize the inference results just like a regular map.
+    Be careful to provide domains with appropriate size (mutliples of 300 are good choices).
+    
     Used in: scripts/qualitative_evalutation.py
     """
+    res = 8.333e-5
+    
     def __getitem__(self, qb):
         return {"mask": self.predict_from_domain(qb)}
 
@@ -355,7 +360,7 @@ class EsawcToEsgpMembers(EsawcToEsgp):
     
 
 class EsawcToEsgpShowEnsemble(EsawcToEsgpAsMap):
-    
+    """Same as EsawcToEsgpAsMap but with the merging criterion"""
     def __init__(
         self,
         checkpoint_path=os.path.join(mmt_repopath, "data", "saved_models", "mmt-weights-v1.0.ckpt"),
@@ -379,7 +384,7 @@ class EsawcToEsgpShowEnsemble(EsawcToEsgpAsMap):
         
         self.score_min = self.auxmap.cutoff
         
-        self.bottommap = landcovers.EcoclimapSGplusV2p1(
+        self.bottommap = landcovers.EcoclimapSGplus(
             score_min=self.score_min,
             crs = self.esawc.crs,
             res = self.esawc.res * 6,
