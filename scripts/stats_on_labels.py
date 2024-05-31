@@ -22,6 +22,7 @@ python -i stats_on_labels.py --lcpath=/data/trieutord/MLULC/outputs/ECOSGML-v0.4
 
 import argparse
 import os
+import sys
 from pprint import pprint
 
 import matplotlib.pyplot as plt

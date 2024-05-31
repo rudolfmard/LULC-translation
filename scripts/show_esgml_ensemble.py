@@ -15,8 +15,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from mmt import _repopath_ as mmt_repopath
-from mmt.utils import domains, misc, aliases
-
+from mmt.utils import aliases, domains, misc
 
 # Argument parsing
 # ----------------
@@ -65,14 +64,14 @@ for i, domainname in enumerate(locations):
         qb = dom.centred_fixed_size(n_px, res).to_tgbox()
     else:
         qb = dom.to_tgbox()
-    
+
     print(f"Location {domainname} (lon, lat): {dom.central_point()}")
     for mb in range(esgml.n_members):
         esgml.member = mb
         u_values[mb] = esgml.u
         x = esgml[qb]
         esgml.plot(x, figax=(fig, axs[i, mb]), show_titles=False, show_colorbar=False)
-    
+
     qs = qscore[qb]
     qscore.plot(qs, figax=(fig, axs[i, -1]), show_titles=False, show_colorbar=False)
 

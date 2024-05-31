@@ -6,6 +6,7 @@ Program to compute confusion matrix of MLCT-net prediction and compare them to E
 """
 import argparse
 import os
+import sys
 
 import h5py
 from mmt import _repopath_ as mmt_repopath
@@ -17,12 +18,12 @@ from mmt.utils import misc, plt_utils, scores
 parser = argparse.ArgumentParser(
     prog="scores_from_inference",
     description="Evaluate model on the dataset DS2 (EURAT-test), and provide confusion matrices",
-    epilog="Example: python -i scores_from_inference.py --weights outofbox2,saunet2,mmt-weights-v1.0.ckpt --npatches 200 --cpu",
+    epilog="Example: python -i scores_from_inference.py --weights outofbox2,saunet2,mmt-weights-v2.0.ckpt --npatches 200",
 )
 parser.add_argument(
     "--weights",
     help="Weight file, experience ID or path to the checkpoint to use for inference",
-    default="mmt-weights-v1.0.ckpt",
+    default="mmt-weights-v2.0.ckpt",
 )
 parser.add_argument(
     "--scorename",
@@ -48,6 +49,7 @@ parser.add_argument(
     "--cpu", help="Perform inference on CPU", action="store_true", default=False
 )
 args = parser.parse_args()
+print(f"Executing {sys.argv[0]} from {os.getcwd()} with args={args}")
 
 scorename = args.scorename
 weights_list = args.weights.split(",")

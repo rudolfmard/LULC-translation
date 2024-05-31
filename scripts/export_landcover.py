@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """Multiple land-cover/land-use Maps Translation (MMT)
 
-Program to export land cover to HDR/DIR format (SURFEX readable)
+Program to export land cover to HDR/DIR format (SURFEX readable). Deprecated
 
 
 Examples
@@ -61,6 +61,7 @@ fillsea = args.fillsea
 
 # Argument checks
 # ----------------
+print("This program is deprecated")
 assert output.endswith(".dir") or output.endswith(
     ".nc"
 ), f"Output format is not recognized. Please use .nc for netCDF4 or .dir for raw binary"
