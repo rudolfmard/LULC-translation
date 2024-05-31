@@ -49,7 +49,7 @@ from mmt.utils import domains, misc
 # VARIABLES
 # ============
 
-ecoclimapsg_labels = """0. no data
+ECOCLIMAPSG_LABELS = """0. no data
 1. sea and oceans
 2. lakes
 3. rivers
@@ -86,7 +86,7 @@ ecoclimapsg_labels = """0. no data
     "\n"
 )
 
-ecoclimapsg_labels_irish = """0. gan sonraí
+ECOCLIMAPSG_LABELS_IRISH = """0. gan sonraí
 1. farraige agus aigéin
 2. lochanna
 3. aibhneacha
@@ -123,7 +123,7 @@ ecoclimapsg_labels_irish = """0. gan sonraí
     "\n"
 )
 
-ecoclimapsg_cmap = [
+ECOCLIMAPSG_CMAP = [
     (0, 0, 0),
     (0, 0, 128),
     (0, 0, 205),
@@ -160,9 +160,9 @@ ecoclimapsg_cmap = [
     (128, 128, 128),
 ]
 
-n_ecoclimapsg_labels = len(ecoclimapsg_labels)
+N_ECOCLIMAPSG_LABELS = len(ECOCLIMAPSG_LABELS)
 
-ecoclimapsg_label_hierarchy = {
+ECOCLIMAPSG_LABEL_HIERARCHY = {
     "water": [
         "1. sea and oceans",
         "2. lakes",
@@ -219,7 +219,6 @@ ecoclimapsg_label_hierarchy = {
 
 # BASE CLASSES
 # ============
-
 
 class TorchgeoLandcover(tgd.RasterDataset):
     """Abstract class for land cover dataset using TorchGeo.
@@ -292,7 +291,7 @@ class TorchgeoLandcover(tgd.RasterDataset):
         if crs is not None:
             self.crs = crs
         else:
-            self.crs = self.crs = self.orig_crs
+            self.crs = self.orig_crs
 
         if res is not None:
             self.res = res
@@ -595,7 +594,7 @@ class ScoreMap(tgd.RasterDataset):
         if crs is not None:
             self.crs = crs
         else:
-            self.crs = self.crs = self.orig_crs
+            self.crs = self.orig_crs
 
         if res is not None:
             self.res = res
@@ -1021,8 +1020,8 @@ class CompositeMap(TorchgeoLandcover):
     >>> x = compo[qb]
     """
 
-    labels = ecoclimapsg_labels
-    cmap = ecoclimapsg_cmap
+    labels = ECOCLIMAPSG_LABELS
+    cmap = ECOCLIMAPSG_CMAP
 
     def __init__(self, topmap, bottommap, auxmap=None):
         self.topmap = topmap
@@ -1067,8 +1066,8 @@ class CompositeMap(TorchgeoLandcover):
 
 class EcoclimapSG(TorchgeoLandcover):
     path = os.path.join(mmt_repopath, "data", "tiff_data", "ECOCLIMAP-SG")
-    labels = ecoclimapsg_labels
-    cmap = ecoclimapsg_cmap
+    labels = ECOCLIMAPSG_LABELS
+    cmap = ECOCLIMAPSG_CMAP
     orig_crs = rasterio.crs.CRS.from_epsg(4326)
 
 
@@ -1117,9 +1116,9 @@ class InferenceResults(EcoclimapSG):
 class InferenceResultsProba(ProbaLandcover):
     """ECOSG-like land cover probability maps (same labels) loaded from a given path"""
 
-    labels = ecoclimapsg_labels
-    cmap = ecoclimapsg_cmap
-    crs = rasterio.crs.CRS.from_epsg(4326)
+    labels = ECOCLIMAPSG_LABELS
+    cmap = ECOCLIMAPSG_CMAP
+    orig_crs = rasterio.crs.CRS.from_epsg(4326)
 
     def __init__(self, path, crs=None, res=None, transforms=None, tgeo_init=True):
         self.path = path
@@ -1154,7 +1153,7 @@ class ScoreECOSGplus(ScoreMap):
         "v2",
         "score-ecosgp-v2.0",
     )
-    crs = rasterio.crs.CRS.from_epsg(4326)
+    orig_crs = rasterio.crs.CRS.from_epsg(4326)
 
 
 class EcoclimapSGplus(CompositeMap):
