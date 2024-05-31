@@ -8,20 +8,20 @@ Land cover maps
 Class diagram
 -------------
 torchgeo.datasets.RasterDataset  (-> https://torchgeo.readthedocs.io/en/v0.4.1/api/datasets.html#rasterdataset)
- ├── TorchgeoLandcover
+ ├── _TorchgeoLandcover
  |   ├── ESAWorldCover
  |   ├── EcoclimapSG
  |   |   ├── SpecialistLabelsECOSGplus
  |   |   ├── InferenceResults
  |   |   └── EcoclimapSGML
- |   └── CompositeMap
+ |   └── _CompositeMap
  |       ├── EcoclimapSGplus
  |       └── EcoclimapSGMLcomposite
  |   
- ├── ScoreMap
+ ├── _ScoreMap
  |   └── ScoreECOSGplus
  |   
- └── ProbaLandcover
+ └── _ProbaLandcover
      └── InferenceResultsProba
     
 OpenStreetMap
@@ -220,7 +220,7 @@ ECOCLIMAPSG_LABEL_HIERARCHY = {
 # ============
 
 
-class TorchgeoLandcover(tgd.RasterDataset):
+class _TorchgeoLandcover(tgd.RasterDataset):
     """Abstract class for land cover dataset using TorchGeo.
 
     This class is a [customised TorchGeo RasterDataset](https://torchgeo.readthedocs.io/en/latest/tutorials/custom_raster_dataset.html).
@@ -547,10 +547,10 @@ class TorchgeoLandcover(tgd.RasterDataset):
             raise Exception("Unknown file format")
 
 
-class ScoreMap(tgd.RasterDataset):
+class _ScoreMap(tgd.RasterDataset):
     """Abstract class for score dataset using TorchGeo.
 
-    Similar to TorchgeoLandcover, but for real-valued data instead of integer.
+    Similar to _TorchgeoLandcover, but for real-valued data instead of integer.
     Consequently, they share most of attributes and methods.
 
 
@@ -679,16 +679,16 @@ class ScoreMap(tgd.RasterDataset):
         return fig, ax
 
 
-class ProbaLandcover(tgd.RasterDataset):
+class _ProbaLandcover(tgd.RasterDataset):
     """Abstract class for land cover probability dataset using TorchGeo.
 
-    Similar to TorchgeoLandcover, but probabilities data instead of cover classes.
+    Similar to _TorchgeoLandcover, but probabilities data instead of cover classes.
     Consequently, they share most of attributes and methods.
 
 
     Parameters
     ----------
-    Same as TorchgeoLandcover.
+    Same as _TorchgeoLandcover.
 
 
     Notes
@@ -890,98 +890,7 @@ class ProbaLandcover(tgd.RasterDataset):
         return labels
 
 
-class OpenStreetMap:
-    """OpenStreetMap land cover from Cartopy (for plot only).
-
-    The class is init with a level of details and a patch size. It is then
-    used to produce Cartopy plots of OSM land cover at given coordinates +/- patch size.
-    Coordinates and patch size are expected to be in lon/lon format (EPSG:4326).
-
-
-    Parameters
-    ----------
-    details: int, default=3
-        Level of details in the map. The higher, the more detailled but the heavier to load
-
-    default_patch_size: float, default=0.05
-        Patch size in lon/lat degrees. Overwritten by plot argument, if provided.
-
-
-    Notes
-    -----
-    Not used in the paper.
-    """
-
-    def __init__(self, details=3, default_patch_size=0.05):
-        self.details = details
-        self.default_patch_size = default_patch_size
-        self.background_image = cimgt.OSM()
-
-    def plot(
-        self,
-        sample: Dict[str, Any],
-        patch_size: Optional[float] = None,
-        show_titles: bool = True,
-        figax=None,
-        rowcolidx=111,
-    ):
-        """Plot the OpenStreetMap land cover
-
-
-        Parameters
-        ----------
-        sample: dict
-            Sample with a 'coordinate' or 'bbox' key that will be used to
-            specify the location.
-            The 'bbox' must have [minx, ..., maxy] attributes
-            The 'coordinate' is assumed to point to the upper-left corner and will be completed by `patch_size`
-            All location information are expected to be in lon/lat degrees
-
-        patch_size: int, optional
-            Patch size to use when the sample only has a 'coordinate' key.
-            If not provided, the default patch size set in init is used.
-        """
-
-        if figax is None:
-            fig, ax = plt.subplots(1, 1, figsize=(12, 12))
-        else:
-            fig, ax = figax
-            ax.set_axis_off()
-
-        if patch_size is None:
-            patch_size = self.default_patch_size
-
-        if "bbox" in sample.keys():
-            minx = sample["bbox"].minx
-            miny = sample["bbox"].miny
-            maxx = sample["bbox"].maxx
-            maxy = sample["bbox"].maxy
-        elif "coordinate" in sample.keys():
-            # Assume they correspond to the upper-left corner (image convention)
-            minx, maxy = sample["coordinate"]
-            maxx = minx + patch_size
-            miny = maxy - patch_size
-        else:
-            raise ValueError("Sample does not have geographical info")
-
-        locextent = [minx, maxx, miny, maxy]
-        xticks = np.linspace(locextent[0], locextent[1], 5)
-        yticks = np.linspace(locextent[2], locextent[3], 5)
-
-        ax0 = fig.add_subplot(rowcolidx, projection=self.background_image.crs)
-        ax0.set_extent(locextent)
-        ax0.add_image(self.background_image, self.details)
-        ax0.set_xticks(xticks, crs=ccrs.PlateCarree())
-        ax0.set_yticks(yticks, crs=ccrs.PlateCarree())
-        ax0.set_xticklabels(np.round(xticks, 3))
-        ax0.set_yticklabels(np.round(yticks, 3))
-        if show_titles:
-            ax0.set_title(self.__class__.__name__)
-
-        return fig, ax0
-
-
-class CompositeMap(TorchgeoLandcover):
+class _CompositeMap(_TorchgeoLandcover):
     """Composite map built with a bottom map, a top map, and an overwritting criterion.
     The composite map returns the top map if the criterion is met and the bottom if it is not.
 
@@ -1009,14 +918,14 @@ class CompositeMap(TorchgeoLandcover):
     >>> ecosg = landcovers.EcoclimapSG()
     >>> mstar = landcovers.SpecialistLabelsECOSGplus()
     >>> score = landcovers.ScoreECOSGplus(transforms = mmt_transforms.ScoreTransform(divide_by=100))
-    >>> compo = landcovers.CompositeMap(topmap = mstar, bottommap = ecosg, auxmap = score)
+    >>> compo = landcovers._CompositeMap(topmap = mstar, bottommap = ecosg, auxmap = score)
     >>> x = compo[qb]
 
     # ECOSG-ML as a composite map
     >>> esgp = landcovers.EcoclimapSGplus()
     >>> infres = landcovers.InferenceResults("path/to/inference_results")
     >>> score = landcovers.ScoreECOSGplus(transforms = mmt_transforms.ScoreTransform(divide_by=100))
-    >>> compo = landcovers.CompositeMap(topmap = infres, bottommap = esgp, auxmap = score)
+    >>> compo = landcovers._CompositeMap(topmap = infres, bottommap = esgp, auxmap = score)
     >>> x = compo[qb]
     """
 
@@ -1064,14 +973,14 @@ class CompositeMap(TorchgeoLandcover):
 # =============
 
 
-class EcoclimapSG(TorchgeoLandcover):
+class EcoclimapSG(_TorchgeoLandcover):
     path = os.path.join(mmt_repopath, "data", "tiff_data", "ECOCLIMAP-SG")
     labels = ECOCLIMAPSG_LABELS
     cmap = ECOCLIMAPSG_CMAP
     orig_crs = rasterio.crs.CRS.from_epsg(4326)
 
 
-class ESAWorldCover(TorchgeoLandcover):
+class ESAWorldCover(_TorchgeoLandcover):
     path = os.path.join(mmt_repopath, "data", "tiff_data", "ESA-WorldCover-2021")
     labels = [
         "No data",
@@ -1113,7 +1022,7 @@ class InferenceResults(EcoclimapSG):
         super().__init__(crs=crs, res=res, transforms=transforms, tgeo_init=tgeo_init)
 
 
-class InferenceResultsProba(ProbaLandcover):
+class InferenceResultsProba(_ProbaLandcover):
     """ECOSG-like land cover probability maps (same labels) loaded from a given path"""
 
     labels = ECOCLIMAPSG_LABELS
@@ -1142,7 +1051,7 @@ class SpecialistLabelsECOSGplus(EcoclimapSG):
     )
 
 
-class ScoreECOSGplus(ScoreMap):
+class ScoreECOSGplus(_ScoreMap):
     """Score quantifying the uncertainty on ECOCLIMAP-SG+ labels"""
 
     path = os.path.join(
@@ -1156,8 +1065,8 @@ class ScoreECOSGplus(ScoreMap):
     orig_crs = rasterio.crs.CRS.from_epsg(4326)
 
 
-class EcoclimapSGplus(CompositeMap):
-    """ECOSG+ as a CompositeMap"""
+class EcoclimapSGplus(_CompositeMap):
+    """ECOSG+ as a _CompositeMap"""
 
     def __init__(self, score_min=0.525, crs=None, res=None, tgeo_init=True):
         self.score_min = score_min
@@ -1176,8 +1085,8 @@ class EcoclimapSGplus(CompositeMap):
         return torch.logical_and(top != 0, aux > self.score_min)
 
 
-class EcoclimapSGMLcomposite(CompositeMap):
-    """ECOSG-ML as a CompositeMap from InferenceResults
+class EcoclimapSGMLcomposite(_CompositeMap):
+    """ECOSG-ML as a _CompositeMap from InferenceResults
 
     Allows to modify the score threshold, but takes only the member provided at the inference path.
 
