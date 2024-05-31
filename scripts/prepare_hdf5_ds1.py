@@ -34,7 +34,7 @@ Such template HDF5 file is taken from [Luc Baudoux's archive](https://zenodo.org
 
 Examples
 --------
-python prepare_hdf5_ds1.py --h5template=/home/trieutord/Works/Physiography/gitsync/MT-MLULC/data/hdf5_data/oso.hdf5 --lcs=ecosg,esgp
+python prepare_hdf5_ds1.py --h5template=../data/hdf5_data/mos.hdf5 --lcnames=ecosg,esgp
 """
 import os
 import rasterio
@@ -81,7 +81,7 @@ lcattrs = {
         "year": 2018,
     },
     "esgp":{
-        "lcclass": "EcoclimapSGplusV2",
+        "lcclass": "EcoclimapSGplus",
         "kwargs":{
             "res": 60,
             "crs": rasterio.crs.CRS.from_epsg(2154),
@@ -103,13 +103,13 @@ for lcname in lcnames:
     
     lc_class = getattr(landcovers, lcattrs[lcname]["lcclass"])
     lc = lc_class(**lcattrs[lcname]["kwargs"])
-    lc.crs = lcattrs[lcname]["kwargs"]["crs"]
-    lc.res = lcattrs[lcname]["kwargs"]["res"]
+    # lc.crs = lcattrs[lcname]["kwargs"]["crs"]
+    # lc.res = lcattrs[lcname]["kwargs"]["res"]
     
     ccrop = transforms.tvt.CenterCrop(int(patch_size/lcattrs[lcname]["kwargs"]["res"]))
     
-    print(f"Write patches of the new map in {h5_lc_path}. New map is:")
-    print(lc)
+    print(f"\nWrite patches of the new map in {h5_lc_path}. New map is:")
+    # print(lc)
     print(f"crs={lc.crs}, res={lc.res}")
 
     # Dataset creation
@@ -152,6 +152,7 @@ for lcname in lcnames:
     # Light check
     #-------------
     eh5 = h5py.File(h5_lc_path, "r", swmr=True, libver='latest')
+    print(f"\n --- Checking {h5_lc_path} - len={len(eh5)} ---")
     for a in eh5.attrs.keys():
         print(a, "=", eh5.attrs[a])
     

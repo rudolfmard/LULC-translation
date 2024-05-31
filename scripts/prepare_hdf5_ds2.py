@@ -31,7 +31,7 @@ It takes the data from the TIF files in `tiff_data` reproject it onto a common g
 
 Examples
 --------
-python prepare_hdf5_ds2.py --h5dir=test --npatches=100 --qscore=0.9
+python prepare_hdf5_ds2.py --h5dir=test --npatches=100 --qscore=0.2
 """
 import os
 import sys
@@ -76,14 +76,17 @@ n_px_emb = int(args.npxemb)
 #--------------------
 print(f"Loading landcovers with native CRS")
 esawc = landcovers.ESAWorldCover(transforms=transforms.EsawcTransform())
-esgp = landcovers.EcoclimapSGplusV2()
 ecosg = landcovers.EcoclimapSG()
+esgp = landcovers.EcoclimapSGplus()
+qscore = landcovers.ScoreECOSGplus(transforms=transforms.ScoreTransform(divide_by=100))
 
-lc = esawc & esgp.maps
+lc = esawc & esgp & ecosg & qscore
 
-lcnames = ["esawc", "esgp", "ecosg"]
-lcmaps = {"esawc":esawc, "esgp":esgp, "ecosg":ecosg}
-n_pxs = {"esawc":600, "esgp":100, "ecosg":20}
+print(f"Joint dataset has res={lc.res} and crs={lc.crs}")
+
+lcnames = ["esawc", "ecosg", "esgp"]
+lcmaps = {"esawc":esawc, "ecosg":ecosg, "esgp":esgp}
+n_pxs = {"esawc":600, "ecosg":20, "esgp":100}
 
 # Sampler definition
 #--------------------
@@ -132,11 +135,13 @@ while add_another_patch:
     # Get the data from all maps
     #-----------------
     x_lc = lc[qb] # 'mask': (3, n_px_max, n_px_max) -> 3: esawc, splab, ecosg ; 'image': (1, n_px_max, n_px_max) -> score
-    x_esgp, _ = esgp.getitem_from_data(x_lc["image"], x_lc["mask"][1], x_lc["mask"][2])
+    # x_esgp, _ = esgp.getitem_from_data(x_lc["image"], x_lc["mask"][1], x_lc["mask"][2])
+    # x_esgp = esgp[qb]
+    
     x_labels = {
         "esawc": x_lc["mask"][0],
         "ecosg": x_lc["mask"][2],
-        "esgp": x_esgp
+        "esgp": x_lc["mask"][1],
     }
     
     # Quality control

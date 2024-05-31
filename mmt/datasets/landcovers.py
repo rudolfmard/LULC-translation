@@ -965,7 +965,29 @@ class _CompositeMap(_TorchgeoLandcover):
             "bbox": qb,
             "crs": self.crs,
         }
+    
+    @property
+    def res(self) -> float:
+        """Resolution of the dataset in units of CRS.
 
+        Returns:
+            The resolution of the dataset.
+        """
+        return self._res
+    
+    @res.setter
+    def res(self, new_res: float) -> None:
+        """Change the resolution of a GeoDataset.
+
+        Args:
+            new_res: New resolution.
+        """
+        if new_res == self.res:
+            return
+
+        self.maps.res = new_res
+        self._res = new_res
+    
     def criterion(self, top, aux):
         return top != 0
 
