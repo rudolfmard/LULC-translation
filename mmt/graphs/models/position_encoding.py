@@ -4,7 +4,6 @@
 
 Module with position encoding models
 """
-raise DeprecationWarning(f"{__name__}: This module is deprecated")
 from torch import nn
 
 

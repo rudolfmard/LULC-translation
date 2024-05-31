@@ -64,6 +64,15 @@ parser.add_argument(
 parser.add_argument(
     "--rmzeros", help="Do not include labels that are absent", action="store_true"
 )
+parser.add_argument("--figfmt", help="Format of the figure", default="svg")
+parser.add_argument(
+    "--figdir",
+    help="Directory where figure will be saved",
+    default=os.path.join(mmt_repopath, "figures"),
+)
+parser.add_argument(
+    "--savefig", help="Save the figures instead of plotting them", action="store_true"
+)
 args = parser.parse_args()
 print(f"Executing {sys.argv[0]} from {os.getcwd()} with args={args}")
 
@@ -184,11 +193,12 @@ else:
 
 plt.title(f"Distribution of {lcname} labels over {domainname}")
 strres = "full" if res is None else round(res, 4)
-figpath = os.path.join(
-    mmt_repopath,
-    "figures",
-    f"{lcname}_res{strres}_{domainname}_propoflabels_{charttype}.svg",
-)
-fig.savefig(figpath)
-print(f"Figure saved at {figpath}")
+if args.savefig:
+    figpath = os.path.join(
+        args.figdir,
+        f"{lcname}_res{strres}_{domainname}_propoflabels_{charttype}.{args.figfmt}",
+    )
+    fig.savefig(figpath)
+    print(f"Figure saved at {figpath}")
+
 fig.show()

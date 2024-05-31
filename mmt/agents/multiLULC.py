@@ -17,10 +17,10 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from mmt.agents import base
 from mmt.datasets import landcover_to_landcover
-from mmt.graphs.models import (attention_autoencoder, position_encoding,
-                               transformer_embedding, universal_embedding)
+from mmt.graphs.models import attention_autoencoder, universal_embedding, position_encoding
+
 from mmt.inference import io
-from mmt.utils import misc, plt_utils, tensorboardx_utils
+from mmt.utils import misc, plt_utils
 
 timeit = misc.timeit
 plt_loss = plt_utils.plt_loss2
@@ -62,15 +62,13 @@ class MultiLULCAgent(base.BaseAgent):
         resizes = np.where(resizes == 1, None, resizes)
 
         # Define models
-        if config.model.type == "transformer_embedding":
-            EncDec = getattr(transformer_embedding, config.model.name)
-        elif config.model.type == "universal_embedding":
+        if config.model.type == "universal_embedding":
             EncDec = getattr(universal_embedding, config.model.name)
         elif config.model.type == "attention_autoencoder":
             EncDec = getattr(attention_autoencoder, config.model.name)
         else:
             raise ValueError(
-                f"Unknown model.type = {config.model.type}. Please change config to one among ['transformer_embedding', 'universal_embedding', 'attention_autoencoder']"
+                f"Unknown model.type = {config.model.type}. Please change config to one among ['universal_embedding', 'attention_autoencoder']"
             )
 
         # self.models = []
@@ -134,15 +132,6 @@ class MultiLULCAgent(base.BaseAgent):
             )
 
         self.load_checkpoint(checkpoint_filename)
-
-        # Summary Writer
-        if self.config.training.tensorboard:
-            (
-                self.summary_writer,
-                self.tensorboard_process,
-            ) = tensorboardx_utils.tensorboard_summary_writer(
-                config, comment=self.config.xp_name
-            )
 
         if self.cuda and torch.cuda.device_count() > 1:
             print("Let's use", torch.cuda.device_count(), "GPUs!")
@@ -294,39 +283,39 @@ class MultiLULCAgent(base.BaseAgent):
                     self.logger.info("Best model for now  : saved ")
                     loss_ref = vl
                     self.save_checkpoint(is_best=1)
-                    io.export_autoencoder_to_onnx(
-                        self.config.xp_name,
-                        lc_in="esawc",
-                        lc_out="encoder",
-                        onnxfilename="best_[default].onnx",
-                    )
-                    io.export_autoencoder_to_onnx(
-                        self.config.xp_name,
-                        lc_in="ecosg",
-                        lc_out="encoder",
-                        onnxfilename="best_[default].onnx",
-                    )
-                    io.export_autoencoder_to_onnx(
-                        self.config.xp_name,
-                        lc_in="esgp",
-                        lc_out="encoder",
-                        onnxfilename="best_[default].onnx",
-                    )
-                    io.export_autoencoder_to_onnx(
-                        self.config.xp_name,
-                        lc_in="esgp",
-                        lc_out="decoder",
-                        onnxfilename="best_[default].onnx",
-                    )
-                    io.export_autoencoder_to_onnx(
-                        self.config.xp_name,
-                        lc_in="esawc",
-                        lc_out="esgp",
-                        onnxfilename="best_[default].onnx",
-                    )
-                    io.export_position_encoder_to_onnx(
-                        self.config.xp_name, onnxfilename="best_[default].onnx"
-                    )
+                    # io.export_autoencoder_to_onnx(
+                        # self.config.xp_name,
+                        # lc_in="esawc",
+                        # lc_out="encoder",
+                        # onnxfilename="best_[default].onnx",
+                    # )
+                    # io.export_autoencoder_to_onnx(
+                        # self.config.xp_name,
+                        # lc_in="ecosg",
+                        # lc_out="encoder",
+                        # onnxfilename="best_[default].onnx",
+                    # )
+                    # io.export_autoencoder_to_onnx(
+                        # self.config.xp_name,
+                        # lc_in="esgp",
+                        # lc_out="encoder",
+                        # onnxfilename="best_[default].onnx",
+                    # )
+                    # io.export_autoencoder_to_onnx(
+                        # self.config.xp_name,
+                        # lc_in="esgp",
+                        # lc_out="decoder",
+                        # onnxfilename="best_[default].onnx",
+                    # )
+                    # io.export_autoencoder_to_onnx(
+                        # self.config.xp_name,
+                        # lc_in="esawc",
+                        # lc_out="esgp",
+                        # onnxfilename="best_[default].onnx",
+                    # )
+                    # io.export_position_encoder_to_onnx(
+                        # self.config.xp_name, onnxfilename="best_[default].onnx"
+                    # )
 
                 torch.cuda.empty_cache()
                 # if self.config.use_scheduler:

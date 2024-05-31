@@ -17,7 +17,7 @@ import yaml
 from easydict import EasyDict
 
 from mmt import _repopath_ as mmt_repopath
-from mmt.utils import dirs, misc
+from mmt.utils import misc
 
 
 def setup_logging(log_dir):
@@ -194,13 +194,11 @@ def process_config(config_file, quiet=False):
     config.paths.log_dir = os.path.join(
         config.paths.experiments_dir, config.xp_name, "logs"
     )
-    dirs.create_dirs(
-        [
-            config.paths.summary_dir,
-            config.paths.checkpoint_dir,
-            config.paths.out_dir,
-            config.paths.log_dir,
-        ]
+    misc.create_directories(
+        config.paths.summary_dir,
+        config.paths.checkpoint_dir,
+        config.paths.out_dir,
+        config.paths.log_dir,
     )
 
     # Setup logging in the project

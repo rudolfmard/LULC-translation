@@ -36,9 +36,10 @@ storeImages = False
 
 
 class plt_loss(object):
-    raise DeprecationWarning(
-        f"{__name__}.{self.__class__.__name__}: This class is deprecated"
-    )
+    def __init__(self):
+        raise DeprecationWarning(
+            f"{__name__}.{self.__class__.__name__}: This class is deprecated"
+        )
 
     def __call__(
         self, train_loss, valid_loss, figsize=(10, 10), savefig=None, display=False
@@ -215,10 +216,11 @@ class PltPerClassMetrics(object):
 
 
 class plt_kappa(object):
-    raise DeprecationWarning(
-        f"{__name__}.{self.__class__.__name__}: This class is deprecated"
-    )
-
+    def __init__(self):
+        raise DeprecationWarning(
+            f"{__name__}.{self.__class__.__name__}: This class is deprecated"
+        )
+    
     def __call__(
         self, train_kappa, valid_kappa, figsize=(10, 10), savefig=None, display=False
     ):
@@ -243,9 +245,10 @@ class plt_kappa(object):
 
 
 class plt_scatter(object):
-    raise DeprecationWarning(
-        f"{__name__}.{self.__class__.__name__}: This class is deprecated"
-    )
+    def __init__(self):
+        raise DeprecationWarning(
+            f"{__name__}.{self.__class__.__name__}: This class is deprecated"
+        )
 
     def __call__(
         self,
