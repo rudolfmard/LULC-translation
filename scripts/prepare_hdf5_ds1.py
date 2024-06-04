@@ -43,8 +43,9 @@ import h5py
 import numpy as np
 import matplotlib.pyplot as plt
 from torchgeo.datasets.utils import BoundingBox
+import torchvision.transforms as tvt
 from mmt.datasets import landcovers
-from mmt.datasets import transforms
+from mmt.datasets import transforms as mmt_transforms
 from mmt.utils import misc
 
 # Argument parsing
@@ -64,7 +65,7 @@ lcattrs = {
     "esawc":{
         "lcclass": "ESAWorldCover",
         "kwargs":{
-            "transforms": transforms.EsawcTransform(),
+            "transforms": mmt_transforms.EsawcTransform(),
             "res": 10,
             "crs": rasterio.crs.CRS.from_epsg(2154),
         },
@@ -103,13 +104,10 @@ for lcname in lcnames:
     
     lc_class = getattr(landcovers, lcattrs[lcname]["lcclass"])
     lc = lc_class(**lcattrs[lcname]["kwargs"])
-    # lc.crs = lcattrs[lcname]["kwargs"]["crs"]
-    # lc.res = lcattrs[lcname]["kwargs"]["res"]
     
-    ccrop = transforms.tvt.CenterCrop(int(patch_size/lcattrs[lcname]["kwargs"]["res"]))
+    ccrop = tvt.CenterCrop(int(patch_size/lcattrs[lcname]["kwargs"]["res"]))
     
     print(f"\nWrite patches of the new map in {h5_lc_path}. New map is:")
-    # print(lc)
     print(f"crs={lc.crs}, res={lc.res}")
 
     # Dataset creation

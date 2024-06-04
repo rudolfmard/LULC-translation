@@ -8,6 +8,7 @@ Conversely to misc, which uses only third-party packages, aliases includes mostl
 """
 import os
 from pprint import pprint
+import torchvision.transforms as tvt
 
 from mmt import _repopath_ as mmt_repopath
 from mmt.datasets import landcovers
@@ -97,7 +98,7 @@ def merge_kwargs(kwargs1, kwargs2):
         if hasattr(trans1, "key") and hasattr(trans2, "key"):
             trans2.key = trans1.key
 
-        transf = mmt_transforms.tvt.Compose([trans1, trans2])
+        transf = tvt.Compose([trans1, trans2])
         kwargs1.update({"transforms": transf})
 
     kwargs1.update(kwargs2)
