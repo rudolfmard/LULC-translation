@@ -62,10 +62,10 @@ class plt_loss(object):
         f = None
 
 
-class plt_loss2(object):
-    def __call__(
-        self, train_loss, valid_loss, figsize=(10, 10), savefig=None, display=False
-    ):
+# class plt_loss2(object):
+def plot_loss(
+    train_loss, valid_loss, figsize=(10, 10), savefig=None, display=False
+):
         # train_loss=np.array(train_loss)
         # valid_loss=np.array(valid_loss)
         f = plt.figure(figsize=figsize)
