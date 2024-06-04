@@ -157,6 +157,19 @@ def create_directories(*indirs):
 
     return outdirs
 
+def rmsuffix(s, startchar="-", stopchar="."):
+    """Remove suffix between `startchar` and `stopchar`
+    
+    
+    Example
+    -------
+    >>> rmsuffix("esawc-trefs41.hdf5")
+    'esawc.hdf5'
+    """
+    if startchar in s:
+        return s.split(startchar)[0] + stopchar + s.split(stopchar)[1]
+    else:
+        return s
 
 def print_cuda_statistics():
     logger = logging.getLogger("Cuda Statistics")

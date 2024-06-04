@@ -27,13 +27,9 @@ torchgeo.datasets.RasterDataset  (-> https://torchgeo.readthedocs.io/en/v0.4.1/a
 OpenStreetMap
 """
 import os
-import sys
 import time
 from typing import Any, Dict, Optional
 
-import cartopy.crs as ccrs
-import cartopy.io.img_tiles as cimgt
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import netCDF4 as nc
 import numpy as np
@@ -229,21 +225,6 @@ class _TorchgeoLandcover(tgd.RasterDataset):
     attributes that are common to all land covers classes.
 
 
-    Parameters
-    ----------
-    transforms: Optional[Callable[[dict[str, Any]], dict[str, Any]]]
-        A function/transform that takes an input sample and returns a transformed version
-
-    crs: `rasterio.crs.CRS`
-        Coordinate reference system in which the land cover will be transformed
-
-    res: float
-        Resolution in units of CRS
-
-    tgeo_init: bool
-        If False, the Rtree index will not be created. Faster but no access to data (useful e.g. for using plots only)
-
-
     Main attributes
     ---------------
     path: str
@@ -270,8 +251,14 @@ class _TorchgeoLandcover(tgd.RasterDataset):
 
     Main methods
     ------------
-    __getitem__: Return a sample of data
-    plot: Plot a sample of data
+    __getitem__(qb) -> dict:
+        Return a sample of data
+    
+    plot(sample) -> None:
+        Plot a sample of data
+    
+    export(sample, ofn) -> str or tuple:
+        Export a sample of data in the given file
     """
 
     path = ""
@@ -279,12 +266,28 @@ class _TorchgeoLandcover(tgd.RasterDataset):
     is_image = False
     element_size = 8  # Bytes per pixel
     separate_files = False
-    # crs = None  # Native coordinate reference system
     orig_crs = None  # Native coordinate reference system
     labels = []
     cmap = []
 
     def __init__(self, crs=None, res=None, transforms=None, tgeo_init=True):
+        """Constructor.
+        
+        
+        Parameters
+        ----------
+        transforms: Optional[Callable[[dict[str, Any]], dict[str, Any]]]
+            A function/transform that takes an input sample and returns a transformed version
+    
+        crs: `rasterio.crs.CRS`
+            Coordinate reference system in which the land cover will be transformed
+    
+        res: float
+            Resolution in units of CRS
+    
+        tgeo_init: bool
+            If False, the Rtree index will not be created. Faster but no access to data (useful e.g. for using plots only)
+        """
         self.n_labels = len(self.labels)
         if tgeo_init:
             super().__init__(self.path, crs=crs, res=res, transforms=transforms)
@@ -553,25 +556,6 @@ class _ScoreMap(tgd.RasterDataset):
 
     Similar to _TorchgeoLandcover, but for real-valued data instead of integer.
     Consequently, they share most of attributes and methods.
-
-
-
-    Parameters
-    ----------
-    cutoff: float
-        Threshold for the score colormap (red below, green above)
-
-    transforms: Optional[Callable[[dict[str, Any]], dict[str, Any]]]
-        A function/transform that takes an input sample and returns a transformed version
-
-    crs: `rasterio.crs.CRS`
-        Coordinate reference system in which the land cover will be transformed
-
-    res: float
-        Resolution in units of CRS
-
-    tgeo_init: bool
-        If False, the Rtree index will not be created. Faster but no access to data (useful e.g. for using plots only)
     """
 
     path = ""
@@ -584,6 +568,26 @@ class _ScoreMap(tgd.RasterDataset):
     def __init__(
         self, cutoff=0.525, crs=None, res=None, transforms=None, tgeo_init=True
     ):
+        """Constructor.
+
+
+        Parameters
+        ----------
+        cutoff: float
+            Threshold for the score colormap (red below, green above)
+
+        transforms: Optional[Callable[[dict[str, Any]], dict[str, Any]]]
+            A function/transform that takes an input sample and returns a transformed version
+
+        crs: `rasterio.crs.CRS`
+            Coordinate reference system in which the land cover will be transformed
+
+        res: float
+            Resolution in units of CRS
+
+        tgeo_init: bool
+            If False, the Rtree index will not be created. Faster but no access to data (useful e.g. for using plots only)
+        """
         self.cutoff = cutoff
         cmap = LinearSegmentedColormap.from_list(
             "mycmap", [(0.0, "red"), (cutoff, "gainsboro"), (1, "green")]
@@ -687,11 +691,6 @@ class _ProbaLandcover(tgd.RasterDataset):
     Consequently, they share most of attributes and methods.
 
 
-    Parameters
-    ----------
-    Same as _TorchgeoLandcover.
-
-
     Notes
     -----
     Not used in the paper, but useful for exploring the data.
@@ -761,17 +760,6 @@ class _ProbaLandcover(tgd.RasterDataset):
         -------
         fig, ax
             Figure and axes of the plot
-
-        Example
-        -------
-        >>> import matplotlib.pyplot as plt
-        >>> from mmt.datasets import landcovers
-        >>> from mmt.utils import domains
-        >>> lc = landcovers.EcoclimapSG()
-        >>> qb = domains.dublin_city.to_tgbox(lc.crs)
-        >>> x = lc[qb]
-        >>> lc.plot(x)
-        >>> plt.show()
         """
         assert len(self.labels) == len(
             self.cmap
@@ -838,14 +826,12 @@ class _ProbaLandcover(tgd.RasterDataset):
 
         Parameters
         ----------
+        Same as in `plot`, except for the following:
+        
         sample: dict
             Sample of data. Probabilities must be accessible under the 'image' key.
-
-        show_titles: bool, default=True
-            True if a title is diplayed over the figure.
-
-        suptitle: str
-            If provided, the string given here is put as main title of the figure.
+        logscale: bool, default=False
+            If True, the log of the UQ is plotted instead of the actual UQ
         """
 
         if figax is None:
@@ -1090,7 +1076,6 @@ class ScoreECOSGplus(_ScoreMap):
 
 class EcoclimapSGplus(_CompositeMap):
     """ECOSG+ as a _CompositeMap"""
-
     def __init__(self, score_min=0.525, crs=None, res=None, tgeo_init=True):
         self.score_min = score_min
 
