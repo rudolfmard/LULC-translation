@@ -49,7 +49,7 @@ parser.add_argument(
     default=default_output,
 )
 parser.add_argument("--domainname", help="Geographical domain name", default="montpellier_agglo")
-parser.add_argument("--scoremin", help="Score threshold for the transition", default=0.525, type=float)
+parser.add_argument("--scorelim", help="Score threshold for the transition", default=0.525, type=float)
 parser.add_argument(
     "--cpu", help="Perform inference on CPU", action="store_true", default=False
 )
@@ -121,9 +121,9 @@ print(f"Inference complete. inference_tif_dir = {inference_tif_dir}")
 # Merge with ECOSG+
 #------------
 print("Merging the inference with ECOSG+")
-merging_dump_dir = os.path.join(inference_dump_dir, f"ecosgml-v2.0-{weights}.{domainname}.u{u_value}.sm{args.scoremin}")
+merging_dump_dir = os.path.join(inference_dump_dir, f"ecosgml-v2.0-{weights}.{domainname}.u{u_value}.sm{args.scorelim}")
 if not args.skip_merging:
-    merger = translators.MapMergerV4(inference_tif_dir, score_min = args.scoremin)
+    merger = translators.MapMerger(inference_tif_dir, score_lim = args.scorelim)
     merging_dump_dir = merger.predict_from_large_domain(
         qdomain,
         output_dir=merging_dump_dir,
