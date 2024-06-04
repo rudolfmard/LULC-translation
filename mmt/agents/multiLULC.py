@@ -255,8 +255,8 @@ class MultiLULCAgent(base.BaseAgent):
     def train(self) -> None:
         """Main training loop"""
         loss_ref = 1000
-        plot_training_loss = {d: [] for d in self.datasets}
-        plot_validation_loss = {d: [] for d in self.datasets}
+        loss_log_training = {d: [] for d in self.datasets}
+        loss_log_validation = {d: [] for d in self.datasets}
 
         self.logger.info("Start training !")
         for epoch in range(1, self.config.training.n_epochs + 1):
@@ -272,7 +272,7 @@ class MultiLULCAgent(base.BaseAgent):
             train_loss = self.train_one_epoch()
 
             for d, l in train_loss.items():
-                plot_training_loss[d].extend(l)
+                loss_log_training[d].extend(l)
 
             torch.cuda.empty_cache()
             if epoch % self.config.training.validate_every == 0:
@@ -287,7 +287,7 @@ class MultiLULCAgent(base.BaseAgent):
                 validation_loss = self.validate()
 
                 for d, l in validation_loss.items():
-                    plot_validation_loss[d].append([self.current_iteration, np.mean(l)])
+                    loss_log_validation[d].append([self.current_iteration, np.mean(l)])
 
                 tmp = [v for v in validation_loss.values()]
                 vl = np.mean([item for elem in tmp for item in elem])
@@ -301,16 +301,16 @@ class MultiLULCAgent(base.BaseAgent):
             self.current_epoch += 1
             if epoch > 1 and epoch >= 2 * self.config.training.validate_every:
                 plot_loss(
-                    plot_training_loss,
-                    plot_validation_loss,
+                    loss_log_training,
+                    loss_log_validation,
                     savefig=os.path.join(self.config.paths.out_dir, "loss.png"),
                 )
         self.logger.info("Training ended!")
 
     @timeit
-    def train_one_epoch(self) -> None:
+    def train_one_epoch(self) -> dict:
         """One epoch of training"""
-        plot_loss = {d: [] for d in self.datasets}
+        loss_log = {d: [] for d in self.datasets}
 
         [model.train() for model in self.models]
         self.coord_model.train()
@@ -412,15 +412,15 @@ class MultiLULCAgent(base.BaseAgent):
                     break
                 batch_idx += 1
 
-                plot_loss[source].append([self.current_iteration, loss.item()])
+                loss_log[source].append([self.current_iteration, loss.item()])
 
             self.current_iteration += 1
         self.save_checkpoint()
-        return plot_loss
+        return loss_log
 
-    def validate(self) -> None:
+    def validate(self) -> dict:
         """One cycle of model validation"""
-        plot_loss = {d: [] for d in self.datasets}
+        loss_log = {d: [] for d in self.datasets}
         [model.eval() for model in self.models]
         self.coord_model.eval()
 
@@ -496,11 +496,11 @@ class MultiLULCAgent(base.BaseAgent):
                                 data.get("coordinate"),
                             )
                             im_save[source][source] = 1
-                        plot_loss[target].append(loss.item())
+                        loss_log[target].append(loss.item())
 
                 if end:
                     break
-        return plot_loss
+        return loss_log
 
     def test(self) -> None:
         """Final testing on left-out dataset"""
