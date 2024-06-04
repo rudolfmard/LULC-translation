@@ -1,3 +1,9 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Multiple land-cover/land-use Maps Translation (MMT)
+
+Module with universal embedding networks (Luc Baudoux' original)
+"""
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint as checkpoint
@@ -359,7 +365,7 @@ class DUNet(nn.Module):
             self.encoder_wrapper,
             x,
             self.dummy_tensor,
-            use_reentrant = True,
+            use_reentrant=True,
             # self.encoder_part, x
         )
         return self.decoder_part(x1, x2, x3, x4, x5, x6)
@@ -487,7 +493,9 @@ class UnivEmb(nn.Module):
 
     def MemoryMonged_forward(self, x, full=False, res=None, image=None):
         if full:
-            x = checkpoint.checkpoint(self.encoder_wrapper, x, self.dummy_tensor, use_reentrant = True)
+            x = checkpoint.checkpoint(
+                self.encoder_wrapper, x, self.dummy_tensor, use_reentrant=True
+            )
             # x = checkpoint.checkpoint(self.encoder, x)
         if res is not None:
             if self.softpos:
