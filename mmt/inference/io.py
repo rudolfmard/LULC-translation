@@ -21,9 +21,8 @@ from mmt.graphs.models import attention_autoencoder, universal_embedding
 from mmt.utils import config as utilconf
 from mmt.utils import misc
 
-
-
 PATCH_SIZE_METRES = landcover_to_landcover.PATCH_SIZE_METRES
+
 
 def cluster_tif_files(
     input_dir,
@@ -40,9 +39,9 @@ def cluster_tif_files(
     The expected pattern for the names of the TIF files is
         "N<lat>_E<lon>.tif"
         Ex: "N4.09_E43.82.tif"
-    
+
     Used in mmt.inference.translators._MapTranslator.predict_from_large_domain
-    
+
 
     Parameters
     ----------
@@ -65,8 +64,8 @@ def cluster_tif_files(
 
     verbose: bool
         If False, remove all prints.
-    
-    
+
+
     Returns
     -------
     n_files: int
@@ -201,18 +200,18 @@ def dump_labels_in_tif(labels, domain, crs, tifpath, dtype="int16") -> None:
 
 def get_epoch_of_best_model(xp_name, return_iteration=False) -> int:
     """Read the value of epoch recorded in the best model checkpoint.
-    
-    
+
+
     Parameters
     ----------
     xp_name: str
         Alias to the weights (experiment name, saved weights or absolute path)
         See `mmt.utils.misc.weights_to_checkpoint`
-    
+
     return_iteration: bool
         If True, returns a tuple (epoch, iteration).
-    
-    
+
+
     Returns
     -------
     epoch [, iteration]: int
@@ -239,17 +238,17 @@ def get_patchsize_from_mapname(mapname) -> int:
 def get_resize_from_mapname(mapname, config) -> int:
     """Return the resizing factor (resolution map/resolution embedding)
     of a given land cover map.
-    
-    
+
+
     Parameters
     ----------
     mapname: str
         Short name of the map (esawc, ecosg, esgp)
-    
+
     config: easydict
         The configuration of the experiment
-    
-    
+
+
     Returns
     -------
     resize: int or None
@@ -257,8 +256,7 @@ def get_resize_from_mapname(mapname, config) -> int:
     """
     if not mapname.endswith(".hdf5"):
         mapname += ".hdf5"
-    
-    
+
     n_px_emb = config.dimensions.n_px_embedding
     model_type = config.model.type
 
@@ -275,29 +273,29 @@ def load_pytorch_model(
     xp_name, lc_in="esawc", lc_out="esgp", train_mode=False, device="cpu"
 ) -> torch.nn.Module:
     """Load a pre-trained Pytorch model to make map translation
-    
-    
+
+
     Parameters
     ----------
     xp_name: str
         Alias to the weights (experiment name, saved weights or absolute path)
         See `mmt.utils.misc.weights_to_checkpoint`
-    
+
     lc_in: str
         Input map's short name (esawc, ecosg, esgp)
-    
+
     lc_out: str
         Input map's short name (esawc, ecosg, esgp, encoder, decoder)
         If lc_out="encoder", the loaded model translates `lc_in` to the latent space
         if lc_out="decoder", the loaded model translates the latent space to `lc_in`
-    
+
     train_mode: bool, optional
         If True, the training mode is set on
-    
+
     device: {"cuda", "cpu"}
         The device on which the model is loaded
-    
-    
+
+
     Returns
     -------
     model: torch.nn.Module
@@ -336,7 +334,9 @@ def load_pytorch_model(
 
     if lc_out not in ["encoder", "decoder"]:
         res_out = landcover_to_landcover.RESOLUTION_CATALOG[lc_out + ".hdf5"]
-        n_channels_out = len(landcover_to_landcover.LABELS_CATALOG[lc_out + ".hdf5"]) + 1
+        n_channels_out = (
+            len(landcover_to_landcover.LABELS_CATALOG[lc_out + ".hdf5"]) + 1
+        )
 
         autoenc_out = EncDec(
             in_channels=n_channels_out,
