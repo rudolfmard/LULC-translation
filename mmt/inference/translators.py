@@ -7,28 +7,21 @@ Module with inference map translator
 
 Class diagram
 -------------
-OnnxModel
-MapTranslator
- ├── EsawcToEsgp
- |    └── EsawcToEsgpProba
- ├── EsawcEcosgToEsgpRFC
+_MapTranslator
  ├── MapMerger
- └── MapMergerProba
+ └── EsawcToEsgp
+     ├── EsawcToEsgpMembers
+     ├── EsawcToEsgpProba
+     └── EsawcToEsgpAsMap -- landcovers.InferenceResults
+            └── EsawcToEsgpShowEnsemble
 """
 
 import os
-import pickle
 import shutil
-import sys
-import time
-from copy import deepcopy
 
-import numpy as np
 import torch
-# from multiprocessing import Pool
-from torch.multiprocessing import Pool, Process, set_start_method
 from torchgeo import samplers
-from torchgeo.datasets.utils import BoundingBox as TgeoBoundingBox
+from torchgeo.datasets.utils import BoundingBox
 from tqdm import tqdm
 
 from mmt import _repopath_ as mmt_repopath
@@ -37,74 +30,17 @@ from mmt.datasets import transforms as mmt_transforms
 from mmt.inference import io
 from mmt.utils import misc
 
-# from memory_profiler import profile
-
-
-try:
-    set_start_method("spawn")
-except RuntimeError:
-    pass
-
-
 # BASE CLASSES
 # ============
-class OnnxModel:
-    """Wrapper for inference from ONNX model
-
-    Not used: remove?
-    """
-
-    def __init__(self, onnxfilename, inputname=None, outputname=None):
-        raise DeprecationWarning(
-            f"{__name__}.{self.__class__.__name__}: This class is deprecated"
-        )
-        import onnx
-        import onnxruntime as ort
-
-        self.onnxfilename = onnxfilename
-        self.ort_session = ort.InferenceSession(
-            onnxfilename, providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
-        )
-
-        if outputname is None:
-            self.outputname = (
-                os.path.basename(onnxfilename).split(".")[0].split("_")[-1]
-            )
-        if inputname is None:
-            self.inputname = os.path.basename(onnxfilename).split(".")[0].split("_")[-2]
-
-        # Check the model
-        onnx_model = onnx.load(onnxfilename)
-        onnx.checker.check_model(onnx_model)
-
-    def __call__(self, x):
-        outputs = self.ort_session.run(
-            [self.outputname],
-            {self.inputname: x},
-        )
-        return outputs[0]
 
 
-class MapTranslator:
+class _MapTranslator:
     """Abstract class to make map translation models in inference mode.
 
     Define a set of nested methods that help scaling up the inference area
-    and give a common API for all models (segmentation vs pixelwise).
+    and give a common API for all models or task (inference and merging).
     By default, the method `predict_from_domain` is called when a translator
     is used as a transform.
-
-
-    Parameters
-    ----------
-    checkpoint_path: str
-        Path to the Pytorch checkpoint from which are loaded the auto-encoders.
-        For the child class `MapMerger`, this attribute is not used and set to "merger"
-
-    device: {"cuda", "cpu"}
-        Device on which the inference is done.
-
-    remove_tmpdirs: bool, default = True
-        If True, temporary directory are erased at the of the function using them.
 
 
     Main attributes
@@ -112,21 +48,21 @@ class MapTranslator:
     checkpoint_path: str
         See parameters
 
-    landcover: `mmt.datasets.landcovers.TorchgeoLandcover`
+    landcover: `torchgeo.datasets.RasterDataset`
         Land cover dataset that will be used to define the sampler and the CRS
         of the query domain.
 
 
     Main methods
     ------------
-    predict_from_data:
-        Apply translation to matrices of land cover labels.
+    predict_from_data(x) -> torch.Tensor:
+        Apply translation to tensor of land cover labels.
 
-    predict_from_domain:
+    predict_from_domain(qb) -> torch.Tensor:
         Apply translation to a geographical domain.
-        Calls `predict_from_data`
+        May call `predict_from_data`
 
-    predict_from_large_domain:
+    predict_from_large_domain(qb, **kwargs) -> str:
         Apply translation to a large domain in made in tiling the large domain into small patches.
         Calls `predict_from_domain`
     """
@@ -138,6 +74,24 @@ class MapTranslator:
         remove_tmpdirs=True,
         output_dtype="int16",
     ):
+        """Constructor.
+
+
+        Parameters
+        ----------
+        checkpoint_path: str
+            Path to the Pytorch checkpoint from which are loaded the auto-encoders.
+            For the child class `MapMerger`, this attribute is not used and set to "merger"
+
+        device: {"cuda", "cpu"}
+            Device on which the inference is done.
+
+        remove_tmpdirs: bool, default = True
+            If True, temporary directory are erased at the of the function using them.
+
+        output_dtype: str
+            Data type of the output
+        """
         self.checkpoint_path = checkpoint_path
         self.remove_tmpdirs = remove_tmpdirs
         self.output_dtype = output_dtype
@@ -153,24 +107,24 @@ class MapTranslator:
     def __repr__(self):
         return str(self.__class__) + " checkpoint_path=" + self.checkpoint_path
 
-    def predict_from_data(self, x):
-        """Apply translation to matrices of land cover labels.
+    def predict_from_data(self, x) -> torch.Tensor:
+        """Apply translation to tensor of land cover labels.
 
 
         Parameters
         ----------
-        x: ndarray or `torch.Tensor` of shape (1, H, W)
-            Matrix of land cover labels in a Pytorch tensor with H=height, W=width
+        x: `torch.Tensor` of shape (1, H, W)
+            Tensor of land cover labels, with H=height, W=width
 
 
         Returns
         -------
-        y: ndarray of shape (H', W')
-            Matrix of predicted ECOSG+ land cover labels
+        y: `torch.Tensor` of shape (H', W')
+            Tensor of predicted land cover labels (usually ECOSG+)
         """
         raise NotImplementedError
 
-    def predict_from_domain(self, qb):
+    def predict_from_domain(self, qb) -> torch.Tensor:
         """Apply translation to a geographical domain.
 
 
@@ -182,21 +136,20 @@ class MapTranslator:
 
         Returns
         -------
-        y: ndarray of shape (H', W')
-            Matrix of predicted ECOSG+ land cover labels
+        y: `torch.Tensor` of shape (H', W')
+            Tensor of predicted land cover labels (usually ECOSG+)
         """
         raise NotImplementedError
 
-    # @profile
     def predict_from_large_domain(
         self, qb, output_dir="[id]", tmp_dir="[id]", n_cluster_files=200, n_px_max=600
-    ):
+    ) -> str:
         """Apply translation to a large domain in made in tiling the large domain into small patches.
 
         As big domains cannot fit in memory, the inference is done on small patches
         (of size `n_px_max` pixels). The result of this inference is sotred in TIF files
         that can be read by Torchgeo. However, as the number of TIF files can be very
-        large, there are stitched together into a smaller number (no more than `n_max_files`).
+        large, there are clustered together into a smaller number (no more than `n_cluster_files`).
 
 
         Parameters
@@ -215,9 +168,9 @@ class MapTranslator:
             digits and the date (ex: "aa2xzh.01Nov-14h38").
             Removed at the end of this function if `remove_tmpdirs=True`
 
-        n_max_files: int, default=200
+        n_cluster_files: int, default=200
             Maximum number of TIF files created in `output_dir`.
-            If `n_max_files=0`, no stitching is made, `output_dir` is then
+            If `n_max_files=0`, no clustering is made, `output_dir` is then
             a copy of `tmp_dir`
 
         n_px_max: int, default=600
@@ -238,6 +191,7 @@ class MapTranslator:
         with open(patches_definition_file, "r") as f:
             patches = f.readlines()
 
+        # Inference on small patches
         for tifpatchname in tqdm(
             patches, desc=f"Inference over {len(patches)} patches"
         ):
@@ -245,22 +199,23 @@ class MapTranslator:
             if os.path.exists(os.path.join(tmp_dir, tifpatchname)):
                 continue
 
-            iqb = TgeoBoundingBox(
+            iqb = BoundingBox(
                 *[float(s[4:]) for s in tifpatchname[:-4].split("_")], 0, 1e12
             )
 
             l_pred = self.predict_from_domain(iqb)
 
             io.dump_labels_in_tif(
-                l_pred,
+                l_pred.numpy(),
                 iqb,
                 self.landcover.crs,
                 os.path.join(tmp_dir, tifpatchname),
                 self.output_dtype,
             )
 
+        # If needed, clustering of the output TIF files
         if n_cluster_files > 0:
-            io.stitch_tif_files(
+            io.cluster_tif_files(
                 tmp_dir,
                 output_dir,
                 n_max_files=n_cluster_files,
@@ -282,26 +237,55 @@ class MapTranslator:
 # =============
 
 
-class EsawcToEsgp(MapTranslator):
-    """Translate from ESA World Cover to ECOCLIMAP-SG+ with map translation auto-encoders"""
+class EsawcToEsgp(_MapTranslator):
+    """Translate from ESA World Cover to ECOCLIMAP-SG+ with map translation auto-encoders
+
+
+    Main attributes
+    ---------------
+    esawc: `mmt.datasets.landcovers.ESAWorldCover`
+        The input map of the map translation
+
+    encoder_decoder: `torch.nn.Module`
+        The pre-trained map translation model
+
+
+    Main methods
+    ------------
+    Same as _MapTranslator
+
+    logits_transform(logits) -> torch.Tensor
+        Transform applied to the logits
+        Hook for alternative transforms in child classes
+    """
 
     def __init__(
         self,
         checkpoint_path=os.path.join(
-            mmt_repopath, "data", "saved_models", "mmt-weights-v1.0.ckpt"
+            mmt_repopath, "data", "saved_models", "mmt-weights-v2.0.ckpt"
         ),
         device="cuda",
         remove_tmpdirs=True,
         output_dtype="int16",
         always_predict=True,
     ):
+        """Constructor. Instanciate the input land cover and load the pre-trained model
+
+
+        Parameters
+        ----------
+        Same as _MapTranslator.__init__, except for
+
+        always_predict: bool, default = True
+            If True, does not apply the diversity criterion and predict all the time
+        """
         super().__init__(checkpoint_path, device, remove_tmpdirs, output_dtype)
         self.always_predict = always_predict
 
         self.esawc = landcovers.ESAWorldCover(
             transforms=mmt_transforms.EsawcTransform()
         )
-        self.esawc_transform = mmt_transforms.OneHot(
+        self.esawc_transform = mmt_transforms.OneHotTorchgeo(
             self.esawc.n_labels + 1, device=self.device
         )
         self.encoder_decoder = io.load_pytorch_model(
@@ -310,15 +294,26 @@ class EsawcToEsgp(MapTranslator):
         self.encoder_decoder.to(self.device)
         self.landcover = self.esawc
 
-    def predict_from_data(self, x):
-        """Run the translation from matrices of land cover labels
-        :x: `torch.Tensor` of shape (N, 1, H, W)
+    def predict_from_data(self, x) -> torch.Tensor:
+        """Apply translation to tensor of land cover labels.
+
+
+        Parameters
+        ----------
+        x: `torch.Tensor` of shape (1, H, W)
+            Tensor of land cover labels, with H=height, W=width
+
+
+        Returns
+        -------
+        y: `torch.Tensor` of shape (H', W')
+            Tensor of predicted ECOSG+ land cover labels
         """
         if not self.always_predict:
             x.to(self.device)
             _, c = torch.unique(x, return_counts=True)
             if any(c / c.sum() > 0.9):
-                return np.zeros(self.get_output_shape(x))
+                return torch.zeros(self.get_output_shape(x))
 
         x = self.esawc_transform(x)
         with torch.no_grad():
@@ -326,19 +321,30 @@ class EsawcToEsgp(MapTranslator):
 
         return self.logits_transform(y)
 
-    def get_output_shape(self, x):
+    def get_output_shape(self, x) -> list:
         """Return the expected shape of the output with `x` in input"""
         return [s // 6 for s in x.shape[-2:]]
 
-    def logits_transform(self, logits):
+    def logits_transform(self, logits) -> torch.Tensor:
         """Transform applied to the logits"""
-        return logits.argmax(1).squeeze().cpu().numpy()
+        return logits.argmax(1).squeeze().cpu()
 
-    def predict_from_domain(self, qb):
-        """Run the translation from geographical domain
-        :qb: `torchgeo.datasets.utils.BoundingBox` or `mmt.utils.domains.GeoRectangle`
+    def predict_from_domain(self, qb) -> torch.Tensor:
+        """Apply translation to a geographical domain.
+
+
+        Parameters
+        ----------
+        qb: `torchgeo.datasets.utils.BoundingBox` or `mmt.utils.domains.GeoRectangle`
+            Geographical domain
+
+
+        Returns
+        -------
+        y: `torch.Tensor` of shape (H', W')
+            Tensor of predicted ECOSG+ land cover labels
         """
-        if not isinstance(qb, TgeoBoundingBox):
+        if not isinstance(qb, BoundingBox):
             qb = qb.to_tgbox(self.esawc.crs)
 
         x = self.esawc[qb]
@@ -354,18 +360,45 @@ class EsawcToEsgpAsMap(EsawcToEsgp, landcovers.InferenceResults):
     Used in: scripts/qualitative_evalutation.py
     """
 
-    res = 8.333e-5
+    res = misc.DEFAULT_RESOLUTION_10M
 
     def __getitem__(self, qb):
         return {"mask": self.predict_from_domain(qb)}
 
 
 class EsawcToEsgpMembers(EsawcToEsgp):
+    """Variation of `EsawcToEsgp` to produce members.
+
+    The prediction methods are the same. Only the logit transform is modified
+    to take into account the additional parameter `u` defining the random
+    draw of the member.
+
+    Used in scripts/inference_and_merging.py
+
+
+    Main attributes
+    ---------------
+    Same as `EsawcToEsgp`, except for
+
+    u: float or None
+        Random draw uniformly distributed between 0 and 1. When set to None,
+        the translator takes the maximum logit probability and is therefore
+        equal to `EsawcToEsgp`.
+
+
+    Main methods
+    ------------
+    Same as `EsawcToEsgp`
+
+    logits_transform(logits) -> torch.Tensor
+        Transform applied to the logits
+        Modified to generate members
+    """
 
     def __init__(
         self,
         checkpoint_path=os.path.join(
-            mmt_repopath, "data", "saved_models", "mmt-weights-v1.0.ckpt"
+            mmt_repopath, "data", "saved_models", "mmt-weights-v2.0.ckpt"
         ),
         device="cuda",
         remove_tmpdirs=True,
@@ -373,15 +406,27 @@ class EsawcToEsgpMembers(EsawcToEsgp):
         always_predict=True,
         u=None,
     ):
+        """Constructor.
+
+
+        Parameters
+        ----------
+        Same as EsawcToEsgp.__init__, except for
+
+        u: float, default=None
+            Random draw uniformly distributed between 0 and 1. When set to None,
+            the translator takes the maximum logit probability and is therefore
+            equal to `EsawcToEsgp`.
+        """
         self.u = u
         super().__init__(
             checkpoint_path, device, remove_tmpdirs, output_dtype, always_predict
         )
 
-    def _logits_to_member0(self, logits):
+    def _logits_to_member0(self, logits) -> torch.Tensor:
         return logits.argmax(1).squeeze().cpu()
 
-    def _logits_to_member(self, logits):
+    def _logits_to_member(self, logits) -> torch.Tensor:
         assert (
             self.u is not None
         ), "Please provide a u value (in ]0,1[) to generate member"
@@ -390,7 +435,7 @@ class EsawcToEsgpMembers(EsawcToEsgp):
         labels = (cdf < self.u).sum(0)
         return labels
 
-    def logits_transform(self, logits):
+    def logits_transform(self, logits) -> torch.Tensor:
         """Transform applied to the logits"""
         if self.u is None:
             return self._logits_to_member0(logits)
@@ -401,13 +446,15 @@ class EsawcToEsgpMembers(EsawcToEsgp):
 class EsawcToEsgpShowEnsemble(EsawcToEsgpAsMap):
     """Same as EsawcToEsgpAsMap but with the merging criterion.
 
+    Allows to visualize the members before exporting the map on a large domain.
+
     Used in scripts/show_infres_ensemble.py
     """
 
     def __init__(
         self,
         checkpoint_path=os.path.join(
-            mmt_repopath, "data", "saved_models", "mmt-weights-v1.0.ckpt"
+            mmt_repopath, "data", "saved_models", "mmt-weights-v2.0.ckpt"
         ),
         device="cuda",
         remove_tmpdirs=True,
@@ -439,11 +486,22 @@ class EsawcToEsgpShowEnsemble(EsawcToEsgpAsMap):
         self.bottommap.crs = self.esawc.crs
         self.bottommap.res = self.esawc.res * 6
 
-    def predict_from_domain(self, qb):
-        """Run the translation from geographical domain
-        :qb: `torchgeo.datasets.utils.BoundingBox` or `mmt.utils.domains.GeoRectangle`
+    def predict_from_domain(self, qb) -> torch.Tensor:
+        """Apply translation to a geographical domain.
+
+
+        Parameters
+        ----------
+        qb: `torchgeo.datasets.utils.BoundingBox` or `mmt.utils.domains.GeoRectangle`
+            Geographical domain
+
+
+        Returns
+        -------
+        y: `torch.Tensor` of shape (H', W')
+            Tensor of predicted ECOSG+ land cover labels
         """
-        if not isinstance(qb, TgeoBoundingBox):
+        if not isinstance(qb, BoundingBox):
             qb = qb.to_tgbox(self.esawc.crs)
 
         x = self.esawc[qb]
@@ -454,12 +512,13 @@ class EsawcToEsgpShowEnsemble(EsawcToEsgpAsMap):
         return torch.where(self.criterion(top, aux), top, bottom).squeeze()
 
     def criterion(self, top, aux):
+        """Criterion to use the top map instead of the bottom map"""
         return torch.logical_and(top != 0, aux < self.score_min)
 
-    def _logits_to_member0(self, logits):
+    def _logits_to_member0(self, logits) -> torch.Tensor:
         return logits.argmax(1).squeeze().cpu()
 
-    def _logits_to_member(self, logits):
+    def _logits_to_member(self, logits) -> torch.Tensor:
         assert (
             self.u is not None
         ), "Please provide a u value (in ]0,1[) to generate member"
@@ -468,7 +527,7 @@ class EsawcToEsgpShowEnsemble(EsawcToEsgpAsMap):
         labels = (cdf < self.u).sum(0)
         return labels
 
-    def logits_transform(self, logits):
+    def logits_transform(self, logits) -> torch.Tensor:
         """Transform applied to the logits"""
         if self.u is None:
             return self._logits_to_member0(logits)
@@ -477,12 +536,33 @@ class EsawcToEsgpShowEnsemble(EsawcToEsgpAsMap):
 
 
 class EsawcToEsgpProba(EsawcToEsgp):
-    """Return probabilities of classes instead of classes"""
+    """Variation of `EsawcToEsgp` to access land cover probabilities instead of classes.
+
+    The prediction methods are the same. Only the logit transform is modified
+    to take into account the additional parameter `u` defining the random
+    draw of the member.
+
+    Not used in the paper but useful.
+
+
+    Main attributes
+    ---------------
+    Same as `EsawcToEsgp`, except for `output_dtype` which default to float32
+
+
+    Main methods
+    ------------
+    Same as `EsawcToEsgp`
+
+    logits_transform(logits) -> torch.Tensor
+        Transform applied to the logits
+        Modified to return probabilities of classes
+    """
 
     def __init__(
         self,
         checkpoint_path=os.path.join(
-            mmt_repopath, "data", "saved_models", "mmt-weights-v1.0.ckpt"
+            mmt_repopath, "data", "saved_models", "mmt-weights-v2.0.ckpt"
         ),
         device="cuda",
         remove_tmpdirs=True,
@@ -499,58 +579,53 @@ class EsawcToEsgpProba(EsawcToEsgp):
 
     def logits_transform(self, logits):
         """Transform applied to the logits"""
-        return logits.softmax(1).squeeze().cpu().numpy()
+        return logits.softmax(1).squeeze().cpu()
 
 
-class MapMerger(MapTranslator):
-    """Merge map with ECOCLIMAP-SG+ according to a quality flag criterion"""
+class MapMerger(_MapTranslator):
+    """Merge the inference result map with ECOCLIMAP-SG+ according to a quality criterion
 
-    def __init__(
-        self,
-        source_map_path,
-        device="cpu",
-        remove_tmpdirs=True,
-        output_dtype="int16",
-        merge_criterion="qflag2_nosea",
-    ):
-        super().__init__("merger", device, remove_tmpdirs, output_dtype)
-
-        self.esgp = landcovers.EcoclimapSGplus()
-        self.qflags = landcovers.QualityFlagsECOSGplus(
-            transforms=mmt_transforms.FillMissingWithSea(0, 6)
-        )
-        self.landcover = landcovers.InferenceResults(
-            path=source_map_path, res=self.esgp.res
-        )
-        self.landcover.res = self.esgp.res
-        if callable(merge_criterion):
-            self.merge_criterion = merge_criterion
-        else:
-            self.merge_criterion = eval(merge_criterion)
-
-    def predict_from_domain(self, qb):
-        """Run the translation from geographical domain"""
-        if not isinstance(qb, TgeoBoundingBox):
-            qb = qb.to_tgbox(self.landcover.crs)
-
-        x_infres = self.landcover[qb]
-        x_qflags = self.qflags[qb]
-        x_esgp = self.esgp[qb]
-
-        x_merge = deepcopy(x_esgp["mask"])
-
-        if self.merge_criterion.__name__ == "qflag2_nodata":
-            where_infres = self.merge_criterion(x_qflags["mask"], x_infres["mask"])
-        else:
-            where_infres = self.merge_criterion(x_qflags["mask"], x_esgp["mask"])
-
-        x_merge[where_infres] = x_infres["mask"][where_infres]
-
-        return x_merge.squeeze().numpy()
+    Once the inference has run on a large domain and is now stored in TIF files,
+    ECOSG-ML is the merge of these inference results (one per member) and ECOSG+.
+    The labels are taken from ECOSG+ if its quality score is high enough, or from
+    the inference results if it is low. The transition between the two is set by
+    the threshold `score_lim`. Maps are first set to the same resolution and CRS.
 
 
-class MapMergerV2(MapTranslator):
-    """Merge map with ECOCLIMAP-SG+ according to a quality flag criterion"""
+    Main attributes
+    ---------------
+    score_lim: float, default = None
+        Threshold to apply ECOSG+ labels or inference labels.
+        When set to done, it is taken equal to the ECOSG+ quality score
+        cutoff value (so-called `score_min=0.525`).
+
+    score: `mmt.datasets.landcovers.ScoreECOSGplus`
+        Map of the ECOSG+ quality score
+
+    bguess: `mmt.datasets.landcovers.SpecialistLabelsECOSGplus`
+        Map of the ECOSG+ best-guess map (without any pixel from ECOSG)
+
+    infres: `mmt.datasets.landcovers.InferenceResults`
+        Map of the inference results stored in TIF files
+
+    ecosg: `mmt.datasets.landcovers.EcoclimapSG`
+        Map of the ECOSG labels
+
+
+    Main methods
+    ------------
+    predict_from_domain(qb) -> torch.Tensor:
+        Apply merging criterion to a geographical domain.
+        The sketch of the method is as follows:
+        ```
+        if score > score_lim
+            return bguess
+        else
+            return infres
+        unless they are at 0 (missing data)
+            return ecosg
+        ```
+    """
 
     def __init__(
         self,
@@ -558,193 +633,33 @@ class MapMergerV2(MapTranslator):
         device="cpu",
         remove_tmpdirs=True,
         output_dtype="int16",
-        score_min=None,
+        score_lim=None,
     ):
-        raise DeprecationWarning(
-            f"{__name__}.{self.__class__.__name__}: This class is deprecated"
-        )
-        super().__init__("merger", device, remove_tmpdirs, output_dtype)
+        """Constructor. Instanciate the quality score map, the best-guess
+        map and the inference results map
 
-        self.auxmap = landcovers.ScoreECOSGplus(
-            transforms=mmt_transforms.ScoreTransform(divide_by=100),
-        )
-        if score_min is None:
-            self.score_min = self.auxmap.cutoff
-        else:
-            self.score_min = score_min
 
-        self.bottommap = landcovers.EcoclimapSGplusV2p1(
-            score_min=self.score_min,
-        )
+        Parameters
+        ----------
+        Same as _MapTranslator.__init__, except for
 
-        self.topmap = landcovers.InferenceResults(
-            path=source_map_path, res=self.bottommap.res
-        )
-        self.topmap.res = self.bottommap.res
+        source_map_path: str
+            Path to the inference results stored in TIF files
 
-        self.landcover = self.bottommap
-
-    def predict_from_domain(self, qb):
-        """Run the translation from geographical domain
-        :qb: `torchgeo.datasets.utils.BoundingBox` or `mmt.utils.domains.GeoRectangle`
+        score_lim: float, default = None
+            Threshold to apply ECOSG+ labels or inference labels.
+            When set to done, it is taken equal to the ECOSG+ quality score
+            cutoff value (so-called `score_min=0.525`).
         """
-        if not isinstance(qb, TgeoBoundingBox):
-            qb = qb.to_tgbox(self.bottommap.crs)
-
-        bottom = self.bottommap[qb]["mask"]
-
-        try:
-            aux = self.auxmap[qb]["image"]
-        except IndexError:
-            aux = torch.zeros_like(bottom)
-
-        try:
-            top = self.topmap[qb]["mask"]
-        except IndexError:
-            top = torch.zeros_like(bottom)
-
-        return torch.where(self.criterion(top, aux), top, bottom).squeeze()
-
-    def criterion(self, top, aux):
-        return torch.logical_and(top != 0, aux < self.score_min)
-
-
-class MapMergerV3(MapTranslator):
-    """Merge map with ECOCLIMAP-SG+ according to a quality flag criterion"""
-
-    def __init__(
-        self,
-        source_map_path,
-        device="cpu",
-        remove_tmpdirs=True,
-        output_dtype="int16",
-        score_min=None,
-    ):
-        raise DeprecationWarning(
-            f"{__name__}.{self.__class__.__name__}: This class is deprecated"
-        )
-        super().__init__("merger", device, remove_tmpdirs, output_dtype)
-
-        auxmap = landcovers.ScoreECOSGplus(
-            transforms=mmt_transforms.ScoreTransform(divide_by=100),
-        )
-        if score_min is None:
-            self.score_min = self.auxmap.cutoff
-        else:
-            self.score_min = score_min
-
-        bottommap = landcovers.EcoclimapSGplusV2p1(
-            score_min=self.score_min,
-        )
-
-        topmap = landcovers.InferenceResults(path=source_map_path)
-
-        self.landcover = auxmap | topmap | bottommap
-
-    def predict_from_domain(self, qb):
-        """Run the translation from geographical domain
-        :qb: `torchgeo.datasets.utils.BoundingBox` or `mmt.utils.domains.GeoRectangle`
-        """
-        if not isinstance(qb, TgeoBoundingBox):
-            qb = qb.to_tgbox(self.bottommap.crs)
-
-        top = self.landcover[qb]["mask"][0]
-        aux = self.landcover[qb]["image"]
-        bottom = self.landcover[qb]["mask"][1]
-
-        return torch.where(self.criterion(top, aux), top, bottom).squeeze()
-
-    def criterion(self, top, aux):
-        return torch.logical_and(top != 0, aux < self.score_min)
-
-
-class MapMergerProba(MapTranslator):
-    """Merge map with ECOCLIMAP-SG+ according to a quality flag criterion"""
-
-    def __init__(
-        self,
-        source_map_path,
-        device="cpu",
-        remove_tmpdirs=True,
-        output_dtype="int16",
-        merge_criterion="qflag2_nosea",
-        tgeo_init=True,
-    ):
-        super().__init__("mergerproba", device, remove_tmpdirs, output_dtype)
-
-        self.tgeo_init = tgeo_init
-
-        self.esgp = landcovers.EcoclimapSGplus(
-            transforms=mmt_transforms.OneHot(35), tgeo_init=tgeo_init
-        )
-        self.qflags = landcovers.QualityFlagsECOSGplus(
-            transforms=mmt_transforms.FillMissingWithSea(0, 6), tgeo_init=tgeo_init
-        )
-        if tgeo_init:
-            self.landcover = landcovers.InferenceResultsProba(
-                path=source_map_path, res=self.esgp.res, tgeo_init=tgeo_init
-            )
-            self.landcover.res = self.esgp.res
-        else:
-            self.landcover = landcovers.InferenceResultsProba(
-                path=source_map_path, tgeo_init=tgeo_init
-            )
-
-        if callable(merge_criterion):
-            self.merge_criterion = merge_criterion
-        else:
-            self.merge_criterion = eval(merge_criterion)
-
-    def predict_from_data(self, x_infres, x_qflags, x_esgp):
-
-        x_merge = deepcopy(x_esgp)
-
-        if self.merge_criterion.__name__ == "qflag2_nodata":
-            where_infres = self.merge_criterion(x_qflags, x_infres.sum(0))
-        else:
-            where_infres = self.merge_criterion(x_qflags, x_esgp)
-
-        where_infres = where_infres.squeeze()
-        x_merge[:, where_infres] = x_infres[:, where_infres]
-
-        return x_merge.squeeze().numpy()
-
-    def predict_from_domain(self, qb):
-        """Run the translation from geographical domain"""
-        if not isinstance(qb, TgeoBoundingBox):
-            qb = qb.to_tgbox(self.landcover.crs)
-
-        x_infres = self.landcover[qb]
-        x_qflags = self.qflags[qb]
-        x_esgp = self.esgp[qb]
-
-        return self.predict_from_data(
-            x_infres["image"].squeeze(),
-            x_qflags["mask"].squeeze(),
-            x_esgp["mask"].squeeze(),
-        )
-
-
-class MapMergerV4(MapTranslator):
-    """Merge map with ECOCLIMAP-SG+ according to a quality flag criterion"""
-
-    def __init__(
-        self,
-        source_map_path,
-        device="cpu",
-        remove_tmpdirs=True,
-        output_dtype="int16",
-        score_min=None,
-    ):
         super().__init__("merger", device, remove_tmpdirs, output_dtype)
 
         self.score = landcovers.ScoreECOSGplus(
             transforms=mmt_transforms.ScoreTransform(divide_by=100),
         )
-        if score_min is None:
-            self.score_min = self.score.cutoff
+        if score_lim is None:
+            self.score_lim = self.score.cutoff
         else:
-            self.score_min = score_min
+            self.score_lim = score_lim
 
         self.bguess = landcovers.SpecialistLabelsECOSGplus(res=self.score.res)
         self.bguess.res = self.score.res
@@ -759,11 +674,22 @@ class MapMergerV4(MapTranslator):
 
         self.landcover = self.ecosg
 
-    def predict_from_domain(self, qb):
-        """Run the translation from geographical domain
-        :qb: `torchgeo.datasets.utils.BoundingBox` or `mmt.utils.domains.GeoRectangle`
+    def predict_from_domain(self, qb) -> torch.Tensor:
+        """Apply translation to a geographical domain.
+
+
+        Parameters
+        ----------
+        qb: `torchgeo.datasets.utils.BoundingBox` or `mmt.utils.domains.GeoRectangle`
+            Geographical domain
+
+
+        Returns
+        -------
+        y: `torch.Tensor` of shape (H', W')
+            Tensor of merged land cover labels
         """
-        if not isinstance(qb, TgeoBoundingBox):
+        if not isinstance(qb, BoundingBox):
             qb = qb.to_tgbox(self.landcover.crs)
 
         x_ecosg = self.ecosg[qb]["mask"].squeeze()
@@ -779,7 +705,7 @@ class MapMergerV4(MapTranslator):
         x_bguess = safeget(self.bguess)
         x_score = safeget(self.score, key="image")
 
-        x_ = torch.where(x_score > self.score_min, x_bguess, x_infres)
+        x_ = torch.where(x_score > self.score_lim, x_bguess, x_infres)
         x = torch.where(x_ == 0, x_ecosg, x_)
 
         if (x == 0).sum() > 0:
@@ -792,25 +718,60 @@ class MapMergerV4(MapTranslator):
         return x
 
 
-# MERGING CRITERIA
-# ================
+# FUNCTIONS
+# =========
 
 
-def sample_domain_with_patches(domain, landcover, patch_size, tmp_dir):
+def sample_domain_with_patches(domain, landcover, patch_size, tmp_dir) -> str:
     """Sample create a list of TIF file names that cover the whole domain
+
+    Each file name gives the boundaries of a patch with the following convention:
+    'minx-MINXVALUE_maxx-MAXXVALUE_minyMINYVALUE_maxyMAXYVALUE.tif'
+    Storing the bounding boxes this way ensure reproducibility in the sampling
+    of the domain and allows safe stops and restarts.
+
+    Used in mmt.inference.translators._MapTranslator.predict_from_large_domain
+
+
+    Parameters
+    ----------
+    domain: `torchgeo.datasets.utils.BoundingBox` or `mmt.utils.domains.GeoRectangle`
+        Geographical domain
+
+    landcover: `torchgeo.datasets.RasterDataset`
+        Land cover to sample
+
+    patch_size: int
+        Size of the sampling patches (# of pixels)
+
+    tmp_dir: str
+        Path to the temporary directory where the inference results will be stored
+
+
+    Returns
+    -------
+    patches_definition_file: str
+        Path to the file containing the TIF files names to be created.
+
 
     Example
     -------
+    >>> # Sample Ireland with ECOSG 100-px patches
     >>> from mmt.utils import domains
     >>> from mmt.datasets import landcovers
     >>> from mmt.inference import translators
     >>> landcover = landcovers.EcoclimapSG()
-    >>> domain = domains.eurat
-    >>> patch_size = 20
-    >>> tmp_dir = "tmp"
-    >>> translators.sample_domain_with_patches(domain, landcover, patch_size, tmp_dir)
+    >>> translators.sample_domain_with_patches(domains.ireland, landcover, 100, "tmp")
+    'tmp/patches_definition_file.txt'
+    >>> with open('tmp/patches_definition_file.txt', 'r') as f:
+    ...     oneline = f.readlines()[0]
+    ...     count = len(f.readlines())
+    >>> count
+    540
+    >>> oneline
+    'minx-11.1_maxx-10.822222222222221_miny50.9_maxy51.17777777777778.tif\n'
     """
-    if not isinstance(domain, TgeoBoundingBox):
+    if not isinstance(domain, BoundingBox):
         qb = domain.to_tgbox(landcover.crs)
 
     margin = patch_size // 6
@@ -833,82 +794,3 @@ def sample_domain_with_patches(domain, landcover, patch_size, tmp_dir):
             )
 
     return patches_definition_file
-
-
-class PatchIterator:
-    def __init__(self, directory):
-        raise DeprecationWarning(
-            f"{__name__}.{self.__class__.__name__}: This class is deprecated"
-        )
-        self.directory = directory
-        self.patches_definition_file = os.path.join(
-            directory, "patches_definition_file.txt"
-        )
-        self.i = 0
-
-    def __enter__(self):
-        self.openfile = open(self.patches_definition_file, "r")
-        self.i = 0
-        l = next(iter(self.openfile))
-        while os.path.exists(os.path.join(self.directory, l.strip())):
-            l = next(iter(self.openfile))
-            self.i += 1
-
-        print(f"Opening {self.patches_definition_file} at line #{self.i}: {l.strip()}")
-        return self
-
-    def __exit__(self, exc_type, exc_value, exc_traceback):
-        self.openfile.close()
-        print(f"Closing {self.patches_definition_file} at line #{self.i}")
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        l = next(iter(self.openfile))
-        self.i += 1
-        tiff = l.strip()
-        bbox = TgeoBoundingBox(*[float(s[4:]) for s in tiff[:-4].split("_")], 0, 1e12)
-        return tiff, bbox
-
-    def __len__(self):
-        if not hasattr(self, "_len"):
-            with open(self.patches_definition_file, "r") as f:
-                count = sum(1 for _ in f)
-
-            self._len = count
-
-        return self._len - self.i
-
-
-def qflag2_nodata(x_qflags, x_infres):
-    """Use inference result when quality flag beyond 2 except for no data"""
-    raise DeprecationWarning(
-        f"{__name__}.{sys._getframe().f_code.co_name}: This function is deprecated"
-    )
-    return torch.logical_and(x_qflags > 2, x_infres > 0)
-
-
-def qflag2_nosea(x_qflags, x_esgp):
-    """Use inference result when quality flag beyond 2 except for sea pixels"""
-    raise DeprecationWarning(
-        f"{__name__}.{sys._getframe().f_code.co_name}: This function is deprecated"
-    )
-    return torch.logical_and(x_qflags > 2, x_esgp != 1)
-
-
-def qflag2_onelabel(x_qflags, x_esgp):
-    """Use inference result when quality flag beyond 2 except for patches with only one label"""
-    raise DeprecationWarning(
-        f"{__name__}.{sys._getframe().f_code.co_name}: This function is deprecated"
-    )
-    return torch.logical_and(x_qflags > 2, torch.Tensor([np.unique(x_esgp).size > 1]))
-
-
-def qflag2_nodominant(x_qflags, x_esgp):
-    """Use inference result when quality flag beyond 2 except for patches with strongly dominant label"""
-    raise DeprecationWarning(
-        f"{__name__}.{sys._getframe().f_code.co_name}: This function is deprecated"
-    )
-    _, c = np.unique(x_esgp, return_counts=True)
-    return torch.logical_and(x_qflags > 2, torch.Tensor([any(c / c.sum() < 0.9)]))
