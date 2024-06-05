@@ -61,9 +61,8 @@ args = parser.parse_args()
 print(f"Executing {sys.argv[0]} from {os.getcwd()} with args={args}")
 
 # Default resolution is the one of ESA World Cover (~10m)
-res = 8.333e-5
-# patch_size = float(args.patchsize)
-# n_px = patch_size // lcs[0].res
+res = misc.DEFAULT_RESOLUTION_10M
+
 n_px = args.npx
 locations = args.locations.split(",")
 device = "cpu" if args.cpu else "cuda"

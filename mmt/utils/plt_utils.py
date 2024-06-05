@@ -209,7 +209,7 @@ def plot_confusion_matrix(
     if DEFAULT_SAVEFIG:
         figpath = os.path.join(DEFAULT_FIGDIR, figname + DEFAULT_FIGFMT)
         fig.savefig(figpath)
-        fig.close()
+        plt.close()
         print("Figure saved:", figpath)
     else:
         fig.show()
@@ -315,7 +315,7 @@ def patches_over_domain(
     if DEFAULT_SAVEFIG:
         figpath = os.path.join(DEFAULT_FIGDIR, figname + DEFAULT_FIGFMT)
         fig.savefig(figpath)
-        fig.close()
+        plt.close()
         print("Figure saved:", figpath)
     else:
         fig.show()

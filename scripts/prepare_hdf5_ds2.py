@@ -45,7 +45,8 @@ import rasterio
 import torch
 import torchvision.transforms as tvt
 from mmt import _repopath_ as mmt_repopath
-from mmt.datasets import landcover_to_landcover, landcovers, transforms
+from mmt.datasets import landcover_to_landcover, landcovers
+from mmt.datasets import  transforms as mmt_transforms
 from mmt.utils import config as utilconf
 from mmt.utils import domains, misc, plt_utils
 from torchgeo import samplers
@@ -75,10 +76,10 @@ n_px_emb = int(args.npxemb)
 # Land cover loading
 #--------------------
 print(f"Loading landcovers with native CRS")
-esawc = landcovers.ESAWorldCover(transforms=transforms.EsawcTransform())
+esawc = landcovers.ESAWorldCover(transforms=mmt_transforms.EsawcTransform())
 ecosg = landcovers.EcoclimapSG()
 esgp = landcovers.EcoclimapSGplus()
-qscore = landcovers.ScoreECOSGplus(transforms=transforms.ScoreTransform(divide_by=100))
+qscore = landcovers.ScoreECOSGplus(transforms=mmt_transforms.ScoreTransform(divide_by=100))
 
 lc = esawc & esgp & ecosg & qscore
 
@@ -135,8 +136,6 @@ while add_another_patch:
     # Get the data from all maps
     #-----------------
     x_lc = lc[qb] # 'mask': (3, n_px_max, n_px_max) -> 3: esawc, splab, ecosg ; 'image': (1, n_px_max, n_px_max) -> score
-    # x_esgp, _ = esgp.getitem_from_data(x_lc["image"], x_lc["mask"][1], x_lc["mask"][2])
-    # x_esgp = esgp[qb]
     
     x_labels = {
         "esawc": x_lc["mask"][0],
@@ -155,7 +154,6 @@ while add_another_patch:
     unmet_qscore = [misc.qscore_from_score(x) < quality_threshold for x in tttv_score.values()]
     unmet_divscore = [misc.divscore_from_esawc(x) < diversity_threshold for x in tttv_esawc.values()]
     if any(unmet_qscore) or any(unmet_divscore):
-        # print(f"[-] Unmet quality criterion: all-patch qscore={misc.qscore_from_score(x_score)}. Move to next patch")
         continue
     
     # If passed, write in file
@@ -213,8 +211,8 @@ with open(os.path.join(dump_dir, coordspatches_filename), "w") as f:
 #-----------------
 qdom = getattr(domains, domainname)
 figname = "patchloc-" + "-".join([domainname, f"{n_patches}patches", f"{quality_threshold}qthresh", f"{diversity_threshold}divthresh"])
-plt_utils.storeImages = True
-plt_utils.figureDir = dump_dir
+plt_utils.DEFAULT_SAVEFIG = True
+plt_utils.DEFAULT_FIGDIR = dump_dir
 plt_utils.patches_over_domain(qdom, selected_bboxes, background="osm", zoomout=0, details=4, figname = figname)
 
 # EOF

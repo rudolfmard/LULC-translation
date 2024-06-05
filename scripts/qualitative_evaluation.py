@@ -59,7 +59,7 @@ device = "cpu" if args.cpu else "cuda"
 
 
 # Default resolution is the one of ESA World Cover (~10m)
-res = 8.333e-5
+res = misc.DEFAULT_RESOLUTION_10M
 
 # Land cover loading
 # --------------------
