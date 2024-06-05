@@ -6,9 +6,8 @@ Program to test the access of data with landcover classes
 """
 import os
 
-import rasterio
 import matplotlib.pyplot as plt
-
+import rasterio
 from mmt import _repopath_ as mmt_repopath
 from mmt.datasets import landcovers
 from mmt.datasets import transforms as mmt_transforms
@@ -54,3 +53,5 @@ lc = landcovers.EcoclimapSGML(member=0)
 qb = domains.portugese_crops.centred_fixed_size(100, 0.0005).to_tgbox(lc.crs)
 lc.plot_all_members(qb)
 plt.show(block=False)
+
+print("Landcovers tested successfully")

@@ -39,8 +39,9 @@ data
      └── ...
 """
 
-import os
 import argparse
+import os
+
 from mmt import _repopath_ as mmt_repopath
 
 parser = argparse.ArgumentParser(prog="is_data_there", description='Check if the data is at the correct location and in the correct format.')
@@ -67,22 +68,21 @@ if tiff:
     from mmt.datasets import landcovers
     
     print(f"Loading landcovers with native CRS and resolution")
-    for lcname in ["ESAWorldCover", "EcoclimapSG", "EcoclimapSGplus", "EcoclimapSGML", "QualityFlagsECOSGplus"]:
+    for lcname in ["ESAWorldCover", "EcoclimapSG", "EcoclimapSGplus", "EcoclimapSGML", "ScoreECOSGplus"]:
         lc_class = getattr(landcovers, lcname)
         lcmap = lc_class()
         print(f"  Loaded: {lcmap.__class__.__name__} with crs={lcmap.crs}, res={lcmap.res}")
     
 if weights:
-    from mmt.inference import io
-    from mmt.inference import translators
+    from mmt.inference import io, translators
     
     translator = translators.EsawcToEsgp()
     epoch, iteration = io.get_epoch_of_best_model(translator.checkpoint_path, return_iteration=True)    
     print(f"Loaded {translator} at epoch={epoch}, iteration={iteration}")
     
 if hdf5:
-    from mmt.utils import config as utilconf
     from mmt.datasets import landcover_to_landcover
+    from mmt.utils import config as utilconf
     config = utilconf.get_config(
         os.path.join(
             mmt_repopath,
@@ -122,3 +122,5 @@ if hdf5:
         print(f"  source={source}")
         for target, val in targetval.items():
             print(f"    target={target}: dataset={val} ({len(val)} items)")
+
+print("\nAll tested data is there")

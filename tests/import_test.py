@@ -90,7 +90,7 @@ from mmt.utils import misc, plt_utils, scores
 
 misc.memoize
 scores.compute_confusion_matrix
-plt_utils.plt_loss2
+plt_utils.plot_loss
 utilconf.get_config
 
 
