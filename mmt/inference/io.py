@@ -352,7 +352,7 @@ def load_pytorch_model(
         autoenc_out.load_state_dict(checkpoint[f"encoder_state_dict_{lc_out}.hdf5"])
 
     print(
-        f"Loaded model at epoch {checkpoint['epoch']}, iteration {checkpoint['iteration']}"
+        f"<{__name__}.{sys._getframe().f_code.co_name}> Loaded model at epoch {checkpoint['epoch']}, iteration {checkpoint['iteration']}"
     )
 
     if lc_out == "encoder":
