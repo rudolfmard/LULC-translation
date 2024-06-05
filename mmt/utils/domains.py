@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Weather-oriented physiography toolbox (WOPT)
+"""Multiple land-cover/land-use Maps Translation (MMT)
 
 Module for geographical domains utilities
 
 Global docstrings reviews:
   * 22 Nov. 2022 (Thomas Rieutord)
+  * 05 Jun. 2024 (Thomas Rieutord)
 """
 
 import json
@@ -16,7 +17,6 @@ import rasterio
 import shapely.geometry
 import utm
 from torchgeo.datasets.utils import BoundingBox as TgeoBoundingBox
-from tqdm import tqdm
 
 
 class GeoRectangle:
@@ -40,6 +40,13 @@ class GeoRectangle:
         - "llmm": longitude-latitude minimum-maximum
             coords should be an array-like of shape (4,) of the type `coords = [x2, x4, y2, y4]`
         - "json": coords is a path to a GeoJson file
+            the JSON file must contain points coords under ["geometry"]["coordinates"][0] or ["coordinates"][0]
+        - "points": from a set of points (take the smaller bounding box containing all points)
+            coords is a list of x,y tuples
+        - "tgbox": from a torchgeo.datasets.utils.BoundingBox
+            coords is a TgeoBoundingBox
+        - "epsg": from coordinates in a different CRS (provided in the opt `crs` argument)
+            coords is a 4-tuple (left, bottom, right, top)
 
     crs: `rasterio.crs.CRS` or None
         Coordinate reference system in which the coordinates are given.
@@ -110,9 +117,9 @@ class GeoRectangle:
                 points = geojson["geometry"]["coordinates"][0]
             except:
                 points = geojson["coordinates"][0]
-            self.extract_boundingbox_(points)
+            self._init_from_boundingbox(points)
         elif fmt == "points":
-            self.extract_boundingbox_(coords)
+            self._init_from_boundingbox(coords)
         elif fmt == "tgbox":
             assert isinstance(
                 coords, TgeoBoundingBox
@@ -143,7 +150,7 @@ class GeoRectangle:
         ):
             raise ValueError("Incoherent min/max values for lon/lat. Please the inputs")
 
-    def extract_boundingbox_(self, points):
+    def _init_from_boundingbox(self, points):
         """Extract the bounding box from a list of points"""
         minlat = 90
         maxlat = -90
@@ -219,7 +226,9 @@ class GeoRectangle:
     def to_epsg(self, crs):
         """Export to the minimum-maximum longitude-latitude format in the given CRS
 
-        :crs: `rasterio.crs.CRS` target coordinate reference system
+        Parameter
+        ---------
+        crs: `rasterio.crs.CRS` target coordinate reference system
         """
         xmin, ymin, xmax, ymax = rasterio.warp.transform_bounds(
             rasterio.crs.CRS.from_epsg(4326),
@@ -349,68 +358,8 @@ class GeoRectangle:
 
 # SOME USEFUL FUNCTIONS
 # =======================
-def find_intersection(dataset, domain, unique=False):
-    """Give the items of the dataset intersecting the domain.
-
-
-    Parameters
-    ----------
-    dataset: `wopt.datasets.Cross_BigEarthNet_EcoclimapSG`
-        Dataset crossing BigEarthNet with ECOCLIMAP-SG
-
-    domain: `wopt.domains.GeoRectangle` or `shapely.geometry.box`
-        Geographical domain
-
-
-    Returns
-    -------
-    idxs: list of int
-        Indices of items of the dataset covering the domain
-    """
-
-    if hasattr(domain, "to_sbox"):
-        domain = domain.to_sbox()
-
-    print(
-        f"Finding items of dataset {dataset} intersecting {domain}. Can take some time..."
-    )
-
-    idxs = []
-    for idx in tqdm(range(len(dataset))):
-        try:
-            bbox = dataset.get_boundingbox(idx).to_sbox()
-        except AttributeError:
-            bbox = dataset.source.get_boundingbox(idx).to_sbox()
-
-        if domain.intersects(bbox):
-            if unique:
-                try:
-                    already_in = any(
-                        [
-                            bbox.equals(dataset.get_boundingbox(i).to_sbox())
-                            for i in idxs
-                        ]
-                    )
-                except AttributeError:
-                    already_in = any(
-                        [
-                            bbox.equals(dataset.source.get_boundingbox(i).to_sbox())
-                            for i in idxs
-                        ]
-                    )
-                if not already_in:
-                    idxs.append(idx)
-            else:
-                idxs.append(idx)
-
-    print(f"{len(idxs)} items found. Unique={unique}")
-
-    return idxs
-
-
-def bbox_from_bboxs(bboxs):
+def bbox_from_bboxs(bboxs) -> GeoRectangle:
     """Give the smallest bounding box encompassing multiple bounding boxes"""
-
     pts = []
     for b in bboxs:
         pts += list(b.to_bltr())
@@ -418,14 +367,7 @@ def bbox_from_bboxs(bboxs):
     return GeoRectangle(pts, fmt="points")
 
 
-def get_central_point(domain):
-    """Return the coordinates of the points at the center of the rectangle"""
-    x = (domain.min_longitude + domain.max_longitude) / 2
-    y = (domain.min_latitude + domain.max_latitude) / 2
-    return x, y
-
-
-def centred_fixed_size(domain, n_px, res):
+def centred_fixed_size(domain, n_px, res) -> GeoRectangle:
     """Return a `GeoRectangle` with the same center as the one provided and
     with `n_px` pixels in each direction.
     """
@@ -437,7 +379,7 @@ def centred_fixed_size(domain, n_px, res):
     return GeoRectangle([xmin, xmax, ymin, ymax])
 
 
-def enlarge_domain(domain, factor=1):
+def enlarge_domain(domain, factor=1) -> GeoRectangle:
     """Create a larger domain than the one provided. Suitable only for small domains.
 
 
@@ -467,71 +409,65 @@ def enlarge_domain(domain, factor=1):
     return GeoRectangle(enlarged_llmm, fmt="llmm")
 
 
-# SOME USEFUL DOMAINS
-# =====================
-# Easily draw geoJson: https://geojson.io/
-ireland = GeoRectangle([-11.1, -4.8, 50.9, 55.6])
-dublin_city = GeoRectangle([-6.3139, -6.2209, 53.3321, 53.3784])
-toulouse = GeoRectangle([1.336, 1.508, 43.554, 43.674])
-nanterre = GeoRectangle([2.166, 2.272, 48.861, 48.936])
+def get_central_point(domain) -> tuple:
+    """Return the coordinates of the points at the center of the rectangle"""
+    x = (domain.min_longitude + domain.max_longitude) / 2
+    y = (domain.min_latitude + domain.max_latitude) / 2
+    return x, y
+
+
+# SOME USEFUL DOMAINS (alphabetical order)
+# ===================
+# Easily draw geoJson: https://geojson.io/d
+# Easily access to bounding boxes: http://bboxfinder.com/
+
+alps_and_carpates = GeoRectangle([2, 27, 41.3, 51])
+antelao_glacier = GeoRectangle(
+    [12.19188, 12.2922, 46.4055, 46.4767]
+)  # Alpine valley with town (San Vito de Cadore) and glacier (Antelao, 3263m), Italy
+bakar_bay_croatia = GeoRectangle(
+    [14.5263, 14.5864, 45.266, 45.3126]
+)  # Coastline, forest, heavy industry in Croatia
+bigearthnet_fulldom = GeoRectangle(
+    [-9.00023345437725, 36.956956702083396, 31.598439091981028, 68.02168200047284]
+)
+breznik_slovenia = GeoRectangle(
+    [15.1475, 15.1643, 45.5126, 45.5266]
+)  # Forest and village
+burren = GeoRectangle([-9.15985, -9.0469, 53.0871, 53.1504])  # Bare rock
+canaries_morocco = GeoRectangle(
+    [-18.457031, -7.338867, 24.567108, 33.174342]
+)  # Track missing data handling around islands and in Sahara
+dublin_city = GeoRectangle(
+    [-6.3139, -6.2209, 53.3321, 53.3784]
+)  # City with airport and heavy industry, complex coastline, estuary
 dublin_county = GeoRectangle(
     '{"type": "Polygon", "coordinates": [[[-6.5468919, 53.1782636], [-6.0439503, 53.1782636], [-6.0439503, 53.509983], [-6.5468919, 53.509983], [-6.5468919, 53.1782636]]]}',
     fmt="json",
 )
-alps_and_carpates = GeoRectangle([2, 27, 41.3, 51])
-europe = GeoRectangle([-20, 30, 32, 70])
-freastern_eurat = GeoRectangle([8.24, 42, 20, 72])
-reunion_island = GeoRectangle([55.1958, 55.8723, -21.4286, -20.8180])
-bigearthnet_fulldom = GeoRectangle(
-    (-9.00023345437725, 36.956956702083396, 31.598439091981028, 68.02168200047284)
-)
-burren = GeoRectangle([-9.15985, -9.0469, 53.0871, 53.1504])
-waterville_kerry = GeoRectangle([-10.2018, -10.1518, 51.8020, 51.8466])
-waterville_kerry_124x133 = GeoRectangle([-10.16, -10.141, 51.83, 51.841])
-montpellier_agglo = GeoRectangle([3.63, 4.14, 43.38, 43.82])  # Sea artefact
-rhone_avignon = GeoRectangle([4.64, 4.95, 43.82, 44.11])  # Stitching artefact
-
-# NWP domains
-irl750 = GeoRectangle([-15.5, -5, 49.5, 57.5])
-ireland25 = GeoRectangle([-16, 4, 45, 61])
-eurat = GeoRectangle([-32, 42, 20, 72])
+elhichria_tunisia = GeoRectangle(
+    [9.390907, 9.509354, 34.832687, 34.921408]
+)  # Low quality score
+elmenia_algeria = GeoRectangle([2.44, 3.46, 30.01, 30.97])  # Sahara small town and lake
+eurat = GeoRectangle(
+    [-32, 42, 20, 72]
+)  # Europe-Atlantic domain -> TARGET DOMAIN FOR THE LAND COVER MAP
+europe = GeoRectangle([-20, 30, 32, 70])  # Hand cut of the European continent
+faroe_islands = GeoRectangle([-8.11, -5.88, 61.30, 62.54])  # Faroe islands
 fin_south_deode = GeoRectangle(
     [15.5, 32, 57, 65]
 )  # forecast domain = [16.33, 31.03, 57.59, 64.07]
-paname = GeoRectangle([-1.5, 6, 46, 50.5])
-
-# Sahara small town and lake
-elmenia_algeria = GeoRectangle([2.44, 3.46, 30.01, 30.97])
-# Mangroves
-florida_mangrove = GeoRectangle([-81.5995, -81.5664, 25.9753, 26.0097])
-# Ice, moss and lichen
-snaefell_glacier = GeoRectangle([-15.5828, -15.4863, 64.7673, 64.8113])
-# Alpine valley with town (San Vito de Cadore) and glacier (Antelao, 3263m), Italy
-antelao_glacier = GeoRectangle([12.19188, 12.2922, 46.4055, 46.4767])
-# Cameroon jungle
-ngambe_jungle = GeoRectangle([10.5992, 10.6443, 4.2156, 4.2581])
-# Mars en Cevennes
-mars_cevennes = GeoRectangle([3.5389, 3.5836, 43.9913, 44.0259])
-# Northern crops and forest
-jokioinen_crops = GeoRectangle([23.4278, 23.4913, 60.7896, 60.8204])
-# Portugese crops and forest
-portugese_crops = GeoRectangle(
-    [-7.0984782206142825, -7.0781569753000895, 40.759403727839384, 40.77504037344005],
-    fmt="llmm",
-)
-# Faroe islands
-faroe_islands = GeoRectangle([-8.11, -5.88, 61.30, 62.54])
-# Large portion of Sahara, mostly over Algeria and Lybia
-large_sahara = GeoRectangle([-2, 21, 20, 34])
-# Small portion of Sahara, near Tripoli
-tripoli_sahara = GeoRectangle([11, 15, 30, 33])
-# Track missing data handling around islands and in Sahara
-canaries_morocco = GeoRectangle([-18.457031, -7.338867, 24.567108, 33.174342])
-# Reunion crops and forest
-reunion_crops = GeoRectangle([55.6638, 55.7004, -21.0505, -21.0150])
-# Small island
-savage_canary_island = GeoRectangle([-15.8935, -15.8517, 30.1319, 30.1677])
-# Another small island
+florida_mangrove = GeoRectangle([-81.5995, -81.5664, 25.9753, 26.0097])  # Mangroves
+freastern_eurat = GeoRectangle(
+    [8.24, 42, 20, 72]
+)  # Part of EURAT east of France mainland
+geneva = GeoRectangle(
+    [6.092434, 6.202126, 46.163782, 46.239702]
+)  # Large town, river to lake transition
+ireland25 = GeoRectangle([-16, 4, 45, 61])  # HARMONIE-AROME domain for NWP
+ireland = GeoRectangle([-11.1, -4.8, 50.9, 55.6])  # Hand cut of the Island of Ireland
+irl750 = GeoRectangle([-15.5, -5, 49.5, 57.5])  # HECTOR domain for NWP
+istanbul_power_plant = GeoRectangle([28.689, 28.703, 40.971, 40.983])  # Heavy industry
 iso_kihdinluoto = GeoRectangle(
     TgeoBoundingBox(
         minx=21.122670101126037,
@@ -542,129 +478,50 @@ iso_kihdinluoto = GeoRectangle(
         maxt=1000000000000.0,
     ),
     fmt="tgbox",
-)
-# Heavy industry
-istanbul_power_plant = GeoRectangle([28.689, 28.703, 40.971, 40.983])
-# Forest and village
-breznik_slovenia = GeoRectangle([15.1475, 15.1643, 45.5126, 45.5266])
-# Coastline, forest, heavy industry in Croatia
-bakar_bay_croatia = GeoRectangle([14.5263, 14.5864, 45.266, 45.3126])
-# Estuary, small town and small island. France, Brittany
-plouguernau_estuary = GeoRectangle([-4.583359, -4.492722, 48.567861, 48.633022])
-# Large town, river to lake transition
-geneva = GeoRectangle([6.092434, 6.202126, 46.163782, 46.239702])
-# LCZ1?
-london_city = GeoRectangle([-0.117073, -0.067978, 51.498485, 51.531280])
-# Low quality score
-lecce_italy = GeoRectangle([18.091049, 18.277130, 40.254377, 40.412973])
-rural_andalousia = GeoRectangle([-4.293423, -4.235573, 36.836493, 36.885387])
-elhichria_tunisia = GeoRectangle([9.390907, 9.509354, 34.832687, 34.921408])
+)  # Tiny islands in the South of Finland
+iziaslav_ukraine = GeoRectangle(
+    [26.711884, 26.902084, 50.037297, 50.178657]
+)  # Low score
+jokioinen_crops = GeoRectangle(
+    [23.4278, 23.4913, 60.7896, 60.8204]
+)  # Northern crops and forest
+large_sahara = GeoRectangle(
+    [-2, 21, 20, 34]
+)  # Large portion of Sahara, mostly over Algeria and Lybia
+lecce_italy = GeoRectangle(
+    [18.091049, 18.277130, 40.254377, 40.412973]
+)  # Low quality score
+london_city = GeoRectangle([-0.117073, -0.067978, 51.498485, 51.531280])  # LCZ1, river
+mars_cevennes = GeoRectangle([3.5389, 3.5836, 43.9913, 44.0259])  # Mars en Cevennes
+montpellier_agglo = GeoRectangle([3.63, 4.14, 43.38, 43.82])  # Sea artefact
+nanterre = GeoRectangle([2.166, 2.272, 48.861, 48.936])  # LCZ1, river
+ngambe_jungle = GeoRectangle([10.5992, 10.6443, 4.2156, 4.2581])  # Cameroon jungle
+paname = GeoRectangle([-1.5, 6, 46, 50.5])  # NWP domain for the PANAME experiment
+plouguernau_estuary = GeoRectangle(
+    [-4.583359, -4.492722, 48.567861, 48.633022]
+)  # Estuary, small town and small island. France, Brittany
+portugese_crops = GeoRectangle(
+    [-7.0984782206142825, -7.0781569753000895, 40.759403727839384, 40.77504037344005],
+    fmt="llmm",
+)  # Portugese crops and forest
+reunion_crops = GeoRectangle(
+    [55.6638, 55.7004, -21.0505, -21.0150]
+)  # Reunion crops and forest
+reunion_island = GeoRectangle([55.1958, 55.8723, -21.4286, -20.8180])
+rhone_avignon = GeoRectangle([4.64, 4.95, 43.82, 44.11])  # Stitching artefact
+rural_andalousia = GeoRectangle(
+    [-4.293423, -4.235573, 36.836493, 36.885387]
+)  # Low quality score
+savage_canary_island = GeoRectangle(
+    [-15.8935, -15.8517, 30.1319, 30.1677]
+)  # Small island
+snaefell_glacier = GeoRectangle(
+    [-15.5828, -15.4863, 64.7673, 64.8113]
+)  # Ice, moss and lichen
 subotica_serbia = GeoRectangle([19.620895, 19.814529, 46.020330, 46.176502])
-iziaslav_ukraine = GeoRectangle([26.711884, 26.902084, 50.037297, 50.178657])
-
-# Rare labels locations
-# Obtained with `python search_rare_labels.py`
-rare_label_9tropbldec = GeoRectangle(
-    TgeoBoundingBox(
-        # South of Maspalomas, Canary island
-        minx=-15.69859857915911,
-        maxx=-15.617750203588354,
-        miny=27.73,
-        maxy=27.8,
-        mint=0.0,
-        maxt=9.223372036854776e18,
-    ),
-    fmt="tgbox",
-)
-
-rare_label_14bornldec = GeoRectangle(
-    TgeoBoundingBox(
-        # West of Simferopol, Crimea
-        minx=33.58441521209243,
-        maxx=33.66526358766319,
-        miny=44.90534374868029,
-        maxy=44.98619212425105,
-        mint=0.0,
-        maxt=9.223372036854776e18,
-    ),
-    fmt="tgbox",
-)
-
-rare_label_22floodedtree = GeoRectangle(
-    TgeoBoundingBox(
-        # Vesturhorn penisula, East coast of Iceland
-        minx=-14.97,
-        maxx=-14.89,
-        miny=64.25,
-        maxy=64.335,
-        mint=0.0,
-        maxt=9.223372036854776e18,
-    ),
-    fmt="tgbox",
-)
-
-rare_label_30lcz7 = GeoRectangle(
-    TgeoBoundingBox(
-        # Fderik town and seasonal lake, NE Mauritania
-        minx=-12.755717708383559,
-        maxx=-12.674869332812802,
-        miny=22.640779094834773,
-        maxy=22.72162747040553,
-        mint=0.0,
-        maxt=9.223372036854776e18,
-    ),
-    fmt="tgbox",
-)
-
-
-rare_v2label_30lcz7 = GeoRectangle(
-    TgeoBoundingBox(
-        # Collonges-sous-Salève, Switzerland
-        minx=6.055288722641995,
-        maxx=6.136137098212752,
-        miny=46.15002449279444,
-        maxy=46.230872868365196,
-        mint=0.0,
-        maxt=9.223372036854776e18,
-    ),
-    fmt="tgbox",
-)
-
-rare_v2label_9tropbldec = GeoRectangle(
-    TgeoBoundingBox(
-        # South of Maspalomas, Canary island
-        minx=-15.691846327550666,
-        maxx=-15.61099795197991,
-        miny=27.689106414967792,
-        maxy=27.76995479053855,
-        mint=0.0,
-        maxt=9.223372036854776e18,
-    ),
-    fmt="tgbox",
-)
-
-rare_v2label_14lcz1 = GeoRectangle(
-    TgeoBoundingBox(
-        # Reykjavik, Iceland
-        minx=-21.96082936930715,
-        maxx=-21.879980993736392,
-        miny=64.08920105360446,
-        maxy=64.17004942917521,
-        mint=0.0,
-        maxt=9.223372036854776e18,
-    ),
-    fmt="tgbox",
-)
-
-rare_v2label_33lcz10 = GeoRectangle(
-    TgeoBoundingBox(
-        # Vestmannaeyjabaer, south of Iceland
-        minx=-20.300742724254274,
-        maxx=-20.219894348683518,
-        miny=63.4100746988101,
-        maxy=63.49092307438086,
-        mint=0.0,
-        maxt=9.223372036854776e18,
-    ),
-    fmt="tgbox",
-)
+toulouse = GeoRectangle([1.336, 1.508, 43.554, 43.674])  # City and river
+tripoli_sahara = GeoRectangle([11, 15, 30, 33])  # Small portion of Sahara, near Tripoli
+waterville_kerry_124x133 = GeoRectangle([-10.16, -10.141, 51.83, 51.841])
+waterville_kerry = GeoRectangle(
+    [-10.2018, -10.1518, 51.8020, 51.8466]
+)  # Small town, lake, sea
