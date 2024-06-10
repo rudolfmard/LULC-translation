@@ -23,8 +23,7 @@ torchgeo.datasets.RasterDataset  (-> https://torchgeo.readthedocs.io/en/v0.4.1/a
  |   
  └── _ProbaLandcover
      └── InferenceResultsProba
-    
-OpenStreetMap
+
 """
 import os
 import time
@@ -1055,8 +1054,7 @@ class SpecialistLabelsECOSGplus(EcoclimapSG):
         "data",
         "tiff_data",
         "ECOCLIMAP-SG-plus",
-        "v2",
-        "labels-isl-ecosgp-v2.0",
+        "bguess-ecosgp-v2.0",
     )
 
 
@@ -1068,8 +1066,7 @@ class ScoreECOSGplus(_ScoreMap):
         "data",
         "tiff_data",
         "ECOCLIMAP-SG-plus",
-        "v2",
-        "score-ecosgp-v2.0",
+        "qscore-ecosgp-v2.0",
     )
     orig_crs = rasterio.crs.CRS.from_epsg(4326)
 
@@ -1229,6 +1226,7 @@ class EcoclimapSGML(EcoclimapSG):
         fig, ax
             Figure and axes of the plot
 
+
         Example
         -------
         >>> from mmt.datasets import landcovers
@@ -1241,8 +1239,6 @@ class EcoclimapSGML(EcoclimapSG):
         fig, axs = plt.subplots(2, 3, figsize=(12, 12))
         for mb, ax in enumerate(axs.flatten()):
             self.member = mb
-            # self.path = os.path.dirname(self.path)
-            # self.__init__(member=mb, crs=self.crs, res=self.res, transforms=self.transforms)
             x = self[qb]
             fig, ax = self.plot(
                 x,

@@ -66,6 +66,8 @@ cd ../..
 # 6. ECOCLIMAP-SG
 mkdir tiff_data/ECOCLIMAP-SG
 
+set +vx
+echo " "
 echo "The data directory is almost ready. Two last things are to be done from the package root directory:"
 echo "  ln -s $PWD data     # Create a symbolic link in the package directory"
 echo "  python scripts/download_ecoclimapsg.py --landingdir $PWD/tiff_data/ECOCLIMAP-SG     # Download and extract ECOSG in TIF"

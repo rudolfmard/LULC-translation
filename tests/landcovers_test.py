@@ -22,7 +22,7 @@ qb = domains.dublin_county.to_tgbox(dst_crs)
 # qb = domains.portugese_crops.centred_fixed_size(100, 0.0005).to_tgbox()
 
 path_to_infres = os.path.join(
-    mmt_repopath, "data", "outputs", "v2", "ecosgml-v2.0-v2outofbox2.eurat.u0.47.sm0.3"
+    mmt_repopath, "data", "tiff_data", "ECOCLIMAP-SG-ML", "ecosgml-v2.0-mb002"
 )
 
 for lc in [
