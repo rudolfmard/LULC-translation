@@ -27,7 +27,7 @@ python translators_test.py
 
 python ../scripts/look_at_map.py --lcname=EcoclimapSGML --other-kwargs member=3 --domainname=eurat --res=0.1 --savefig --figdir tmp
 
-python ../scripts/look_at_map.py --lcname=qscore --domainname=montpellier_agglo --other-kwargs cutoff=0.3 --fillsea --savefig --figdir tmp
+python ../scripts/look_at_map.py --lcname=qscore --domainname=montpellier_agglo --other-kwargs cutoff=0.3 --savefig --figdir tmp
 
 python ../scripts/qualitative_evaluation.py --lcnames esawc,ecosg,outofbox2,mmt-weights-v2.0.ckpt --savefig --figdir tmp
 

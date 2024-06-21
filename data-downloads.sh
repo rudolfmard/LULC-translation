@@ -57,9 +57,9 @@ cd ..
 # 5. ECOCLIMAP-SG
 mkdir tiff_data/ECOCLIMAP-SG-plus
 cd tiff_data/ECOCLIMAP-SG-plus
-wget https://zenodo.org/records/10944693/files/best-guess_map.zip
+wget https://zenodo.org/records/11517903/files/best-guess_map.zip
 unzip -j best-guess_map.zip -d bguess-ecosgp-v2.0
-wget https://zenodo.org/records/10944693/files/quality_score_map.zip
+wget https://zenodo.org/records/11517903/files/quality_score_map.zip
 unzip -j quality_score_map.zip -d qscore-ecosgp-v2.0
 cd ../..
 
