@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="mmt",
-    version="0.2.1",
+    version="1.0",
     author="Luc Baudoux (original idea), Thomas Rieutord (dev > 0.1.0)",
     author_email="thomas.rieutord@met.ie",
     description="""Multi land-use/land-cover translation network.
