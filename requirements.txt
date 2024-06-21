@@ -10,6 +10,7 @@ cartopy>=0.21
 torchinfo>=1.8
 torchgeo>=0.4.1
 tensorboard>=2.13
+onnx>=1.15
 tqdm>=4.65
 easydict>=1.9
 imageio>=2.31

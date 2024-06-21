@@ -6,5 +6,5 @@
 #export CUDA_DEVICE_ORDER=PCI_BUS_ID
 #export CUDA_VISIBLE_DEVICES=1
 export TOKENIZERS_PARALLELISM=false
-python main.py configs/new_config_template.yaml
+python main.py configs/test_config.yaml
 

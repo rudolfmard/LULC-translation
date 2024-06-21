@@ -1,7 +1,7 @@
 Multiple Map Translation
 ========================
 This repo was forked from [MLULC](https://github.com/LBaudoux/MLULC).
-The main purpose of this repository is provide the source code that was used to produce the ECOCLIMAP-SG-ML land cover map, which is used in numerical weather prediction.
+The main purpose of this repository is provide the source code that was used to produce the ECOCLIMAP-SG-ML land cover map, which is described in Rieutord et al. (2024).
 Land cover maps are translated thanks to auto-encoders, as illustrated in the following figure.
 ECOCLIMAP-SG-ML is obtained by map translation from ESA World Cover to ECOCLIMAP-SG+.
 
@@ -45,40 +45,36 @@ data
      └── ...
 ```
 
-To download the data, use the following links, uncompress it and store it as indicated above.
-Due to the large volume of data, we recommend to **download it the day before**.
 
-#### Download zipped archives (recommended)
+#### Downloads
 
-Several zipped archives are available for download, depending on your capacity and what you want to do.
-  * The [full data](https://drive.proton.me/urls/9NSPARVBHG#sdRkPZNng72D) contains weights, training data and land cover maps over all Europe (so-called EURAT domain): 45GB downloaded, 160GB uncompressed.
-  * The [sample data](https://drive.proton.me/urls/4JK0X0BQ2R#rdnXGeWbqWYj) contains weights, training data and land cover maps over Ireland: 2GB downloaded, 100GB uncompressed.
-  * The [sample TIF files](https://drive.proton.me/urls/GTKE99CVB4#IMZcMUYyvgJa) contains only land cover maps over Ireland: 150MB downloaded, 15GB uncompressed.
+The data original to this work is accessible in this [Zenodo archive](https://doi.org/10.5281/zenodo.11242911).
+It contains the TIF files of ECOCLIMAP-SG-ML, the HDF5 files for training and testing and the weights of the neural network.
 
-In case you want to focus on some specific part of the data, we provide more detailed information on how to download it separately.
-Except for the sample TIF files, all zipped archived are already organised, so you can skip the next subsections of [Data](#data) and go directly to [Check the installation](#check-the-installation).
-
-#### Landcovers
-
-  * ECOCLIMAP-SG-ML: link to [version 0.6](https://drive.proton.me/urls/7H7V6K62KG#dxLVsVJJ1IDm) (750 MB)
-  * ECOCLIMAP-SG+: link to [version 0.3.e2](https://drive.proton.me/urls/74EH1BYA8W#tRPWIWhS0i1y) (1.2GB)
-  * [ECOCLIMAP-SG](https://opensource.umr-cnrm.fr/projects/ecoclimap-sg/wiki): link to the [EURAT extraction in TIF](https://drive.proton.me/urls/X0QZ18C5X8#XRDMQVNnHGWO)
-  * [ESA World Cover](https://esa-worldcover.org/en): link to the [Zenodo archive](https://zenodo.org/records/7254221). Four macro-tiles cover the EURAT domain (43 GB)
+The program `data-download.sh` is provided to help downloading and unpacking the data.
+Copy it and execute it in the directory that will receive the data (the `data` directory or another that will be linked as `data`).
 ```
-wget https://zenodo.org/record/7254221/files/ESA_WorldCover_10m_2021_v200_60deg_macrotile_S30W060.zip
-wget https://zenodo.org/record/7254221/files/ESA_WorldCover_10m_2021_v200_60deg_macrotile_N30W060.zip
-wget https://zenodo.org/record/7254221/files/ESA_WorldCover_10m_2021_v200_60deg_macrotile_S30E000.zip
-wget https://zenodo.org/record/7254221/files/ESA_WorldCover_10m_2021_v200_60deg_macrotile_N30E000.zip
-unzip '*.zip' -d ESA-WorldCover-2021
+bash data-download.sh
 ```
 
-#### Weights
+Note that the [ECOCLIMAP-SG](https://opensource.umr-cnrm.fr/projects/ecoclimap-sg/wiki) land cover is downloaded and extracted with a Python program.
+From the package root directory, and after having installed the software, the command is as follows (also given at the end of `data-download.sh`):
+```
+python scripts/download_ecoclimapsg.py --landingdir data/tiff_data/ECOCLIMAP-SG
+```
 
-Here is the [link](https://drive.proton.me/urls/DWJ3ATQS9G#i4GptzWdUnC5) to download the weights (11 MB).
-
-#### Training data
-
-Here is the [link](https://drive.proton.me/urls/AA5KJRYPCC#PD5E1XElNMpG) to download the HDF5 files used in the training (1.8 GB downloaded, 85GB uncompressed)
+The full program takes approximately 4 hours to run.
+The volume downloaded (for all data) is approximately 56 GB.
+Once unzipped, the volume occupied by the data is approximately 370GB, distributed as follows
+```
+0	./outputs
+12M	./saved_models
+266G	./tiff_data
+103G	./hdf5_data
+369G	.
+```
+The amount of data can be reduced depending on the use you want to have of this repository.
+Please remove the part you don't need in `data-download.sh` to reduce the amount of data.
 
 
 ### Check the installation
@@ -105,8 +101,8 @@ python -i scripts/look_at_map.py --lcname=EcoclimapSGML --domainname=eurat --res
 ```
 See the header of `look_at_map.py` for more examples.
 
-Alternatively, if you want to export maps in various formats (netCDF, DIR/HDR), the program `scripts/export_landcover.py` has a similar interface.
-See the header for more information.
+Alternatively, you can export maps in various formats (netCDF, DIR/HDR), using the `export` method of the land cover classes.
+See the documentation of the method for more information.
 
 
 ### Make inference
@@ -115,7 +111,7 @@ Once the landcover and the weights are correctly installed, you can perform infe
 The program to make the inference is `scripts/inference_and_merging.py`.
 ```
 python drafts/inference_and_merging.py
-python -i scripts/look_at_map.py --lcpath=<path given by the  previous program>
+python -i scripts/look_at_map.py --lcname=<path given by the  previous program>
 ```
 See the documentation inside to run it.
 
@@ -148,7 +144,6 @@ The repository has the following directories:
   * `drafts`: contains draft programs using the package
   * `experiments`: contains all the files created when training a model (logs, checkpoints, visualizations...)
   * `mmt`: contains the source code of the MMT package
-  * `questions`: contains programs providing answers to specific questions
   * `tests`: contains programs to test the installation
   * `scripts`: contains programs ready for use
 
@@ -158,8 +153,7 @@ mmt
 ├── agents
 │   ├── __init__.py
 │   ├── base.py
-│   ├── multiLULC.py
-│   └── TranslatingUnet_vf.py
+│   └── multiLULC.py
 ├── datasets
 │   ├── __init__.py
 │   ├── landcovers.py
@@ -175,10 +169,7 @@ mmt
 │   │   │   ├── down_block.py
 │   │   │   └── up_block.py
 │   │   ├── attention_autoencoder.py
-│   │   ├── embedding_mixer.py
 │   │   ├── position_encoding.py
-│   │   ├── transformer_embedding.py
-│   │   ├── translating_unet.py
 │   │   └── universal_embedding.py
 ├── inference
 │   ├── __init__.py
@@ -186,14 +177,12 @@ mmt
 │   └── translators.py
 └── utils
     ├── __init__.py
+    ├── aliases.py
     ├── config.py
-    ├── dirs.py
     ├── domains.py
-    ├── image_type.py
     ├── misc.py
     ├── plt_utils.py
-    ├── scores.py
-    └── tensorboardx_utils.py
+    └── scores.py
 ```
 The modules `agents`, `graphs`, `datasets` and `utils` are mostly inherited from the MLULC repository.
 The other modules are specific additions for the ECOCLIMAP-SG-ML generation.
@@ -206,29 +195,34 @@ Two modules contain customised families of classes for which we provide the inhe
 Landcovers are used to access the data from multiple TIF files:
 ```
 mmt.datasets.landcovers
-├── OpenStreetMap
-└── torchgeo.datasets.RasterDataset  (-> https://torchgeo.readthedocs.io/en/v0.4.1/api/datasets.html#rasterdataset)
-    ├── TorchgeoLandcover
-    |   ├── EcoclimapSG
-    |   ├── ESAWorldCover
-    |   └── EcoclimapSGplus
-    |       ├── QualityFlagsECOSGplus
-    |       ├── InferenceResults
-    |       └── EcoclimapSGML
-    |   
-    └── ProbaLandcover
-        └── InferenceResultsProba
+ └── torchgeo.datasets.RasterDataset  (-> https://torchgeo.readthedocs.io/en/v0.4.1/api/datasets.html#rasterdataset)
+     ├── _TorchgeoLandcover
+     |   ├── ESAWorldCover
+     |   ├── EcoclimapSG
+     |   |   ├── SpecialistLabelsECOSGplus
+     |   |   ├── InferenceResults
+     |   |   └── EcoclimapSGML
+     |   └── _CompositeMap
+     |       ├── EcoclimapSGplus
+     |       └── EcoclimapSGMLcomposite
+     |   
+     ├── _ScoreMap
+     |   └── ScoreECOSGplus
+     |   
+     └── _ProbaLandcover
+         └── InferenceResultsProba
 ```
 
 Translators are used to perform map translation in inference mode:
 ```
 mmt.inference.translators
- └── MapTranslator
-     ├── EsawcToEsgp
-     |    └── EsawcToEsgpProba
-     ├── EsawcEcosgToEsgpRFC
+ └── _MapTranslator
      ├── MapMerger
-     └── MapMergerProba
+     └── EsawcToEsgp
+         ├── EsawcToEsgpMembers
+         ├── EsawcToEsgpProba
+         └── EsawcToEsgpAsMap -- landcovers.InferenceResults
+                └── EsawcToEsgpShowEnsemble
 ```
 
 
