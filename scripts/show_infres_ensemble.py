@@ -2,7 +2,9 @@
 # -*- coding: utf-8 -*-
 """Multiple land-cover/land-use Maps Translation (MMT)
 
-Qualitative evaluation of map translation. Pre-set patches.
+Generation of land cover members on few patches.
+
+python -i show_infres_ensemble.py --weights v2outofbox2 --u 0.82,0.11,0.47,0.34,0.65
 """
 
 import argparse
@@ -11,28 +13,34 @@ import sys
 
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
 from mmt import _repopath_ as mmt_repopath
 from mmt.datasets import landcovers
 from mmt.datasets import transforms as mmt_transforms
 from mmt.inference import translators
-from mmt.utils import aliases, domains, misc
+from mmt.utils import domains, misc
 
 # Argument parsing
 # ----------------
 parser = argparse.ArgumentParser(
-    prog="qualitative_evalution",
-    description="Compare a set of maps on a set of patches",
-    epilog="Example: python -i qualitative_evaluation.py --lcnames esawc,ecosg,outofbox2,mmt-weights-v2.0.ckpt",
+    prog="show_infres_ensemble",
+    description="Generation of land cover members on few patches",
+    epilog="Example: python -i show_infres_ensemble.py --weights mmt-weights-v2.0.ckpt --u 0.82,0.11,0.47,0.34,0.65",
 )
 parser.add_argument(
     "--locations",
-    help="Domain names to look at (see mmt/utils/domains.py). Default are: snaefell_glacier,nanterre,iso_kihdinluoto,portugese_crops,elmenia_algeria",
+    help="Domain names to look at",
     default="snaefell_glacier,nanterre,iso_kihdinluoto,portugese_crops,elmenia_algeria",
 )
 parser.add_argument(
-    "--lcnames",
-    help="Land cover aliases (esawc, ecosg, esgp, esgml, qflags)",
-    default="esawc,ecosg,esgp,esgml,qflags",
+    "--weights",
+    help="Weight file, experience ID or path to the checkpoint to use for inference",
+    default="mmt-weights-v1.0.ckpt",
+)
+parser.add_argument(
+    "--u",
+    help=f"Values for the random drawing of the ensemble",
+    default="0.62,0.29,0.41,0.78,0.09",
 )
 parser.add_argument(
     "--npx", help="Size of patch (in number of ~10m pixels)", default=900, type=int
@@ -52,26 +60,23 @@ parser.add_argument(
 args = parser.parse_args()
 print(f"Executing {sys.argv[0]} from {os.getcwd()} with args={args}")
 
-n_px = args.npx
-locations = args.locations.split(",")
-lcnames = args.lcnames.split(",")
-device = "cpu" if args.cpu else "cuda"
-
-
 # Default resolution is the one of ESA World Cover (~10m)
 res = misc.DEFAULT_RESOLUTION_10M
 
-# Land cover loading
-# --------------------
-lcs = []
-for lcname in lcnames:
-    lcs.append(aliases.get_landcover_from_alias(lcname))
+n_px = args.npx
+locations = args.locations.split(",")
+device = "cpu" if args.cpu else "cuda"
+u_values = [None] + [float(u) for u in args.u.split(",")]
+n_members = len(u_values)
 
-print(f"Landcovers loaded with native CRS and resolution")
+tr = translators.EsawcToEsgpShowEnsemble(
+    checkpoint_path=misc.weights_to_checkpoint(args.weights), device=device
+)
+weights = misc.checkpoint_to_weight(tr.checkpoint_path)
 
-# Inference or access to data
+# Inference
 # ----------------
-fig, axs = plt.subplots(len(locations), len(lcnames), figsize=(12, 16))
+fig, axs = plt.subplots(len(locations), len(u_values), figsize=(12, 16))
 for i, domainname in enumerate(locations):
     dom = getattr(domains, domainname)
     if n_px > 0:
@@ -80,27 +85,29 @@ for i, domainname in enumerate(locations):
         qb = dom.to_tgbox()
 
     print(f"Location {domainname} (lon, lat): {dom.central_point()}")
-    for j, lc in enumerate(lcs):
-        x = lc[qb]
-        lc.plot(x, figax=(fig, axs[i, j]), show_titles=False, show_colorbar=False)
+    for j, u_value in enumerate(u_values):
+        tr.u = u_value
+        x = tr[qb]
+        tr.plot(x, figax=(fig, axs[i, j]), show_titles=False, show_colorbar=False)
 
-
-lcattrs = aliases.LANDCOVER_ALIASES
 [ax.axis("off") for ax in axs.ravel()]
 cols = []
-for lcname in lcnames:
-    if lcname in lcattrs.keys():
-        cols.append(lcattrs[lcname]["colname"])
-    else:
-        cols.append(lcname)
+for j, u_value in enumerate(u_values):
+    cols.append(f"Member {j} (u={u_value})")
 
 for ax, col in zip(axs[0], cols):
     ax.set_title(col)
 
 figname = f"_".join(
-    ["qualcheck", "-".join(lcnames), "-".join([loc[:3] for loc in locations])]
+    [
+        f"ensemble",
+        weights,
+        "-".join([str(u) for u in u_values]),
+        "-".join([loc[:3] for loc in locations]),
+    ]
 )
-fig.suptitle(figname)
+title = f"Ensemble generation for {weights}"
+fig.suptitle(title)
 fig.tight_layout()
 
 if args.savefig:

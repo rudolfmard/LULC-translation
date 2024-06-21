@@ -3,7 +3,16 @@ import torch.nn as nn
 
 
 class DoubleConv(nn.Module):
-    """(convolution => [BN] => ReLU) * 2 if num group=None Instance norm, if num group=1 Layer norm"""
+    """(convolution => [BN] => ReLU) * 2 if num group=None Instance norm, if num group=1 Layer norm
+
+
+    Examples
+    --------
+    >>> dc = DoubleConv(in_channels = 12, out_channels = 20)
+    >>> x = torch.rand(16, 12, 60, 60)
+    >>> dc(x).shape
+    torch.Size([16, 20, 60, 60])
+    """
 
     def __init__(
         self, in_channels, out_channels, stride=1, num_groups=None, bias=False

@@ -4,54 +4,64 @@
 
 Program to compute confusion matrix of MLCT-net prediction and compare them to ECOSG
 """
+import argparse
 import os
 import sys
+
 import h5py
-import torch
-import numpy as np
-import rasterio
-import matplotlib.pyplot as plt
-from pprint import pprint
-from tqdm import tqdm
-from sklearn import metrics
-import pandas as pd
-import seaborn as sns
-
 from mmt import _repopath_ as mmt_repopath
-from mmt.graphs.models import universal_embedding
-from mmt.datasets import landcover_to_landcover
-from mmt.datasets import landcovers
-from mmt.datasets import transforms as mmt_transforms
-from mmt.utils import config as utilconf
-from mmt.utils import domains
-from mmt.utils import plt_utils
-from mmt.utils import scores
-from mmt.inference import io
 from mmt.inference import translators
+from mmt.utils import misc, plt_utils, scores
 
-shortlbnames = np.array(landcovers.ecoclimapsg_labels)
+# Argument parsing
+# ----------------
+parser = argparse.ArgumentParser(
+    prog="scores_from_inference",
+    description="Evaluate model on the dataset DS2 (EURAT-test), and provide confusion matrices",
+    epilog="Example: python -i scores_from_inference.py --weights outofbox2,saunet2,mmt-weights-v2.0.ckpt --npatches 200",
+)
+parser.add_argument(
+    "--weights",
+    help="Weight file, experience ID or path to the checkpoint to use for inference",
+    default="mmt-weights-v2.0.ckpt",
+)
+parser.add_argument(
+    "--scorename",
+    help="Score used to put in the tables (user_accuracy, prod_accuracy, f1score)",
+    default="f1score",
+)
+parser.add_argument("--figfmt", help="Format of the figure", default="svg")
+parser.add_argument(
+    "--npatches",
+    help="Number of patches on which the confusion matrices are computed",
+    type=int,
+    default=1e5,
+)
+parser.add_argument(
+    "--figdir",
+    help="Directory where figure will be saved",
+    default=os.path.join(mmt_repopath, "figures"),
+)
+parser.add_argument(
+    "--savefig", help="Save the figures instead of plotting them", action="store_true"
+)
+parser.add_argument(
+    "--cpu", help="Perform inference on CPU", action="store_true", default=False
+)
+args = parser.parse_args()
+print(f"Executing {sys.argv[0]} from {os.getcwd()} with args={args}")
 
-# Configs
-#---------
-usegpu = True
-device = "cuda" if usegpu else "cpu"
+scorename = args.scorename
+weights_list = args.weights.split(",")
+device = "cpu" if args.cpu else "cuda"
 
-print(f"Executing program {sys.argv[0]} in {os.getcwd()}")
+plt_utils.figureDir = args.figdir
+plt_utils.fmtImages = "." + args.figfmt
+plt_utils.storeImages = args.savefig
 
-plt_utils.figureDir = os.path.join(mmt_repopath, "figures")
-plt_utils.fmtImages = ".svg"
-plt_utils.storeImages = False
 
-# Loading models
-#----------------
-checkpoint_path = os.path.join(mmt_repopath, "data", "saved_models", "mmt-weights-v1.0.ckpt")
-print(f"Loading auto-encoders from {checkpoint_path}")
-translator = translators.EsawcToEsgp(checkpoint_path = checkpoint_path)
-epoch = io.get_epoch_of_best_model(checkpoint_path)
-to_tensor = lambda x: torch.Tensor(x[:]).long().unsqueeze(0)
-
-# VALIDATION DOMAINS
-#====================
+# Open HDF5 files with validation patches
+# -----------------------------------------
 ldom_data_dir = os.path.join(mmt_repopath, "data", "hdf5_data")
 subset = "test"
 lcnames = ["esawc", "ecosg", "esgp"]
@@ -60,89 +70,67 @@ h5f = {}
 for lcname in lcnames:
     h5_path[lcname] = os.path.join(ldom_data_dir, f"{lcname}-{subset}.hdf5")
     assert os.path.isfile(h5_path[lcname]), f"File {h5_path[lcname]} does not exist"
-    h5f[lcname] = h5py.File(h5_path[lcname], "r", libver='latest')
+    h5f[lcname] = h5py.File(h5_path[lcname], "r", libver="latest")
 
-assert all([set(h5f["esawc"].keys()) == set(h5f[lcname].keys()) for lcname in ["ecosg", "esgp"]]), "HDF5 keys lists don't match"
+assert all(
+    [
+        set(h5f["esawc"].keys()) == set(h5f[lcname].keys())
+        for lcname in ["ecosg", "esgp"]
+    ]
+), "HDF5 keys lists don't match"
 
-n_labels = len(shortlbnames)
-cmx_infres_esgp = np.zeros((n_labels, n_labels), dtype = np.int32)
-cmx_ecosg_esgp = np.zeros((n_labels, n_labels), dtype = np.int32)
-
-print("Computing confusion matrices...")
-items = list(h5f["esawc"].keys())
-for i in tqdm(items):
-    x1 = to_tensor(h5f["esawc"].get(i))
-    x3 = h5f["ecosg"].get(i)
-    y_true = h5f["esgp"].get(i)
-    
-    y1 = translator.predict_from_data(x1)
-    
-    cmx_infres_esgp += metrics.confusion_matrix(y_true[:].ravel(), y1.ravel(), labels = np.arange(n_labels))
-    cmx_ecosg_esgp += metrics.confusion_matrix(y_true[:].ravel(), np.tile(x3[:], (5,5)).ravel(), labels = np.arange(n_labels))
+n_patches = min(args.npatches, len(h5f["esawc"]))
 
 
-print(f"Bulk total overall accuracy (ECOSG): {scores.oaccuracy(cmx_ecosg_esgp)}")
-print(f"Bulk total overall accuracy (INFRES): {scores.oaccuracy(cmx_infres_esgp)}")
+# Instanciate all translators
+# -----------------------------
+translator_list = [
+    translators.EsawcToEsgp(
+        checkpoint_path=misc.weights_to_checkpoint(weights), device=device
+    )
+    for weights in weights_list
+]
 
-lh = landcovers.ecoclimapsg_label_hierarchy
-oap = {}
-oat = {}
-domainname = "eurat"
-epoch = 174
-pred_lnames = scores.p_(shortlbnames)
-true_lnames = scores.t_(shortlbnames)
 
-dfcmx_ecosg = pd.DataFrame(data=cmx_ecosg_esgp, index = true_lnames, columns = pred_lnames)
-dfcmx_infres = pd.DataFrame(data=cmx_infres_esgp, index = true_lnames, columns = pred_lnames)
+# Compute (or load) confusion matrices
+# --------------------------------------
+cmxs = {}
+for translator in translator_list + ["ecosg"]:
+    method = (
+        misc.checkpoint_to_weight(translator.checkpoint_path)
+        if hasattr(translator, "checkpoint_path")
+        else translator
+    )
+    cmxs[method] = scores.look_in_cache_else_compute(translator, h5f, n_patches)
+    print(f"Bulk total overall accuracy ({method}): {scores.oaccuracy(cmxs[method])}")
 
-print("Drawing confusion matrices...")
-for cmx, method, shortmet in zip(
-        [cmx_infres_esgp, cmx_ecosg_esgp],
-        ["ESAWC -> ECOSG+", "ECOSG"],
-        ["infres", "ecosg"],
-    ):
-    print(f"Method = {method}")
-    dfcmx = pd.DataFrame(data=cmx, index = true_lnames, columns = pred_lnames)
-    dfkcmx = scores.remove_absent_labels(dfcmx)
-    print(f"  Overall accuracy on secondary labels ({method}): {scores.oaccuracy(dfkcmx)}")
-    oat[shortmet] = np.round(scores.oaccuracy(dfkcmx), 3)
-    
-    # Primary labels confusion matrix
-    #---------------------
-    dfamcmx = scores.sum_primary_labels(dfcmx, lh)
-    print(f"  Overall accuracy on primary labels ({method}): {scores.oaccuracy(dfamcmx)}")
-    oap[shortmet] = np.round(scores.oaccuracy(dfamcmx), 3)
-    
-    # Normalization by actual amounts -> Recall matrix
-    #--------------------------------
-    reccmx = scores.norm_matrix(dfkcmx, axis = 1)
+
+# Plot recall matrices
+# ----------------------
+for method, cmx in cmxs.items():
+    reccmx = scores.norm_matrix(scores.remove_absent_labels(cmx), axis=1)
     plt_utils.plot_confusion_matrix(
-        pd.DataFrame(data=reccmx, index = dfkcmx.index, columns = dfkcmx.columns),
-        figtitle = f"Recall matrix (normed by reference) {method}",
-        figname = f"reccmx_{domainname}_{shortmet}_ep{epoch}"
+        reccmx,
+        figtitle=f"Recall matrix (normed by reference) {method}",
+        figname=f"reccmx_{method}",
     )
 
-print(f"""Recap of overall accuracies over {domainname}:
-+------------+----------------+--------------+
-| Method     | Primary labels | ECOSG labels |
-+------------+----------------+--------------+
-| ECOSG      | {oap['ecosg']}          | {oat['ecosg']}        |
-| ESA trans  | {oap['infres']}          | {oat['infres']}        |
-+------------+----------------+--------------+
-""")
 
-scorename = "f1score"
-methods = ["infres", "ecosg"]
-
+# Per-label scores
+# ----------------------
 print(f"\n   {scorename.upper()} FOR PRIMARY LABELS")
-cmxs = [scores.sum_primary_labels(cmx, lh) for cmx in [dfcmx_infres, dfcmx_ecosg]]
-pms = scores.permethod_scores(cmxs, methods, scorename)
+pms = scores.permethod_scores(
+    {k: scores.sum_primary_labels(v) for k, v in cmxs.items()}, scorename
+)
 scores.latexstyleprint(pms)
 
 print(f"\n   {scorename.upper()} FOR SECONDARY LABELS")
-cmxs = [dfcmx_infres, dfcmx_ecosg]
-# cmxs = [scores.remove_absent_labels(cmx) for cmx in [dfcmx_infres, dfcmx_ecosg]]
-pms = scores.permethod_scores(cmxs, methods, scorename)
-
+pms = scores.permethod_scores(cmxs, scorename)
 scores.latexstyleprint(pms)
+
+
+# Overall accuracies
+# ----------------------
+scores.pprint_oaccuracies(cmxs)
+
 # EOF
