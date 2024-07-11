@@ -464,6 +464,7 @@ class UnivEmb(nn.Module):
 
     def classical_forward(self, x, full=False, res=None, image=None):
         if full:
+            print(f"......... encoder.forward() .........")
             x = self.encoder(x)
         if res is not None:
             if self.softpos:
@@ -479,6 +480,8 @@ class UnivEmb(nn.Module):
                 x *= image
             else:
                 x += image
+        print(f"......... (x shape: {x.shape}) .........")
+        print(f"......... decoder.forward() .........")
         return x, self.decoder(x)
 
     def MemoryMonged_forward(self, x, full=False, res=None, image=None):

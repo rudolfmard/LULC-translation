@@ -177,16 +177,16 @@ def process_config(config_file, quiet=False):
     config.paths.checkpoint_dir = os.path.join(config.paths.experiments_dir, config.xp_name, "checkpoints")
     config.paths.out_dir = os.path.join(config.paths.experiments_dir, config.xp_name, "out")
     config.paths.log_dir = os.path.join(config.paths.experiments_dir, config.xp_name, "logs")
+    print(f"New directories:\n\t{config.paths.summary_dir}\n\t{config.paths.checkpoint_dir}\n\t{config.paths.out_dir}\n\t{config.paths.log_dir}")
     dirs.create_dirs(
         [config.paths.summary_dir, config.paths.checkpoint_dir, config.paths.out_dir, config.paths.log_dir]
     )
-    
+    print("Here 1")
     # Setup logging in the project
-    setup_logging(config.paths.log_dir)
-    
+    #setup_logging(config.paths.log_dir)
     shutil.copy(config_file, os.path.join(config.paths.log_dir, "config.yaml"))
     shutil.copy(config_file, os.path.join(config.paths.checkpoint_dir, "model_best.config.yaml"))
-    
+    print("Here 2")
     # if not quiet:
         # logging.getLogger().info("Hi, This is root.")
         # logging.getLogger().info(

@@ -43,7 +43,7 @@ class MultiLULCAgent(base.BaseAgent):
             self.device = torch.device("cuda")
             #self.logger.info("Program will run on *****GPU-CUDA***** ")
             print("Program will run on *****GPU-CUDA***** ")
-            misc.print_cuda_statistics()
+            #misc.print_cuda_statistics()
             print("print_cuda_statistics run")
         else:
             self.device = torch.device("cpu")
@@ -123,7 +123,7 @@ class MultiLULCAgent(base.BaseAgent):
         if self.cuda:
             self.models = [net.to(self.device) for net in self.models]
             self.coord_model = self.coord_model.to(self.device)
-            misc.print_cuda_statistics()
+            #misc.print_cuda_statistics()
         
         # Model Loading from the latest checkpoint if not found start from scratch.
         if startfrom is None:
@@ -178,7 +178,7 @@ class MultiLULCAgent(base.BaseAgent):
             self.manual_seed = checkpoint["manual_seed"]
 
             #self.logger.info("Checkpoint loaded successfully from '{}' at (epoch {}) at (iteration {})\n".format(filename, checkpoint["epoch"], checkpoint["iteration"],))
-            print(f"Checkpoint loaded successfully from '{filename}' at (epoch {checkpoint["epoch"]}) at (iteration {checkpoint["iteration"]})\n")
+            print(f"Checkpoint loaded successfully from '{filename}' at (epoch {checkpoint['epoch']}) at (iteration {checkpoint['iteration']})\n")
         except OSError as e:
             #self.logger.info("No checkpoint exists from '{}'. Skipping...".format(self.config.paths.checkpoint_dir))
             print(f"No checkpoint exists from '{self.config.paths.checkpoint_dir}'. Skipping...")
@@ -257,6 +257,7 @@ class MultiLULCAgent(base.BaseAgent):
             print(f" ------- Training epoch {epoch}/{self.config.training.n_epochs} ({100 * epoch/self.config.training.n_epochs:.0f}%) ------- ")
             
             train_loss = self.train_one_epoch()
+            print("train_one_epoch finished!")
             
             for d, l in train_loss.items():
                 plot_training_loss[d].extend(l)
@@ -322,7 +323,7 @@ class MultiLULCAgent(base.BaseAgent):
             for target, dl in targetval.items():
                 dlcount[dl] = 0
                 # self.logger.info(f"Dataloader length: {len(dl)}\t {source} \t->  {target}")
-
+        print("\tStart iterating over data_loaders!")
         end = False
         while not end:
             for source, targetval in data_loader.items():
@@ -334,9 +335,11 @@ class MultiLULCAgent(base.BaseAgent):
                     
                     ### Load data
                     try:
+                        print("\tLoad data!")
                         data = next(dl)
                         dlcount[dl] += 1
                     except:
+                        print("\tLoading data failed!")
                         end = True
                         break
                     
@@ -350,7 +353,8 @@ class MultiLULCAgent(base.BaseAgent):
                     self.optimizers[i_source].zero_grad(set_to_none=True)
                     self.coord_optimizer.zero_grad(set_to_none=True)
                     self.optimizers[i_target].zero_grad(set_to_none=True)
-                    
+                    print("\tStart forward pass!")
+
                     ### Forward pass
                     if self.config.model.use_pos:
                         pos_enc = (
@@ -360,57 +364,67 @@ class MultiLULCAgent(base.BaseAgent):
                             source_patch, full=True, res=pos_enc
                         )
                     else:
+                        print(f"\t----- i_source: {i_source} -----")
+                        print(f"\t----- source_patch: {type(source_patch)} -----")
                         embedding, rec = self.models[i_source](source_patch, full=True)
-                    
+                    print("\tSource -> Source")
+
                     ### Loss computation
-                    loss_rec = nn.CrossEntropyLoss(ignore_index=0)(
-                        rec, sv
-                    )  # self reconstruction loss
+                    loss_rec = nn.CrossEntropyLoss(ignore_index=0)(rec, sv)  # self reconstruction loss
+                    print("\trec loss")
+
                     if self.config.model.use_pos:
                         embedding2, rec = self.models[i_target](
                             target_patch, full=True, res=pos_enc
                         )
                     else:
                         embedding2, rec = self.models[i_target](target_patch, full=True)
-                    loss_rec += nn.CrossEntropyLoss(ignore_index=0)(
-                        rec, tv
-                    )  # self reconstruction loss
-                    loss_emb = torch.nn.MSELoss()(
-                        embedding, embedding2
-                    )  # similar embedding loss
+                    print("\tTarget -> Target")
+
+                    loss_rec += nn.CrossEntropyLoss(ignore_index=0)(rec, tv)  # self reconstruction loss
+                    print("\trec loss 2")
+
+                    loss_emb = torch.nn.MSELoss()(embedding, embedding2)  # similar embedding loss
+                    print("\tEmbedding loss")
                     
                     if self.config.model.type == "attention_autoencoder":
                         rec = self.models[i_target].decoder(embedding)
                     else:
                         _, rec = self.models[i_target](embedding)
-                        
-                    loss_tra = nn.CrossEntropyLoss(ignore_index=0)(
-                        rec, tv
-                    )  # translation loss
+                    print("\tembedding1 -> target")
+
+                    loss_tra = nn.CrossEntropyLoss(ignore_index=0)(rec, tv)  # translation loss
+                    print("\tTranslation loss 1")
 
                     if self.config.model.type == "attention_autoencoder":
                         rec = self.models[i_source].decoder(embedding2)
                     else:
                         _, rec = self.models[i_source](embedding2)
+                    print("\tembedding2 -> source")
                         
-                    loss_tra += nn.CrossEntropyLoss(ignore_index=0)(
-                        rec, sv
-                    )  # translation loss
+                    loss_tra += nn.CrossEntropyLoss(ignore_index=0)(rec, sv)  # translation loss
+                    print("\ttranslation loss 2")
 
                     loss = loss_rec + loss_emb + loss_tra
+                    print("\tcombine loss")
                     
                     # self.logger.info(f"loss {loss.item()}, CUDA memory reserved: {torch.cuda.memory_reserved()/10**9} GB")
                     
                     # if dlcount[dl] % max(int(len(dl)/20), 1) == 0:
                     if dlcount[dl] % self.config.training.print_inc == 0:
+                        print("%==0")
                         #self.logger.info(f"[ep {self.current_epoch}, i={self.current_iteration}][batch {dlcount[dl]}/{len(dl)}] train\t {source} -> {target} \t Losses: rec={loss_rec.item()}, emb={loss_emb.item()}, tra={loss_tra.item()}")
                         print(f"[ep {self.current_epoch}, i={self.current_iteration}][batch {dlcount[dl]}/{len(dl)}] train\t {source} -> {target} \t Losses: rec={loss_rec.item()}, emb={loss_emb.item()}, tra={loss_tra.item()}")
                     
                     ### Backward propagation
                     loss.backward()
+                    print("\tcall backward")
                     self.optimizers[i_source].step()
+                    print("\tstep optimizer 1")
                     self.optimizers[i_target].step()
+                    print("\tstep optimizer 2")
                     self.coord_optimizer.step()
+                    print("Single iteration done!")
                 if end:
                     break
                 batch_idx += 1

@@ -39,6 +39,7 @@ def main():
     except:
         print("agent.run encountered an error!")
     agent.finalize()
+    print("All tasks finished!")
 
 
 if __name__ == '__main__':

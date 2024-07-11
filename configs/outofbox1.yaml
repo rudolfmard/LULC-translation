@@ -2,8 +2,8 @@ xp_name: outofbox1
 seed: 666
 cuda: true
 paths:
-    data_dir: /data/trieutord/MLULC
-    experiments_dir: /home/trieutord/Works/Physiography/gitsync/MT-MLULC/experiments
+    data_dir: /project/project_465000527/LULC_translation/data/hdf5_data/
+    experiments_dir: /project/project_465000527/LULC_translation/experiments/
 versions:
     ecosgplus: 1.4
     ecosgml: 0.6
@@ -19,7 +19,7 @@ dataloader:
         pos_enc: true
 training:
     batch_size: 32
-    n_epochs: 120
+    n_epochs: 1 #120
     tensorboard: false
     validate_every: 1
     print_inc: 10
