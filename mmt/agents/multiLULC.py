@@ -66,7 +66,8 @@ class MultiLULCAgent(base.BaseAgent):
             torch.cuda.manual_seed(self.manual_seed)
             self.device = torch.device("cuda")
             self.logger.info("Program will run on *****GPU-CUDA***** ")
-            misc.print_cuda_statistics()
+            # LUMI: Omit calling print_cuda_statistics() as LUMI is equipped with AMD hardware and doesn't provide all NVIDIA tools.
+            #misc.print_cuda_statistics()
         else:
             self.device = torch.device("cpu")
             torch.manual_seed(self.manual_seed)
@@ -134,7 +135,8 @@ class MultiLULCAgent(base.BaseAgent):
         if self.cuda:
             self.models = [net.to(self.device) for net in self.models]
             self.coord_model = self.coord_model.to(self.device)
-            misc.print_cuda_statistics()
+            # LUMI: Omit calling print_cuda_statistics() as LUMI is equipped with AMD hardware and doesn't provide all NVIDIA tools.
+            #misc.print_cuda_statistics()
 
         # Model Loading from the latest checkpoint if not found start from scratch.
         if startfrom is None:

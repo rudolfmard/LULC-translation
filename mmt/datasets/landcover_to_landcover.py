@@ -892,7 +892,9 @@ class LandcoverToLandcoverDataLoader:
             The number of CPU used to access the data
         """
         self.config = config
-        self.datadir = os.path.join(mmt_repopath, "data", "hdf5_data")
+        # LUMI: the mmt_repopath is different than data_dir given in config, use the one defined in config instead.
+        #self.datadir = os.path.join(mmt_repopath, "data", "hdf5_data")
+        self.datadir = self.config.paths.data_dir
         self.device = "cuda" if config.cuda else "cpu"
         self.datasets = [rmsuffix(dataset) for dataset in datasets]
 
