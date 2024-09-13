@@ -1,7 +1,7 @@
 Multiple Map Translation
 ========================
 This repo was forked from [MLULC](https://github.com/LBaudoux/MLULC).
-The main purpose of this repository is provide the source code that was used to produce the ECOCLIMAP-SG-ML land cover map, which is described in Rieutord et al. (2024).
+The main purpose of this repository is provide the source code that was used to produce the ECOCLIMAP-SG-ML land cover map, which is described in [Rieutord et al. (2024)](https://doi.org/10.20944/preprints202409.0942.v1).
 Land cover maps are translated thanks to auto-encoders, as illustrated in the following figure.
 ECOCLIMAP-SG-ML is obtained by map translation from ESA World Cover to ECOCLIMAP-SG+.
 
