@@ -6,3 +6,4 @@ configs/*
 figures/*
 *.onnx
 *.egg-info/
+sandbox*

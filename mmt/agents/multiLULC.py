@@ -87,6 +87,8 @@ class MultiLULCAgent(base.BaseAgent):
             self.data_loader.real_patch_sizes
         )
         resizes = np.where(resizes == 1, None, resizes)
+        #LUMI: will be removed, printing for investigation purposes
+        print(f"******************* resizes: *******************\n{resizes}\n************************************************")
 
         # Define models
         if config.model.type == "universal_embedding":
@@ -98,9 +100,15 @@ class MultiLULCAgent(base.BaseAgent):
                 f"Unknown model.type = {config.model.type}. Please change config to one among ['universal_embedding', 'attention_autoencoder']"
             )
 
+        #LUMI: add the number of elements position encoding to input_channel
+        if self.config.model.use_pos:
+            pos_enc_dim = self.config.model.pos_enc_dim
+        else:
+            pos_enc_dim = 0
+
         self.models = [
             EncDec(
-                in_channels=input_channel,
+                in_channels=input_channel + pos_enc_dim,
                 out_channels=output_channel,
                 n_px_input=self.data_loader.real_patch_sizes[i_model],
                 resize=resizes[i_model],
@@ -113,9 +121,10 @@ class MultiLULCAgent(base.BaseAgent):
                 zip(input_channels, output_channels)
             )
         ]
-        self.coord_model = position_encoding.PositionEncoder(
-            n_channels_embedding=self.config.dimensions.n_channels_embedding
-        )
+
+        # LUMI: Added a new parameter dictating the dimensionality of the position encoding:
+        #self.coord_model = position_encoding.PositionEncoder(n_channels_embedding=self.config.dimensions.n_channels_embedding)
+        self.coord_model = position_encoding.PositionEncoder(n_channels_embedding=self.config.model.pos_enc_dim)
 
         # Define optimizer
         optim_class = getattr(optim, self.config.optimizer.type)
@@ -353,51 +362,52 @@ class MultiLULCAgent(base.BaseAgent):
                     self.optimizers[i_target].zero_grad(set_to_none=True)
 
                     ### Forward pass
+
+                    # Encode+Decode the source patches:
                     if self.config.model.use_pos:
-                        pos_enc = (
-                            self.coord_model(pos_enc.float()).unsqueeze(2).unsqueeze(3)
-                        )
-                        embedding, rec = self.models[i_source](
-                            source_patch, full=True, res=pos_enc
-                        )
+                        # LUMI: Pass the raw output from coord_model to autoencoder (no unsqueezing here)
+                        #pos_enc = (self.coord_model(pos_enc.float()).unsqueeze(2).unsqueeze(3))
+                        pos_enc =  self.coord_model(pos_enc.float())
+                        embedding, rec = self.models[i_source](source_patch, full=True, res=pos_enc)
                     else:
                         embedding, rec = self.models[i_source](source_patch, full=True)
 
-                    ### Loss computation
-                    loss_rec = torch.nn.CrossEntropyLoss(ignore_index=0)(
-                        rec, sv
-                    )  # self reconstruction loss
+                    # Calculate and add source reconstruction error to reconstruction loss:
+                    loss_rec = torch.nn.CrossEntropyLoss(ignore_index=0)(rec, sv)  # self reconstruction loss
+
+                    # Encode+Decode the target patches:
                     if self.config.model.use_pos:
                         embedding2, rec = self.models[i_target](
                             target_patch, full=True, res=pos_enc
                         )
                     else:
                         embedding2, rec = self.models[i_target](target_patch, full=True)
-                    loss_rec += torch.nn.CrossEntropyLoss(ignore_index=0)(
-                        rec, tv
-                    )  # self reconstruction loss
-                    loss_emb = torch.nn.MSELoss()(
-                        embedding, embedding2
-                    )  # similar embedding loss
 
+                    # Calculate and add target reconstruction error to reconstruction loss:
+                    loss_rec += torch.nn.CrossEntropyLoss(ignore_index=0)(rec, tv)  # self reconstruction loss
+                    
+                    # Calculate embedding loss:
+                    loss_emb = torch.nn.MSELoss()(embedding, embedding2)  # similar embedding loss
+
+                    # Translation decode the source embedding:
                     if self.config.model.type == "attention_autoencoder":
                         rec = self.models[i_target].decoder(embedding)
                     else:
                         _, rec = self.models[i_target](embedding)
 
-                    loss_tra = torch.nn.CrossEntropyLoss(ignore_index=0)(
-                        rec, tv
-                    )  # translation loss
+                    # Calculate translation loss from source->target:
+                    loss_tra = torch.nn.CrossEntropyLoss(ignore_index=0)(rec, tv)  # translation loss
 
+                    # Translation decode the target embedding:
                     if self.config.model.type == "attention_autoencoder":
                         rec = self.models[i_source].decoder(embedding2)
                     else:
                         _, rec = self.models[i_source](embedding2)
+                    
+                    # Calculate translation loss from target->source:
+                    loss_tra += torch.nn.CrossEntropyLoss(ignore_index=0)(rec, sv)  # translation loss
 
-                    loss_tra += torch.nn.CrossEntropyLoss(ignore_index=0)(
-                        rec, sv
-                    )  # translation loss
-
+                    # Combine all losses:
                     loss = loss_rec + loss_emb + loss_tra
 
                     if dlcount[dl] % self.config.training.print_inc == 0:

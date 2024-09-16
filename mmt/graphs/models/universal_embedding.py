@@ -462,7 +462,10 @@ class UnivEmb(nn.Module):
             atrou=decoder_atrou,
             bias=bias,
         )
-        self.forward_method = self.classical_forward
+
+        # LUMI: Swich forward method if needed
+        #self.forward_method = self.classical_forward
+        self.forward_method = self.forward_with_coordinate_encoding
         if memory_monger:
             self.dummy_tensor = torch.ones(1, dtype=torch.float32, requires_grad=True)
             self.encoder_wrapper = ModuleWrapperIgnores2ndArg(self.encoder)
@@ -471,6 +474,21 @@ class UnivEmb(nn.Module):
         self.image_mul = False
         if image_operator == "mul":
             self.image_mul = True
+
+    # LUMI: alternative forward method for concatenating position encoding into the input
+    def forward_with_coordinate_encoding(self, x, full=False, res=None, image=None):
+        if res is not None and full:
+            # x shape before concating: (batch_size, n_categories (1-hot), lon, lat)
+            # res shape (encoded position data): (batch_size, n_channels_embedding)
+            # -> duplicate the res vector along lon-lat dims
+            # -> shape after concatenating: (batch_size, n_categories+n_channels_embedding, lon, lat)
+            res = res.unsqueeze(2).unsqueeze(3).expand(-1, -1, x.shape[-2], x.shape[-1])
+            x = torch.cat((x, res), 1)
+        if full:
+            x = self.encoder(x)
+        if image is not None:
+            raise NotImplementedError("Handling of the given argument 'image' is not implemented!" )
+        return x, self.decoder(x)
 
     def classical_forward(self, x, full=False, res=None, image=None):
         if full:
