@@ -87,8 +87,6 @@ class MultiLULCAgent(base.BaseAgent):
             self.data_loader.real_patch_sizes
         )
         resizes = np.where(resizes == 1, None, resizes)
-        #LUMI: will be removed, printing for investigation purposes
-        print(f"******************* resizes: *******************\n{resizes}\n************************************************")
 
         # Define models
         if config.model.type == "universal_embedding":
@@ -160,10 +158,12 @@ class MultiLULCAgent(base.BaseAgent):
 
         self.load_checkpoint(checkpoint_filename)
 
+        print("Let's use", torch.cuda.device_count(), "GPUs!")
         if self.cuda and torch.cuda.device_count() > 1:
-            print("Let's use", torch.cuda.device_count(), "GPUs!")
             # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
             self.models = [torch.nn.DataParallel(net) for net in self.models]
+            # LUMI: also wrap DataParallel to coord_model
+            self.coord_model = torch.nn.DataParallel(self.coord_model)
 
     def load_checkpoint(self, file_name) -> None:
         """Latest checkpoint loader
@@ -352,10 +352,11 @@ class MultiLULCAgent(base.BaseAgent):
                         break
 
                     pos_enc = data.get("coordenc").to(self.device)
-                    source_patch = data.get("source_one_hot")
-                    target_patch = data.get("target_one_hot")
-                    sv = data.get("source_data")[:, 0]
-                    tv = data.get("target_data")[:, 0]
+                    # LUMI: also move all data below to device
+                    source_patch = data.get("source_one_hot").to(self.device)
+                    target_patch = data.get("target_one_hot").to(self.device)
+                    sv = data.get("source_data")[:, 0].to(self.device)
+                    tv = data.get("target_data")[:, 0].to(self.device)
 
                     self.optimizers[i_source].zero_grad(set_to_none=True)
                     self.coord_optimizer.zero_grad(set_to_none=True)
@@ -377,9 +378,7 @@ class MultiLULCAgent(base.BaseAgent):
 
                     # Encode+Decode the target patches:
                     if self.config.model.use_pos:
-                        embedding2, rec = self.models[i_target](
-                            target_patch, full=True, res=pos_enc
-                        )
+                        embedding2, rec = self.models[i_target](target_patch, full=True, res=pos_enc)
                     else:
                         embedding2, rec = self.models[i_target](target_patch, full=True)
 
