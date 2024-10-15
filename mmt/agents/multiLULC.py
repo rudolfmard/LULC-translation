@@ -458,27 +458,19 @@ class MultiLULCAgent(base.BaseAgent):
                         target_patch = data.get("target_one_hot")
 
                         if self.config.model.use_pos:
-                            pos_enc = (
-                                self.coord_model(pos_enc.float())
-                                .unsqueeze(2)
-                                .unsqueeze(3)
-                            )
-                            embedding, rec = self.models[i_source](
-                                source_patch.float(), full=True, res=pos_enc
-                            )
+                            #pos_enc = (self.coord_model(pos_enc.float()).unsqueeze(2).unsqueeze(3))
+                            #embedding, rec = self.models[i_source](source_patch.float(), full=True, res=pos_enc)
+                            pos_enc =  self.coord_model(pos_enc.float())
+                            embedding, rec = self.models[i_source](source_patch.float(), full=True, res=pos_enc)
                         else:
-                            embedding, rec = self.models[i_source](
-                                source_patch.float(), full=True
-                            )
+                            embedding, rec = self.models[i_source](source_patch.float(), full=True)
 
                         if self.config.model.type == "attention_autoencoder":
                             trad = self.models[i_target].decoder(embedding)
                         else:
                             _, trad = self.models[i_target](embedding)
 
-                        loss = torch.nn.CrossEntropyLoss(ignore_index=0)(
-                            trad, torch.argmax(target_patch, 1)
-                        )
+                        loss = torch.nn.CrossEntropyLoss(ignore_index=0)(trad, torch.argmax(target_patch, 1))
 
                         if im_save[source][target] == 0:
                             out_img = self.data_loader.plot_samples_per_epoch(
