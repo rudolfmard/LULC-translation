@@ -76,8 +76,10 @@ class MultiLULCAgent(base.BaseAgent):
         # Define data_loader
         DataLoader = getattr(landcover_to_landcover, self.config.dataloader.type)
         self.data_loader = DataLoader(
-            config=self.config, **self.config.dataloader.params
-        )
+            config=self.config,
+            world_size=, # LUMI-multi-GPU: Pass the world_size (number of processes) for data distribution TODO
+            rank=, # LUMI-multi-GPU: Pass the rank of this processes for data distribution TODO
+            **self.config.dataloader.params)
         self.datasets = self.data_loader.datasets  # shortcut
 
         # Get required param for network initialisation
@@ -158,7 +160,7 @@ class MultiLULCAgent(base.BaseAgent):
 
         self.load_checkpoint(checkpoint_filename)
 
-        print("Let's use", torch.cuda.device_count(), "GPUs!")
+        print("Let's use", torch.cuda.device_count(), "GPUs!") # LUMI-multi-GPU: What to do with this when using DDP?
         if self.cuda and torch.cuda.device_count() > 1:
             # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
             self.models = [torch.nn.DataParallel(net) for net in self.models]
@@ -166,7 +168,7 @@ class MultiLULCAgent(base.BaseAgent):
             self.coord_model = torch.nn.DataParallel(self.coord_model)
 
     def load_checkpoint(self, file_name) -> None:
-        """Latest checkpoint loader
+        """Latest checkpoint loader # TODO: only on master device?
 
 
         Parameters
@@ -183,7 +185,7 @@ class MultiLULCAgent(base.BaseAgent):
             self.logger.info(f"Loading checkpoint '{filename}'")
             checkpoint = torch.load(filename)
 
-            self.current_epoch = checkpoint["epoch"]
+            self.current_epoch = checkpoint["epoch"] + 1 # LUMI-multi-GPU: Resume training from the next epoch from the saved state
             self.current_iteration = checkpoint["iteration"]
             for i, d in enumerate(self.datasets):
                 self.models[i].load_state_dict(checkpoint["encoder_state_dict_" + d])
@@ -191,8 +193,8 @@ class MultiLULCAgent(base.BaseAgent):
                 if self.cuda and torch.cuda.device_count() > 1:
                     print("Let's use", torch.cuda.device_count(), "GPUs!")
                     # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
-                    self.models[i] = torch.nn.DataParallel(self.models[i])
-                    self.coord_model = torch.nn.DataParallel(self.coord_model)
+                    self.models[i] = torch.nn.DataParallel(self.models[i]) #TODO
+                    self.coord_model = torch.nn.DataParallel(self.coord_model) #TODO
             self.manual_seed = checkpoint["manual_seed"]
 
             self.logger.info(
@@ -215,8 +217,7 @@ class MultiLULCAgent(base.BaseAgent):
         file_name=default_checkpoint_filename,
         is_best=0,
     ) -> None:
-        """Checkpoint saver
-
+        """Checkpoint saver # TODO: only on master device?
 
         Parameters
         ----------
@@ -270,7 +271,8 @@ class MultiLULCAgent(base.BaseAgent):
         loss_log_validation = {d: [] for d in self.datasets}
 
         self.logger.info("Start training !")
-        for epoch in range(1, self.config.training.n_epochs + 1):
+        #for epoch in range(1, self.config.training.n_epochs + 1):
+        for epoch in range(self.current_epoch+1, self.config.training.n_epochs+1): # LUMI-multi-GPU: Start epoch from current_epoch, logging from 1 to n_epoch as previously.
             self.logger.info("")
             self.logger.info(
                 " ------- Training epoch {}/{} ({:.0f}%) ------- ".format(
@@ -283,7 +285,7 @@ class MultiLULCAgent(base.BaseAgent):
             train_loss = self.train_one_epoch()
 
             for d, l in train_loss.items():
-                loss_log_training[d].extend(l)
+                loss_log_training[d].extend(l)  # LUMI-multi-GPU TODO: Collects the loss from each source separately at each iteration, but only between the corresponding source and the target listed last
 
             torch.cuda.empty_cache()
             if epoch % self.config.training.validate_every == 0:
@@ -298,8 +300,8 @@ class MultiLULCAgent(base.BaseAgent):
                 validation_loss = self.validate()
 
                 for d, l in validation_loss.items():
-                    loss_log_validation[d].append([self.current_iteration, np.mean(l)])
-
+                    loss_log_validation[d].append([self.current_iteration, np.mean(l)]) # LUMI-multi-GPU TODO: current_iteration does not match with the latest current_iteration collected in train_loss, as current_iteration is incremented by one in the very end of an epoch
+                                                                                        # Collects the loss as a mean over the validation dataset and all sources, based on the target? 
                 tmp = [v for v in validation_loss.values()]
                 vl = np.mean([item for elem in tmp for item in elem])
                 if vl < loss_ref:
@@ -310,7 +312,7 @@ class MultiLULCAgent(base.BaseAgent):
                 torch.cuda.empty_cache()
 
             self.current_epoch += 1
-            if epoch > 1 and epoch >= 2 * self.config.training.validate_every:
+            if epoch > 1 and epoch >= 2 * self.config.training.validate_every:  # LUMI-multi-GPU TODO: validate_every is always >= 1, and epoch has to be >= 2*validate_every? When this is true epoch is always > 1?
                 plot_loss(
                     loss_log_training,
                     loss_log_validation,
@@ -326,7 +328,7 @@ class MultiLULCAgent(base.BaseAgent):
         [model.train() for model in self.models]
         self.coord_model.train()
 
-        batch_idx = 0
+        #batch_idx = 0 # LUMI-multi-GPU: unused variable, delete?
         data_loader = {
             source: {target: iter(val) for target, val in targetval.items()}
             for source, targetval in self.data_loader.train_loader.items()
@@ -338,14 +340,17 @@ class MultiLULCAgent(base.BaseAgent):
 
         end = False
         while not end:
-            for source, targetval in data_loader.items():
+            for source, targetval in data_loader.items():   # Iterate over source maps
                 i_source = self.datasets.index(source)
-                for target, dl in targetval.items():
+                for target, dl in targetval.items():        # Iterate over target maps of current source
                     i_target = self.datasets.index(target)
+
+                    if dlcount[dl] == 0:
+                        dl.sampler.set_epoch(self.current_epoch) # LUMI-multi-GPU: call set_epoch on the DistributedSampler
 
                     ### Load data
                     try:
-                        data = next(dl)
+                        data = next(dl)                     # Fetch one batch corresponding to the current source and target map
                         dlcount[dl] += 1
                     except:
                         end = True
@@ -421,11 +426,11 @@ class MultiLULCAgent(base.BaseAgent):
                     self.coord_optimizer.step()
                 if end:
                     break
-                batch_idx += 1
+                #batch_idx += 1 # LUMI-multi-GPU: unused variable, delete?
 
-                loss_log[source].append([self.current_iteration, loss.item()])
+                loss_log[source].append([self.current_iteration, loss.item()])  # TODO: Only collects the loss from the last target of each source, uses same current_iteration to store multiple values.
 
-            self.current_iteration += 1
+            self.current_iteration += 1     # One iteration here corresponds to fetching one batch from all soure-target dataloaders.
         self.save_checkpoint()
         return loss_log
 
@@ -436,7 +441,7 @@ class MultiLULCAgent(base.BaseAgent):
         self.coord_model.eval()
 
         test_loss = 0
-        with torch.no_grad():
+        with torch.no_grad(): # LUMI-multi-GPU TODO: Is validation with no grad supposed to be done on the master process only?
             im_save = {d: {j: 0 for j in self.datasets} for d in self.datasets}
             data_loader = {
                 source: {target: iter(val) for target, val in targetval.items()}

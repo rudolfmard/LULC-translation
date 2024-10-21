@@ -14,6 +14,7 @@ import torch
 from matplotlib.colors import LinearSegmentedColormap
 from sklearn.decomposition import PCA
 from torch.utils.data import DataLoader, Dataset
+from torch.utils.data.distributed import DistributedSampler # LUMI-multi-GPU
 from torchvision.transforms import Compose
 
 from mmt import _repopath_ as mmt_repopath
@@ -864,6 +865,8 @@ class LandcoverToLandcoverDataLoader:
         pos_enc=False,
         ampli=True,
         num_workers=4,
+        world_size=None, # LUMI-multi-GPU: Pass the world_size (number of processes) for data distribution
+        rank=None, # LUMI-multi-GPU: Pass the rank of this process for data distribution
     ):
         """Constructor.
         
@@ -1068,7 +1071,8 @@ class LandcoverToLandcoverDataLoader:
                 target: DataLoader(
                     val,
                     batch_size=self.config.training.batch_size,
-                    shuffle=True,
+                    shuffle=False, # LUMI-multi-GPU: Set DataLoader shuffle to False, and sampler shuffle to True
+                    sampler = DistributedSampler(val, num_replicas=world_size, rank=rank, shuffle=True, drop_last=False, shuffle=True), #LUMI-multi-GPU
                     num_workers=num_workers,
                     pin_memory=pin_memory,
                     persistent_workers=num_workers > 0,
@@ -1082,7 +1086,8 @@ class LandcoverToLandcoverDataLoader:
                 target: DataLoader(
                     val,
                     batch_size=self.config.training.batch_size,
-                    shuffle=True,
+                    shuffle=False, # LUMI-multi-GPU: Set DataLoader shuffle to False, and sampler shuffle to True
+                    sampler = DistributedSampler(val, num_replicas=world_size, rank=rank, shuffle=True, drop_last=False, shuffle=True), #LUMI-multi-GPU
                     num_workers=num_workers,
                     pin_memory=pin_memory,
                     persistent_workers=num_workers > 0,
@@ -1096,7 +1101,8 @@ class LandcoverToLandcoverDataLoader:
                 target: DataLoader(
                     val,
                     batch_size=self.config.training.batch_size,
-                    shuffle=True,
+                    shuffle=False, # LUMI-multi-GPU: Set DataLoader shuffle to False, and sampler shuffle to True
+                    sampler = DistributedSampler(val, num_replicas=world_size, rank=rank, shuffle=True, drop_last=False, shuffle=True), #LUMI-multi-GPU
                     num_workers=num_workers,
                     pin_memory=pin_memory,
                     persistent_workers=num_workers > 0,
