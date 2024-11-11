@@ -1189,7 +1189,7 @@ class EcoclimapSGML(EcoclimapSG):
             raise ValueError(f"Unknown member specification {member}")
 
         self.path = os.path.join(
-            self.path, "ecosgml-v2.0-mb" + str(self.member).zfill(3)
+            self.path, "ecosgml-v2.1-mb" + str(self.member).zfill(3)
         )
         super().__init__(crs=crs, res=res, transforms=transforms, tgeo_init=tgeo_init)
 

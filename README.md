@@ -1,7 +1,7 @@
 Multiple Map Translation
 ========================
 This repo was forked from [MLULC](https://github.com/LBaudoux/MLULC).
-The main purpose of this repository is provide the source code that was used to produce the ECOCLIMAP-SG-ML land cover map, which is described in [Rieutord et al. (2024)](https://doi.org/10.20944/preprints202409.0942.v1).
+The main purpose of this repository is provide the source code that was used to produce the ECOCLIMAP-SG-ML land cover map, which is described in [Rieutord et al. (2024)](https://doi.org/10.3390/land13111875).
 Land cover maps are translated thanks to auto-encoders, as illustrated in the following figure.
 ECOCLIMAP-SG-ML is obtained by map translation from ESA World Cover to ECOCLIMAP-SG+.
 
@@ -161,16 +161,16 @@ mmt
 │   └── transforms.py
 ├── graphs
 │   ├── __init__.py
-│   ├── models
-│   │   ├── __init__.py
-│   │   ├── custom_layers
-│   │   │   ├── __init__.py
-│   │   │   ├── double_conv.py
-│   │   │   ├── down_block.py
-│   │   │   └── up_block.py
-│   │   ├── attention_autoencoder.py
-│   │   ├── position_encoding.py
-│   │   └── universal_embedding.py
+│   └── models
+│       ├── __init__.py
+│       ├── custom_layers
+│       │   ├── __init__.py
+│       │   ├── double_conv.py
+│       │   ├── down_block.py
+│       │   └── up_block.py
+│       ├── attention_autoencoder.py
+│       ├── position_encoding.py
+│       └── universal_embedding.py
 ├── inference
 │   ├── __init__.py
 │   ├── io.py

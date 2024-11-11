@@ -31,8 +31,8 @@ parser.add_argument(
 )
 parser.add_argument(
     "--lcnames",
-    help="Land cover aliases (esawc, ecosg, esgp, esgml, qflags)",
-    default="esawc,ecosg,esgp,esgml,qflags",
+    help="Land cover aliases (esawc, ecosg, esgp, esgml, qscore)",
+    default="esawc,ecosg,esgp,esgml,qscore",
 )
 parser.add_argument(
     "--npx", help="Size of patch (in number of ~10m pixels)", default=900, type=int
