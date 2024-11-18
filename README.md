@@ -13,13 +13,25 @@ Installation
 ### Software
 
 The main dependencies of this repository are Pytorch, TorchGeo, Numpy, Pandas, h5py, netCDF4 and Matplotlib.
-We recommend to use [Conda](https://docs.conda.io/projects/conda/en/latest/index.html) with the following steps:
-
-1. Create or clone an environment with the [Pytorch installation](https://pytorch.org/get-started/locally/) suiting your machine.
-2. In this environment, install the dependencies with `pip install -r requirements.txt`
-3. Clone the repository and install the package with `pip install -e .`
+This code has been used with [Conda](https://docs.conda.io/projects/conda/en/latest/index.html) environments.
+  1. Create a new environment with `conda create -n mmt python=3.11; conda activate mmt`
+  2. Clone the package locally and install it with `pip install -e .`
 
 ### Data
+The program `data-download.sh` is provided to help downloading and unpacking the data.
+Copy it and execute it in the directory that will receive the data (the `data` directory or another that will be linked as `data`).
+```
+bash data-download.sh
+```
+The data original to this work is accessible in this [Zenodo archive](https://doi.org/10.5281/zenodo.11242911).
+It contains the TIF files of ECOCLIMAP-SG-ML, the HDF5 files for training and testing and the weights of the neural network.
+
+Note that the [ECOCLIMAP-SG](https://opensource.umr-cnrm.fr/projects/ecoclimap-sg/wiki) land cover is downloaded and extracted with a Python program.
+From the package root directory, and after having installed the software, the command is as follows (also given at the end of `data-download.sh`):
+```
+python scripts/download_ecoclimapsg.py --landingdir data/tiff_data/ECOCLIMAP-SG
+```
+
 All data is assumed to be found in the `data` folder of the repository.
 We recommend to use symbolic links to adapt it to your file system.
 The `data` folder should be organised as follows:
@@ -43,24 +55,6 @@ data
      ├── ecosg-val.hdf5
      ├── esawc.hdf5
      └── ...
-```
-
-
-#### Downloads
-
-The data original to this work is accessible in this [Zenodo archive](https://doi.org/10.5281/zenodo.11242911).
-It contains the TIF files of ECOCLIMAP-SG-ML, the HDF5 files for training and testing and the weights of the neural network.
-
-The program `data-download.sh` is provided to help downloading and unpacking the data.
-Copy it and execute it in the directory that will receive the data (the `data` directory or another that will be linked as `data`).
-```
-bash data-download.sh
-```
-
-Note that the [ECOCLIMAP-SG](https://opensource.umr-cnrm.fr/projects/ecoclimap-sg/wiki) land cover is downloaded and extracted with a Python program.
-From the package root directory, and after having installed the software, the command is as follows (also given at the end of `data-download.sh`):
-```
-python scripts/download_ecoclimapsg.py --landingdir data/tiff_data/ECOCLIMAP-SG
 ```
 
 The full program takes approximately 4 hours to run.
