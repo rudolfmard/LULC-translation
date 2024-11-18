@@ -6,11 +6,11 @@ https://github.com/ThomasRieutord/MT-MLULC
 """
 import os
 
-_repopath_ = os.path.split(__path__[0])[0]
+_repopath_ = os.path.dirname(os.path.dirname(__path__[0]))
 
-with open(os.path.join(_repopath_, "setup.py"), "r") as f:
+with open(os.path.join(_repopath_, "pyproject.toml"), "r") as f:
     for l in f.readlines():
-        if "version=" in l:
+        if "version =" in l:
             __version__ = l.split('"')[1]
             break
 
