@@ -25,6 +25,8 @@ python transforms_test.py
 
 python translators_test.py
 
+shasum -a 256 -c mmt-weights-v2.0.ckpt.sha256
+
 python ../scripts/look_at_map.py --lcname=EcoclimapSGML --other-kwargs member=3 --domainname=eurat --res=0.1 --savefig --figdir tmp
 
 python ../scripts/look_at_map.py --lcname=qscore --domainname=montpellier_agglo --other-kwargs cutoff=0.3 --savefig --figdir tmp
