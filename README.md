@@ -75,7 +75,7 @@ Please remove the part you don't need in `data-download.sh` to reduce the amount
 
 To check the software installation:
 ```
-python tests/import_tests.py
+python tests/import_test.py
 ````
 To check the data installation:
 ```

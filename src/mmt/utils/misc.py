@@ -22,7 +22,7 @@ from mmt import _repopath_ as mmt_repopath
 CACHE_DIRECTORY = os.path.join(mmt_repopath, "experiments", "cache")
 
 if not os.path.isdir(CACHE_DIRECTORY):
-    os.makedir(CACHE_DIRECTORY)
+    os.makedirs(CACHE_DIRECTORY)
 
 DEFAULT_RESOLUTION_10M = 8.333e-5
 
