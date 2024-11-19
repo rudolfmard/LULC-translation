@@ -155,7 +155,7 @@ def compute_stats_on_labels(lcname, lckwargs, domainname, rmzeros):
         cmap = [np.array(lcmap.cmap[l]) / 255.0 for l in ulabels]
         zlabels = []
     else:
-        counts = np.zeros(lcmap.n_labels)
+        counts = np.zeros(len(lcmap.labels))
         counts[ulabels] = ucounts
         zlabels = counts == 0
         labels = np.array(lcmap.labels)

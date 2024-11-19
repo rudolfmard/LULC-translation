@@ -35,11 +35,6 @@ LANDCOVER_ALIASES = {
         "kwargs": {},
         "colname": "ECOSG+",
     },
-    "esgpv2": {
-        "lcclass": "EcoclimapSGplusV2",
-        "kwargs": {},
-        "colname": "ECOSG+v2",
-    },
     "bguess": {
         "lcclass": "SpecialistLabelsECOSGplus",
         "kwargs": {},
@@ -49,13 +44,6 @@ LANDCOVER_ALIASES = {
         "lcclass": "EcoclimapSGML",
         "kwargs": {},
         "colname": "ECOSG-ML",
-    },
-    "qflags": {
-        "lcclass": "QualityFlagsECOSGplus",
-        "kwargs": {
-            "transforms": mmt_transforms.FillMissingWithSea(0, 6),
-        },
-        "colname": "QFLAGS",
     },
     "qscore": {
         "lcclass": "ScoreECOSGplus",
