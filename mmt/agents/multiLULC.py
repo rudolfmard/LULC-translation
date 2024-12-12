@@ -7,15 +7,18 @@ Main agent. Performs training and testing of the auto-encoders on pair of land c
 import json
 import os
 import shutil
+import time
 
 import numpy as np
 import torch
 import torch.optim as optim
+import torch.distributed as dist # LUMI-multi-GPU
+from torch.nn.parallel import DistributedDataParallel as DDP # LUMI-multi-GPU
 from sklearn.metrics import confusion_matrix
 
 from mmt.agents import base
 from mmt.datasets import landcover_to_landcover
-from mmt.graphs.models import attention_autoencoder, universal_embedding, position_encoding
+from mmt.graphs.models import attention_autoencoder, universal_embedding, position_encoding, autoencoder_wrapper
 
 from mmt.utils import misc, plt_utils
 
@@ -53,21 +56,25 @@ class MultiLULCAgent(base.BaseAgent):
         config: dict
             The configuration parameters for the agent.
         
-        startfrom: str, optional
+        startfrom: str, optional    # TODO: Not accurate, used only for phase 2 when starting from other experiment. If None will resume from current experiment
             The name of the experiment directory to start from. If None,
             the agent will start from scratch. Defaults to None.
         """
         super().__init__(config)
+
+        # LUMI-multi-GPU: fetch world_size and rank
+        world_size = int(os.environ['WORLD_SIZE'])
+        self.rank = int(os.environ['LOCAL_RANK'])
+        print(f"Hello from process rank {self.rank}!")
 
         # Set device and RNG seed
         self.cuda = torch.cuda.is_available() & self.config.cuda
         self.manual_seed = self.config.seed
         if self.cuda:
             torch.cuda.manual_seed(self.manual_seed)
-            self.device = torch.device("cuda")
+            self.device = torch.device(f"cuda:{self.rank}")
             self.logger.info("Program will run on *****GPU-CUDA***** ")
-            # LUMI: Omit calling print_cuda_statistics() as LUMI is equipped with AMD hardware and doesn't provide all NVIDIA tools.
-            #misc.print_cuda_statistics()
+            print(f"| Number of GPUs: {torch.cuda.device_count()} | Number of processes: {world_size} |")
         else:
             self.device = torch.device("cpu")
             torch.manual_seed(self.manual_seed)
@@ -77,147 +84,119 @@ class MultiLULCAgent(base.BaseAgent):
         DataLoader = getattr(landcover_to_landcover, self.config.dataloader.type)
         self.data_loader = DataLoader(
             config=self.config,
-            world_size=, # LUMI-multi-GPU: Pass the world_size (number of processes) for data distribution TODO
-            rank=, # LUMI-multi-GPU: Pass the rank of this processes for data distribution TODO
+            world_size=world_size, # LUMI-multi-GPU: Pass the world_size (number of processes) for data distribution
+            rank=self.rank, # LUMI-multi-GPU: Pass the rank of this processes for data distribution
             **self.config.dataloader.params)
         self.datasets = self.data_loader.datasets  # shortcut
-
-        # Get required param for network initialisation
-        input_channels = self.data_loader.input_channels
-        output_channels = self.data_loader.output_channels
-        resizes = self.config.dimensions.n_px_embedding // np.array(
-            self.data_loader.real_patch_sizes
-        )
-        resizes = np.where(resizes == 1, None, resizes)
-
-        # Define models
-        if config.model.type == "universal_embedding":
-            EncDec = getattr(universal_embedding, config.model.name)
-        elif config.model.type == "attention_autoencoder":
-            EncDec = getattr(attention_autoencoder, config.model.name)
-        else:
-            raise ValueError(
-                f"Unknown model.type = {config.model.type}. Please change config to one among ['universal_embedding', 'attention_autoencoder']"
-            )
-
-        #LUMI: add the number of elements position encoding to input_channel
-        if self.config.model.use_pos:
-            pos_enc_dim = self.config.model.pos_enc_dim
-        else:
-            pos_enc_dim = 0
-
-        self.models = [
-            EncDec(
-                in_channels=input_channel + pos_enc_dim,
-                out_channels=output_channel,
-                n_px_input=self.data_loader.real_patch_sizes[i_model],
-                resize=resizes[i_model],
-                n_px_embedding=self.config.dimensions.n_px_embedding,
-                n_channels_hiddenlay=self.config.dimensions.n_channels_hiddenlay,
-                n_channels_embedding=self.config.dimensions.n_channels_embedding,
-                **self.config.model.params,
-            )
-            for i_model, (input_channel, output_channel) in enumerate(
-                zip(input_channels, output_channels)
-            )
-        ]
-
-        # LUMI: Added a new parameter dictating the dimensionality of the position encoding:
-        #self.coord_model = position_encoding.PositionEncoder(n_channels_embedding=self.config.dimensions.n_channels_embedding)
-        self.coord_model = position_encoding.PositionEncoder(n_channels_embedding=self.config.model.pos_enc_dim)
-
-        # Define optimizer
-        optim_class = getattr(optim, self.config.optimizer.type)
-        self.coord_optimizer = optim_class(
-            self.coord_model.parameters(), **self.config.optimizer.params
-        )
-        self.optimizers = [
-            optim_class(net.parameters(), **self.config.optimizer.params)
-            for i, net in enumerate(self.models)
-        ]
 
         # Initialize counters
         self.current_epoch = 0
         self.current_iteration = 0
         self.best_metric = 0
 
-        if self.cuda:
-            self.models = [net.to(self.device) for net in self.models]
-            self.coord_model = self.coord_model.to(self.device)
-            # LUMI: Omit calling print_cuda_statistics() as LUMI is equipped with AMD hardware and doesn't provide all NVIDIA tools.
-            #misc.print_cuda_statistics()
+        # Initialize a dictionary to hold loss values
+        self.loss_log = {
+            "training": {
+                "reconstruction": {d: [] for d in self.datasets},
+                "total_average": [],
+        }, "validation": {
+                "reconstruction": {d: [] for d in self.datasets},
+                "total_average": []
+        }}
 
-        # Model Loading from the latest checkpoint if not found start from scratch.
-        if startfrom is None:
-            checkpoint_filename = default_checkpoint_filename
-        else:
-            checkpoint_filename = os.path.join(
-                self.config.paths.experiments_dir,
-                startfrom,
-                "checkpoints",
-                default_checkpoint_filename,
+        # Get required param for network initialisation
+        input_channels = self.data_loader.input_channels
+        output_channels = self.data_loader.output_channels
+        resizes = self.config.dimensions.n_px_embedding // np.array(self.data_loader.real_patch_sizes)
+        resizes = np.where(resizes == 1, None, resizes)
+
+        # Initialize the model
+        self.models_wrapper = autoencoder_wrapper.AutoencoderWrapper(        
+            in_channels=input_channels,
+            out_channels=output_channels,
+            n_px_inputs=self.data_loader.real_patch_sizes,
+            resizes=resizes,
+            config=config
+        ).to(self.device)
+        self.models_wrapper = DDP(self.models_wrapper, device_ids=[self.rank], find_unused_parameters=True)
+
+        # Define optimizers:
+        optim_class = getattr(optim, self.config.optimizer.type)
+        self.optimizers = [
+            optim_class(net.parameters(), **self.config.optimizer.params)
+            for net in self.models_wrapper.module.models
+        ]
+        if self.config.model.use_pos:
+            self.coord_optimizer = optim_class(
+                self.models_wrapper.module.coord_model.parameters(), **self.config.optimizer.params
             )
+        
+        # Load checkpoints consecutively for each process:
+        for i in range(0,world_size):
+            if self.rank == i:
+                self.load_checkpoint(startfrom)#checkpoint_filename)
+                print(f"Checkpoint loaded for process rank {self.rank}")
+            dist.barrier()
 
-        self.load_checkpoint(checkpoint_filename)
-
-        print("Let's use", torch.cuda.device_count(), "GPUs!") # LUMI-multi-GPU: What to do with this when using DDP?
-        if self.cuda and torch.cuda.device_count() > 1:
-            # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
-            self.models = [torch.nn.DataParallel(net) for net in self.models]
-            # LUMI: also wrap DataParallel to coord_model
-            self.coord_model = torch.nn.DataParallel(self.coord_model)
-
-    def load_checkpoint(self, file_name) -> None:
-        """Latest checkpoint loader # TODO: only on master device?
-
+    def load_checkpoint(self, startfrom) -> None:
+        """Latest checkpoint loader
 
         Parameters
         ----------
         file_name: str
-            Name of the checkpoint file
+            Name of the checkpoint file  #TODO: Update
         """
-        if os.path.isfile(file_name):
-            filename = file_name
-        else:
-            filename = os.path.join(self.config.paths.checkpoint_dir, file_name)
 
+        # Start from scratch or resume training if checkpoint exists:
+        filename = os.path.join(self.config.paths.checkpoint_dir, default_checkpoint_filename)
+        begin_phase_2 = False
+        if startfrom is not None and not os.path.isfile(filename):
+            # If startfrom is specified and default checkpoint file is not found, begin phase 2. Otherwise resume from checkpoint or begin phase 1.
+            filename = os.path.join(
+                self.config.paths.experiments_dir,
+                startfrom,
+                "checkpoints",
+                default_bestmodel_filename,
+            )
+            begin_phase_2 = True
+        # Try to load and restore checkpoint:
         try:
-            self.logger.info(f"Loading checkpoint '{filename}'")
             checkpoint = torch.load(filename)
 
-            self.current_epoch = checkpoint["epoch"] + 1 # LUMI-multi-GPU: Resume training from the next epoch from the saved state
-            self.current_iteration = checkpoint["iteration"]
-            for i, d in enumerate(self.datasets):
-                self.models[i].load_state_dict(checkpoint["encoder_state_dict_" + d])
-                self.optimizers[i].load_state_dict(checkpoint["encoder_optimizer_" + d])
-                if self.cuda and torch.cuda.device_count() > 1:
-                    print("Let's use", torch.cuda.device_count(), "GPUs!")
-                    # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
-                    self.models[i] = torch.nn.DataParallel(self.models[i]) #TODO
-                    self.coord_model = torch.nn.DataParallel(self.coord_model) #TODO
+            self.current_iteration = checkpoint["iteration"]    # Currently unused variable
             self.manual_seed = checkpoint["manual_seed"]
+
+            if begin_phase_2:
+                # In phase two, there are fewer autoencoders in the models_wrapper and the parameters of these excluded AEs has to be filtered out of the state_dict
+                # Exclude parameters where the key starts with "model.i" where i is not an index of an existing AE in the ModuleList within models_wrapper
+                # Phase 2 also resets the current_epoch counter, loss_log data and optimizer states, therefore these are not recovered.
+                n_autoencoders = len(self.models_wrapper.module.models)
+                filtered_state_dict = {k: v for k, v in checkpoint["model"].items() if not k.startswith(f"models.") or any(k.startswith(f"models.{i}.") for i in range(n_autoencoders))}
+                self.models_wrapper.module.load_state_dict(filtered_state_dict)
+                self.logger.info("**Beginning of phase 2 of training**")
+            else:
+                self.models_wrapper.module.load_state_dict(checkpoint["model"])
+                self.current_epoch = checkpoint["epoch"] + 1
+                self.loss_log = checkpoint["loss_log"]
+                if self.config.model.use_pos:
+                    self.coord_optimizer.load_state_dict(checkpoint["coord_optimizer"])
+                for i, d in enumerate(self.datasets):
+                    self.optimizers[i].load_state_dict(checkpoint["encoder_optimizer_" + d])
 
             self.logger.info(
                 "Checkpoint loaded successfully from '{}' at (epoch {}) at (iteration {})\n".format(
                     filename,
-                    checkpoint["epoch"],
+                    checkpoint["epoch"]+1,
                     checkpoint["iteration"],
                 )
             )
+        # Loading the checkpoint failed, continue to train from scratch:
         except OSError as e:
-            self.logger.info(
-                "No checkpoint exists from '{}'. Skipping...".format(
-                    self.config.paths.checkpoint_dir
-                )
-            )
+            self.logger.info("No checkpoint exists at '{}'. Skipping...".format(filename))
             self.logger.info("**First time to train**")
 
-    def save_checkpoint(
-        self,
-        file_name=default_checkpoint_filename,
-        is_best=0,
-    ) -> None:
-        """Checkpoint saver # TODO: only on master device?
+    def save_checkpoint(self, file_name=default_checkpoint_filename, is_best=0,) -> None:
+        """Checkpoint saver
 
         Parameters
         ----------
@@ -231,16 +210,14 @@ class MultiLULCAgent(base.BaseAgent):
             "epoch": self.current_epoch,
             "iteration": self.current_iteration,
             "manual_seed": self.manual_seed,
+            "loss_log": self.loss_log
         }
+
+        state["model"] = self.models_wrapper.module.state_dict()
+        if self.config.model.use_pos:
+            state["coord_optimizer"] = self.coord_optimizer.state_dict()
         for i, d in enumerate(self.datasets):
             state["encoder_optimizer_" + d] = self.optimizers[i].state_dict()
-            state["coord_optimizer_" + d] = self.coord_optimizer.state_dict()
-            if torch.cuda.device_count() > 1 and self.cuda:
-                state["encoder_state_dict_" + d] = self.models[i].module.state_dict()
-                state["image_state_dict_" + d] = self.coord_model.module.state_dict()
-            else:
-                state["encoder_state_dict_" + d] = self.models[i].state_dict()
-                state["image_state_dict_" + d] = self.coord_model.state_dict()
 
         # Save the state
         torch.save(state, os.path.join(self.config.paths.checkpoint_dir, file_name))
@@ -259,36 +236,34 @@ class MultiLULCAgent(base.BaseAgent):
             torch.cuda.empty_cache()
             self.train()
             torch.cuda.empty_cache()
-            self.test()
-            torch.cuda.empty_cache()
+            if self.rank == 0:
+                self.test()
+                torch.cuda.empty_cache()
         except KeyboardInterrupt:
             self.logger.info("You have entered CTRL+C.. Wait to finalize")
 
     def train(self) -> None:
         """Main training loop"""
         loss_ref = 1000
-        loss_log_training = {d: [] for d in self.datasets}
-        loss_log_validation = {d: [] for d in self.datasets}
 
-        self.logger.info("Start training !")
         #for epoch in range(1, self.config.training.n_epochs + 1):
-        for epoch in range(self.current_epoch+1, self.config.training.n_epochs+1): # LUMI-multi-GPU: Start epoch from current_epoch, logging from 1 to n_epoch as previously.
-            self.logger.info("")
-            self.logger.info(
-                " ------- Training epoch {}/{} ({:.0f}%) ------- ".format(
-                    epoch,
-                    self.config.training.n_epochs,
-                    100 * epoch / self.config.training.n_epochs,
+        for epoch in range(self.current_epoch+1, self.config.training.n_epochs+1): # LUMI-multi-GPU: Start epoch from current_epoch, Start from 1 for more intuitive logs
+            if self.rank == 0:
+                self.logger.info("")
+                self.logger.info(
+                    " ------- Training epoch {}/{} ({:.0f}%) ------- ".format(
+                        epoch,
+                        self.config.training.n_epochs,
+                        100 * epoch / self.config.training.n_epochs,
+                    )
                 )
-            )
 
-            train_loss = self.train_one_epoch()
-
-            for d, l in train_loss.items():
-                loss_log_training[d].extend(l)  # LUMI-multi-GPU TODO: Collects the loss from each source separately at each iteration, but only between the corresponding source and the target listed last
-
+            # LUMI-multi-GPU: Train for one epoch
+            self.train_one_epoch()
             torch.cuda.empty_cache()
-            if epoch % self.config.training.validate_every == 0:
+            # LUMI-multi-GPU: Validate the model only in the rank 0 process.
+            if self.rank == 0 and epoch % self.config.training.validate_every == 0:
+                rank_0_t = time.time()
                 self.logger.info(
                     " - - - - Validation epoch {}/{} ({:.0f}%) - - - - ".format(
                         epoch,
@@ -296,47 +271,64 @@ class MultiLULCAgent(base.BaseAgent):
                         100 * epoch / self.config.training.n_epochs,
                     )
                 )
-
-                validation_loss = self.validate()
-
-                for d, l in validation_loss.items():
-                    loss_log_validation[d].append([self.current_iteration, np.mean(l)]) # LUMI-multi-GPU TODO: current_iteration does not match with the latest current_iteration collected in train_loss, as current_iteration is incremented by one in the very end of an epoch
-                                                                                        # Collects the loss as a mean over the validation dataset and all sources, based on the target? 
-                tmp = [v for v in validation_loss.values()]
-                vl = np.mean([item for elem in tmp for item in elem])
-                if vl < loss_ref:
-                    self.logger.info("Best model for now  : saved ")
-                    loss_ref = vl
+                # LUMI-multi-GPU: Validate the model
+                self.validate()
+                print(f"Rank 0 process spent {time.time()-rank_0_t} seconds validating")
+                # LUMI-multi-GPU: Check if this is the best model so far (based on total average loss)
+                last_validation_loss = self.loss_log["validation"]["total_average"][-1][1]
+                if last_validation_loss == min([item[1] for item in self.loss_log["validation"]["total_average"]]):
+                    self.logger.info("Best model for now: saved")
                     self.save_checkpoint(is_best=1)
-                
                 torch.cuda.empty_cache()
+            
+            # LUMI-multi-GPU: Check if the training and validation loss logging lists has enough data (>1 data points) to plot and proceed accordingly:
+            enough_data = all(len(self.loss_log["training"]["reconstruction"][d])>1 for d in self.datasets) and all(len(self.loss_log["validation"]["reconstruction"][d])>1 for d in self.datasets)
+            if self.rank == 0 and enough_data:
+                plot_loss(
+                    self.loss_log["training"]["reconstruction"],
+                    self.loss_log["validation"]["reconstruction"],
+                    savefig=os.path.join(self.config.paths.out_dir, "reconstruction_loss.png"),
+                )
+            
+            # LUMI-multi-GPU: Save checkpoint only on process rank 0, after training and validation losses has been stored
+            if self.rank == 0:
+                self.save_checkpoint()
+                print("Chekpoint saved!")
 
             self.current_epoch += 1
-            if epoch > 1 and epoch >= 2 * self.config.training.validate_every:  # LUMI-multi-GPU TODO: validate_every is always >= 1, and epoch has to be >= 2*validate_every? When this is true epoch is always > 1?
-                plot_loss(
-                    loss_log_training,
-                    loss_log_validation,
-                    savefig=os.path.join(self.config.paths.out_dir, "loss.png"),
-                )
-        self.logger.info("Training ended!")
+
+            # LUMI-multi-GPU: The processes with rank != 0 stop here, and continue when the rank 0 process reaches this point after validation/plotting losses
+            dist.barrier()
+        if self.rank == 0:
+            self.logger.info("Training ended!")
 
     @timeit
-    def train_one_epoch(self) -> dict:
+    def train_one_epoch(self) -> None:
         """One epoch of training"""
-        loss_log = {d: [] for d in self.datasets}
+        loss_arrays = {d: [] for d in self.datasets}
 
-        [model.train() for model in self.models]
-        self.coord_model.train()
+        # LUMI-multi-GPU: Set the models to training mode:
+        for model in self.models_wrapper.module.models:
+            model.train()
+        if self.config.model.use_pos:
+            self.models_wrapper.module.coord_model.train()
 
-        #batch_idx = 0 # LUMI-multi-GPU: unused variable, delete?
+        # LUMI-multi-GPU: call set_epoch on the DistributedSampler
+        for _, targetval in self.data_loader.train_loader.items():
+            for _, val in targetval.items():
+                val.sampler.set_epoch(self.current_epoch)
+
         data_loader = {
             source: {target: iter(val) for target, val in targetval.items()}
             for source, targetval in self.data_loader.train_loader.items()
         }
+
         dlcount = {}
         for source, targetval in data_loader.items():
             for target, dl in targetval.items():
                 dlcount[dl] = 0
+
+        epoch_running_loss, n_loss_items = 0, 0
 
         end = False
         while not end:
@@ -344,9 +336,6 @@ class MultiLULCAgent(base.BaseAgent):
                 i_source = self.datasets.index(source)
                 for target, dl in targetval.items():        # Iterate over target maps of current source
                     i_target = self.datasets.index(target)
-
-                    if dlcount[dl] == 0:
-                        dl.sampler.set_epoch(self.current_epoch) # LUMI-multi-GPU: call set_epoch on the DistributedSampler
 
                     ### Load data
                     try:
@@ -356,7 +345,7 @@ class MultiLULCAgent(base.BaseAgent):
                         end = True
                         break
 
-                    pos_enc = data.get("coordenc").to(self.device)
+                    pos_enc = data.get("coordenc").float().to(self.device)
                     # LUMI: also move all data below to device
                     source_patch = data.get("source_one_hot").to(self.device)
                     target_patch = data.get("target_one_hot").to(self.device)
@@ -364,89 +353,80 @@ class MultiLULCAgent(base.BaseAgent):
                     tv = data.get("target_data")[:, 0].to(self.device)
 
                     self.optimizers[i_source].zero_grad(set_to_none=True)
-                    self.coord_optimizer.zero_grad(set_to_none=True)
                     self.optimizers[i_target].zero_grad(set_to_none=True)
-
-                    ### Forward pass
-
-                    # Encode+Decode the source patches:
                     if self.config.model.use_pos:
-                        # LUMI: Pass the raw output from coord_model to autoencoder (no unsqueezing here)
-                        #pos_enc = (self.coord_model(pos_enc.float()).unsqueeze(2).unsqueeze(3))
-                        pos_enc =  self.coord_model(pos_enc.float())
-                        embedding, rec = self.models[i_source](source_patch, full=True, res=pos_enc)
-                    else:
-                        embedding, rec = self.models[i_source](source_patch, full=True)
+                        self.coord_optimizer.zero_grad(set_to_none=True)
+
+                    ### LUMI-multi-GPU: Forward pass, call forward only on the AutoencoderWrapper
+                    rec_source, rec_target, embedding_source, embedding_target, src_to_target, target_to_src = self.models_wrapper(i_source, i_target, source_patch, target_patch, pos_enc)
 
                     # Calculate and add source reconstruction error to reconstruction loss:
-                    loss_rec = torch.nn.CrossEntropyLoss(ignore_index=0)(rec, sv)  # self reconstruction loss
-
-                    # Encode+Decode the target patches:
-                    if self.config.model.use_pos:
-                        embedding2, rec = self.models[i_target](target_patch, full=True, res=pos_enc)
-                    else:
-                        embedding2, rec = self.models[i_target](target_patch, full=True)
+                    loss_rec_source = torch.nn.CrossEntropyLoss(ignore_index=0)(rec_source, sv)        # self reconstruction loss
 
                     # Calculate and add target reconstruction error to reconstruction loss:
-                    loss_rec += torch.nn.CrossEntropyLoss(ignore_index=0)(rec, tv)  # self reconstruction loss
-                    
-                    # Calculate embedding loss:
-                    loss_emb = torch.nn.MSELoss()(embedding, embedding2)  # similar embedding loss
+                    loss_rec_target = torch.nn.CrossEntropyLoss(ignore_index=0)(rec_target, tv)       # self reconstruction loss
 
-                    # Translation decode the source embedding:
-                    if self.config.model.type == "attention_autoencoder":
-                        rec = self.models[i_target].decoder(embedding)
-                    else:
-                        _, rec = self.models[i_target](embedding)
+                    loss_rec = loss_rec_source + loss_rec_target
+
+                    # Calculate embedding loss:
+                    loss_emb = torch.nn.MSELoss()(embedding_source, embedding_target)           # similar embedding loss
 
                     # Calculate translation loss from source->target:
-                    loss_tra = torch.nn.CrossEntropyLoss(ignore_index=0)(rec, tv)  # translation loss
+                    loss_tra = torch.nn.CrossEntropyLoss(ignore_index=0)(src_to_target, tv)     # translation loss
 
-                    # Translation decode the target embedding:
-                    if self.config.model.type == "attention_autoencoder":
-                        rec = self.models[i_source].decoder(embedding2)
-                    else:
-                        _, rec = self.models[i_source](embedding2)
-                    
                     # Calculate translation loss from target->source:
-                    loss_tra += torch.nn.CrossEntropyLoss(ignore_index=0)(rec, sv)  # translation loss
+                    loss_tra += torch.nn.CrossEntropyLoss(ignore_index=0)(target_to_src, sv)    # translation loss
 
                     # Combine all losses:
                     loss = loss_rec + loss_emb + loss_tra
 
-                    if dlcount[dl] % self.config.training.print_inc == 0:
+                    # Divide rec and trans losses by two as they are sum of two losses?
+                    if self.rank == 0 and dlcount[dl] % self.config.training.print_inc == 0:
                         self.logger.info(
-                            f"[ep {self.current_epoch}, i={self.current_iteration}][batch {dlcount[dl]}/{len(dl)}] train\t {source} -> {target} \t Losses: rec={loss_rec.item()}, emb={loss_emb.item()}, tra={loss_tra.item()}"
+                            f"[ep {self.current_epoch+1}, i={self.current_iteration}][batch {dlcount[dl]}/{len(dl)}] train\t {source} -> {target} \t Losses: rec={loss_rec.item()}, emb={loss_emb.item()}, tra={loss_tra.item()}"
                         )
 
                     ### Backward propagation
                     loss.backward()
                     self.optimizers[i_source].step()
                     self.optimizers[i_target].step()
-                    self.coord_optimizer.step()
+                    if self.config.model.use_pos:
+                        self.coord_optimizer.step()
+
+                    # Accumulate the running loss and count loss items:
+                    epoch_running_loss += loss.item()
+                    n_loss_items += 1
+
+                    # LUMI-multi-GPU: collect model specific loss data, currently collects reconstruction losses.
+                    loss_arrays[source].append(loss_rec_source.item())
+                    loss_arrays[target].append(loss_rec_target.item())
                 if end:
                     break
-                #batch_idx += 1 # LUMI-multi-GPU: unused variable, delete?
-
-                loss_log[source].append([self.current_iteration, loss.item()])  # TODO: Only collects the loss from the last target of each source, uses same current_iteration to store multiple values.
-
-            self.current_iteration += 1     # One iteration here corresponds to fetching one batch from all soure-target dataloaders.
-        self.save_checkpoint()
-        return loss_log
-
-    def validate(self) -> dict:
+            # One iteration here corresponds to fetching one batch from all soure-target dataloaders.
+            self.current_iteration += 1
+        # LUMI-multi-GPU: Store loss values to the loss_log:
+        for d, l in loss_arrays.items():
+            self.loss_log["training"]["reconstruction"][d].append([self.current_epoch+1, np.mean(l)])
+        self.loss_log["training"]["total_average"].append([self.current_epoch+1, epoch_running_loss/n_loss_items])
+    
+    def validate(self) -> None:
         """One cycle of model validation"""
-        loss_log = {d: [] for d in self.datasets}
-        [model.eval() for model in self.models]
-        self.coord_model.eval()
+        loss_arrays = {d: [] for d in self.datasets}
+
+        # LUMI-multi-GPU: Set the models to evaluation mode:
+        for model in self.models_wrapper.module.models:
+            model.eval()
+        if self.config.model.use_pos:
+            self.models_wrapper.module.coord_model.eval()
 
         test_loss = 0
-        with torch.no_grad(): # LUMI-multi-GPU TODO: Is validation with no grad supposed to be done on the master process only?
+        with torch.no_grad():
             im_save = {d: {j: 0 for j in self.datasets} for d in self.datasets}
             data_loader = {
                 source: {target: iter(val) for target, val in targetval.items()}
                 for source, targetval in self.data_loader.valid_loader.items()
             }
+            epoch_running_loss, n_loss_items = 0, 0
             end = False
             while not end:
                 for source, targetval in data_loader.items():
@@ -458,10 +438,13 @@ class MultiLULCAgent(base.BaseAgent):
                         except:
                             end = True
                             break
-                        pos_enc = data.get("coordenc").to(self.device)
-                        source_patch = data.get("source_one_hot")
-                        target_patch = data.get("target_one_hot")
+                        pos_enc = data.get("coordenc").float().to(self.device)
+                        source_patch = data.get("source_one_hot").to(self.device)
+                        target_patch = data.get("target_one_hot").to(self.device)
+                        sv = data.get("source_data")[:, 0].to(self.device)
+                        tv = data.get("target_data")[:, 0].to(self.device)
 
+                        """
                         if self.config.model.use_pos:
                             #pos_enc = (self.coord_model(pos_enc.float()).unsqueeze(2).unsqueeze(3))
                             #embedding, rec = self.models[i_source](source_patch.float(), full=True, res=pos_enc)
@@ -474,18 +457,39 @@ class MultiLULCAgent(base.BaseAgent):
                             trad = self.models[i_target].decoder(embedding)
                         else:
                             _, trad = self.models[i_target](embedding)
+                        """
+                        # LUMI-multi-GPU:
+                        rec_source, rec_target, embedding_source, embedding_target, src_to_target, target_to_src = self.models_wrapper(i_source, i_target, source_patch, target_patch, pos_enc)
 
-                        loss = torch.nn.CrossEntropyLoss(ignore_index=0)(trad, torch.argmax(target_patch, 1))
+                        """
+                        loss = torch.nn.CrossEntropyLoss(ignore_index=0)(trad, torch.argmax(target_patch, 1)) # TODO: Make sure why argmax is here
+                        """
+                        # LUMI-multi-GPU: For plotting, the training and validation losses has to be the same.
+                        # Calculate and add source reconstruction error to reconstruction loss:
+                        loss_rec_source = torch.nn.CrossEntropyLoss(ignore_index=0)(rec_source, sv)        # self reconstruction loss
+                        # Calculate and add target reconstruction error to reconstruction loss:
+                        loss_rec_target = torch.nn.CrossEntropyLoss(ignore_index=0)(rec_target, tv)       # self reconstruction loss
+                        loss_rec = loss_rec_source + loss_rec_target
+                        # Calculate embedding loss:
+                        loss_emb = torch.nn.MSELoss()(embedding_source, embedding_target)           # similar embedding loss
+                        # Calculate translation loss from source->target:
+                        loss_tra = torch.nn.CrossEntropyLoss(ignore_index=0)(src_to_target, tv)     # translation loss
+                        # Calculate translation loss from target->source:
+                        loss_tra += torch.nn.CrossEntropyLoss(ignore_index=0)(target_to_src, sv)    # translation loss
+                        # Combine all losses:
+                        loss = loss_rec + loss_emb + loss_tra
 
                         if im_save[source][target] == 0:
                             out_img = self.data_loader.plot_samples_per_epoch(
                                 source_patch,
                                 target_patch,
-                                trad,
-                                embedding,
+                                #trad,
+                                src_to_target,
+                                #embedding,
+                                embedding_source,
                                 source,
                                 target,
-                                self.current_epoch,
+                                self.current_epoch+1,
                                 data.get("coordinate"),
                             )
                             im_save[source][target] = 1
@@ -496,19 +500,29 @@ class MultiLULCAgent(base.BaseAgent):
                             out_img = self.data_loader.plot_samples_per_epoch(
                                 source_patch,
                                 source_patch,
-                                rec,
-                                embedding,
+                                #rec,
+                                rec_source,
+                                #embedding,
+                                embedding_source,
                                 source,
                                 source,
-                                self.current_epoch,
+                                self.current_epoch+1,
                                 data.get("coordinate"),
                             )
                             im_save[source][source] = 1
-                        loss_log[target].append(loss.item())
+                        
+                        # Accumulate the running loss and count loss items:
+                        epoch_running_loss += loss.item()
+                        n_loss_items += 1
 
-                if end:
-                    break
-        return loss_log
+                        # LUMI-multi-GPU: Collect reconstruction losses for each model 
+                        loss_arrays[source].append(loss_rec_source.item())
+                        loss_arrays[target].append(loss_rec_target.item())
+                    if end:
+                        break
+        for d, l in loss_arrays.items():
+            self.loss_log["validation"]["reconstruction"][d].append([self.current_epoch+1, np.mean(l)])
+        self.loss_log["validation"]["total_average"].append([self.current_epoch+1, epoch_running_loss/n_loss_items])
 
     def test(self) -> None:
         """Final testing on left-out dataset"""
@@ -518,8 +532,11 @@ class MultiLULCAgent(base.BaseAgent):
         with torch.no_grad():
             ##### Read ground_truth_file
             self.load_checkpoint(default_bestmodel_filename)
-            [model.eval() for model in self.models]
-            self.coord_model.eval()
+            # LUMI-multi-GPU: Set the models to evaluation mode:
+            for model in self.models_wrapper.module.models:
+                model.eval()
+            if self.config.model.use_pos:
+                self.models_wrapper.module.coord_model.eval()
 
             res_oa = {d: {j: [0, 0] for j in self.datasets} for d in self.datasets}
             conf_matrix = {
@@ -540,6 +557,12 @@ class MultiLULCAgent(base.BaseAgent):
                 for target, val in targetval.items():
                     i_target = self.datasets.index(target)
                     for nb_it, data in enumerate(val):
+                        pos_enc = data.get("coordenc").float().to(self.device)
+                        source_patch = data.get("source_one_hot").to(self.device)
+                        target_patch = data.get("target_one_hot").to(self.device)
+                        sv = data.get("source_data")[:, 0].to(self.device)
+                        tv = data.get("target_data")[:, 0].to(self.device)
+                        """
                         pos_enc = data.get("coordenc").to(self.device)
                         source_patch = data.get("source_one_hot")
                         tv = data.get("target_data")[:, 0]
@@ -562,6 +585,11 @@ class MultiLULCAgent(base.BaseAgent):
                             trad = self.models[i_target].decoder(embedding)
                         else:
                             _, trad = self.models[i_target](embedding)
+                        """
+                        # LUMI-multi-GPU:
+                        rec_source, rec_target, embedding_source, embedding_target, src_to_target, target_to_src = self.models_wrapper(i_source, i_target, source_patch, target_patch, pos_enc)
+                        embedding = embedding_source
+                        trad = src_to_target
 
                         y_pred = torch.argmax(trad, dim=1)
 
@@ -617,6 +645,7 @@ class MultiLULCAgent(base.BaseAgent):
         """Finalizes all the operations of the 2 Main classes of the process, the operator and the data loader"""
         self.logger.info("Please wait while finalizing the operation.. Thank you")
         torch.cuda.empty_cache()
+        dist.destroy_process_group()
         if self.config.training.tensorboard:
             self.tensorboard_process.kill()
             self.summary_writer.close()

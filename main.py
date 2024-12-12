@@ -8,12 +8,26 @@ Main
 -Run the agent
 """
 
+import os
+import torch
 import matplotlib
 import argparse
+import datetime
 from mmt.utils import config as utilconf
 from mmt.agents import multiLULC
+import torch.distributed as dist
 
 def main():
+    # Set a custom timeout (30 minutes) since process 0 currently does evaluation alone and takes more time than the default.
+    # using dist.barrier() only holds for the duration set here.
+    dist.init_process_group(
+        backend='nccl',
+        init_method='env://',  # Required for torch.distributed.run
+        timeout=datetime.timedelta(seconds=1800)
+    )
+
+    torch.cuda.set_device(int(os.environ['LOCAL_RANK']))
+
     # Choose the appropriate backend (see: https://matplotlib.org/stable/users/explain/figure/backends.html)
     matplotlib.use("AGG")
     

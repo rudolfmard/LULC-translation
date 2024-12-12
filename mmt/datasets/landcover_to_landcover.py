@@ -1072,7 +1072,7 @@ class LandcoverToLandcoverDataLoader:
                     val,
                     batch_size=self.config.training.batch_size,
                     shuffle=False, # LUMI-multi-GPU: Set DataLoader shuffle to False, and sampler shuffle to True
-                    sampler = DistributedSampler(val, num_replicas=world_size, rank=rank, shuffle=True, drop_last=False, shuffle=True), #LUMI-multi-GPU
+                    sampler = DistributedSampler(val, num_replicas=world_size, rank=rank, shuffle=True, drop_last=False), #LUMI-multi-GPU
                     num_workers=num_workers,
                     pin_memory=pin_memory,
                     persistent_workers=num_workers > 0,
@@ -1086,8 +1086,8 @@ class LandcoverToLandcoverDataLoader:
                 target: DataLoader(
                     val,
                     batch_size=self.config.training.batch_size,
-                    shuffle=False, # LUMI-multi-GPU: Set DataLoader shuffle to False, and sampler shuffle to True
-                    sampler = DistributedSampler(val, num_replicas=world_size, rank=rank, shuffle=True, drop_last=False, shuffle=True), #LUMI-multi-GPU
+                    shuffle=True, # LUMI-multi-GPU: DistributedSampler not yet needed with validation and test datasets as process 0 handles validation and testing alone currently.
+                    #sampler = DistributedSampler(val, num_replicas=world_size, rank=rank, shuffle=True, drop_last=False), #LUMI-multi-GPU, only for training loader?
                     num_workers=num_workers,
                     pin_memory=pin_memory,
                     persistent_workers=num_workers > 0,
@@ -1101,8 +1101,8 @@ class LandcoverToLandcoverDataLoader:
                 target: DataLoader(
                     val,
                     batch_size=self.config.training.batch_size,
-                    shuffle=False, # LUMI-multi-GPU: Set DataLoader shuffle to False, and sampler shuffle to True
-                    sampler = DistributedSampler(val, num_replicas=world_size, rank=rank, shuffle=True, drop_last=False, shuffle=True), #LUMI-multi-GPU
+                    shuffle=True, # LUMI-multi-GPU: DistributedSampler not yet needed with validation and test datasets as process 0 handles validation and testing alone currently.
+                    #sampler = DistributedSampler(val, num_replicas=world_size, rank=rank, shuffle=True, drop_last=False), #LUMI-multi-GPU, only for training loader?
                     num_workers=num_workers,
                     pin_memory=pin_memory,
                     persistent_workers=num_workers > 0,

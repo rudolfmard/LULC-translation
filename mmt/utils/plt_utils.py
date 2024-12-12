@@ -43,7 +43,6 @@ def plot_loss(
 ) -> None:
     """Plot the learning curve
 
-
     Parameters
     ----------
     train_loss: dict
@@ -69,7 +68,6 @@ def plot_loss(
             plt.plot(
                 v[:, 0], v[:, 1], "--", color=DATASET_COLORS[k], label="training " + k
             )
-
         except:
             print(f"Error plotting loss for {k}. Values are {v}")
 
@@ -80,7 +78,7 @@ def plot_loss(
     plt.legend(bbox_to_anchor=(1.0, 0.5), loc="center left", borderaxespad=0.5)
     plt.tight_layout(rect=[0, 0, 1, 1])
     plt.grid()
-    plt.xlabel("Iteration")
+    plt.xlabel("Epoch")
     plt.ylabel("Loss")
     if savefig:
         fig.savefig(savefig, bbox_inches="tight")
