@@ -170,6 +170,7 @@ class MultiLULCAgent(base.BaseAgent):
                 # In phase two, there are fewer autoencoders in the models_wrapper and the parameters of these excluded AEs has to be filtered out of the state_dict
                 # Exclude parameters where the key starts with "model.i" where i is not an index of an existing AE in the ModuleList within models_wrapper
                 # Phase 2 also resets the current_epoch counter, loss_log data and optimizer states, therefore these are not recovered.
+                # TODO: Possible bug! Currently only keep range(n_autoencoders) but are the AEs of interest actually the first n_autoencoders?
                 n_autoencoders = len(self.models_wrapper.module.models)
                 filtered_state_dict = {k: v for k, v in checkpoint["model"].items() if not k.startswith(f"models.") or any(k.startswith(f"models.{i}.") for i in range(n_autoencoders))}
                 self.models_wrapper.module.load_state_dict(filtered_state_dict)
@@ -640,6 +641,34 @@ class MultiLULCAgent(base.BaseAgent):
                 conf_matrix,
                 savefig=os.path.join(self.config.paths.out_dir, "per_class"),
             )
+
+    def early_stopping(self) -> bool:
+        """
+        Inspects the epoch-wise validation losses
+        and determines whether early stopping criterion is met.
+
+        Constants:
+            patience (int): Number of consecutive epochs without improvement (as defined by delta) in the validation loss before training stops.
+            delta (float):  Minimum absolute change required in the validation loss to qualify as an improvement.
+        Returns:
+            stop_training (bool):  True if early stopping criterion is met, False otherwise.
+        """
+        patience = 10
+        delta = 0.001
+
+        validation_epoch_averages = loss_log["validation"]["total_average"]
+
+        if len(validation_epoch_averages) <= patience:
+            return False  # Not enough data to make decision
+
+        # Best loss, excluding last n (=patience) elements:
+        best_loss = min([i[1] for i in validation_epoch_averages[:-patience]])
+        # Last n (=patience) elements:
+        last_n = [i[1] for i in validation_epoch_averages[-patience:]]
+        # Check if any of the last n (=patience) loss values is better (by >delta) than the best_loss:
+        all_worse = all(loss > (best_loss - delta) for loss in last_n)
+
+        return all_worse
 
     def finalize(self) -> None:
         """Finalizes all the operations of the 2 Main classes of the process, the operator and the data loader"""
