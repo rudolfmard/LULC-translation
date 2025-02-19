@@ -127,4 +127,5 @@ if args.savefig:
     fig.savefig(figpath)
     print("Figure saved:", figpath)
 
-fig.show()
+# Do not show when working on LUMI:
+#fig.show()

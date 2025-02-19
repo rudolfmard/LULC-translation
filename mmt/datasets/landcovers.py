@@ -29,6 +29,8 @@ import os
 import time
 from typing import Any, Dict, Optional
 
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import netCDF4 as nc
 import numpy as np

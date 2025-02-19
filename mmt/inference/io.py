@@ -17,7 +17,7 @@ from torchgeo.datasets.utils import BoundingBox
 
 from mmt import _repopath_ as mmt_repopath
 from mmt.datasets import landcover_to_landcover
-from mmt.graphs.models import attention_autoencoder, universal_embedding
+from mmt.graphs.models import attention_autoencoder, universal_embedding, autoencoder_wrapper
 from mmt.utils import config as utilconf
 from mmt.utils import misc
 
@@ -302,11 +302,43 @@ def load_pytorch_model(
         Map translation model loaded with weights of `xp_name` translating
         from `lc_in` to `lc_out`
     """
+    # LUMI-MULTI-GPU: Made compatible with autoencoder_wrapper
 
     checkpoint_path = misc.weights_to_checkpoint(xp_name)
-    checkpoint = torch.load(checkpoint_path, map_location=device)
     config = utilconf.get_config(checkpoint_path.replace("ckpt", "config.yaml"))
 
+    # Fetch the list of map names corresponding to AEs in autoencoder_wrapper (remove file extensions and possible "-train" suffix):
+    map_names = [dataset.split('.')[0].split('-')[0] for dataset in config.dataloader.params.datasets]
+    print(f"_______ map names: {map_names}")
+
+    # Fetch index of lc_in (and lc_out) from the map_names list to filter the state_dict for only the desired AEs
+    # Also fetch other information about the lc_in (and lc_out) map:
+    try:
+        lc_in_idx = map_names.index(lc_in)
+        res_in = landcover_to_landcover.RESOLUTION_CATALOG[lc_in + ".hdf5"]
+        n_channels_in = len(landcover_to_landcover.LABELS_CATALOG[lc_in + ".hdf5"]) + 1
+        if lc_out not in ["encoder", "decoder"]:
+            lc_out_idx = map_names.index(lc_out)
+            res_out = landcover_to_landcover.RESOLUTION_CATALOG[lc_out + ".hdf5"]
+            n_channels_out = len(landcover_to_landcover.LABELS_CATALOG[lc_out + ".hdf5"]) + 1
+
+            # Gather map information for initializing the autoencoder_wrapper:
+            input_channels = [n_channels_in, n_channels_out]
+            output_channels = [n_channels_in, n_channels_out]
+            n_px_inputs = [get_patchsize_from_mapname(lc_in), get_patchsize_from_mapname(lc_out)]
+            resizes = [get_resize_from_mapname(lc_in, config), get_resize_from_mapname(lc_out, config)]
+            AE_indices = [lc_in_idx, lc_out_idx]
+        else:
+            # Gather map information for initializing the autoencoder_wrapper when lc_out in ["encoder", "decoder"]:
+            input_channels = [n_channels_in]
+            output_channels = [n_channels_in]
+            n_px_inputs = [get_patchsize_from_mapname(lc_in)]
+            resizes = [get_resize_from_mapname(lc_in, config)]
+            AE_indices = [lc_in_idx]
+    except ValueError:
+        print(f"lc_in or lc_out not found in the list of valid map names: {map_names}.")
+
+    """
     if config.model.type == "universal_embedding":
         EncDec = getattr(universal_embedding, config.model.name)
     elif config.model.type == "attention_autoencoder":
@@ -315,10 +347,18 @@ def load_pytorch_model(
         raise ValueError(
             f"Unknown model.type = {config.model.type}. Please change config to one among ['transformer_embedding', 'universal_embedding', 'attention_autoencoder']"
         )
+    """
 
-    res_in = landcover_to_landcover.RESOLUTION_CATALOG[lc_in + ".hdf5"]
-    n_channels_in = len(landcover_to_landcover.LABELS_CATALOG[lc_in + ".hdf5"]) + 1
+    # CAUTION: If bugged, the in- and out_channels etc. might have to be in the same order as they were when training the model. Also, always place information on lc_in first and lc_out second.
+    models_wrapper = autoencoder_wrapper.AutoencoderWrapper(        
+        in_channels=input_channels,
+        out_channels=output_channels,
+        n_px_inputs=n_px_inputs,
+        resizes=resizes,
+        config=config
+    )
 
+    """
     autoenc_in = EncDec(
         in_channels=n_channels_in,
         out_channels=n_channels_in,
@@ -329,7 +369,14 @@ def load_pytorch_model(
         n_channels_embedding=config.dimensions.n_channels_embedding,
         **config.model.params,
     )
+    """
 
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    # Filter the state_dict to only include weights of autoencoders corresponding to lc_in and lc_out:
+    filtered_state_dict = {k: v for k, v in checkpoint["model"].items() if not k.startswith(f"models.") or any(k.startswith(f"models.{i}.") for i in AE_indices)}
+    models_wrapper.load_state_dict(filtered_state_dict)
+
+    """
     autoenc_in.load_state_dict(checkpoint[f"encoder_state_dict_{lc_in}.hdf5"])
 
     if lc_out not in ["encoder", "decoder"]:
@@ -350,17 +397,22 @@ def load_pytorch_model(
         )
 
         autoenc_out.load_state_dict(checkpoint[f"encoder_state_dict_{lc_out}.hdf5"])
+    """
 
     print(
         f"<{__name__}.{sys._getframe().f_code.co_name}> Loaded model at epoch {checkpoint['epoch']}, iteration {checkpoint['iteration']}"
     )
 
+    # The AEs corresponding to the lc_in and lc_out should be in order [lc_in, lc_out] within the ModuleList inside models_wrapper.
     if lc_out == "encoder":
-        model = autoenc_in.encoder
+        #model = autoenc_in.encoder
+        model = models_wrapper.models[0].encoder
     elif lc_out == "decoder":
-        model = autoenc_in.decoder
+        #model = autoenc_in.decoder
+        model = models_wrapper.models[0].decoder
     else:
-        model = torch.nn.Sequential(autoenc_in.encoder, autoenc_out.decoder)
+        #model = torch.nn.Sequential(autoenc_in.encoder, autoenc_out.decoder)
+        model = torch.nn.Sequential(models_wrapper.models[0].encoder, models_wrapper.models[1].decoder)
 
     model.train(mode=train_mode)
     return model
