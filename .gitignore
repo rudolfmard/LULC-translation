@@ -7,3 +7,4 @@ figures/*
 *.onnx
 *.egg-info/
 sandbox*
+*.out
