@@ -97,6 +97,9 @@ for lcname in lcnames:
 for ax, col in zip(axs[0], cols):
     ax.set_title(col)
 
+# If lcname is a path keep only the file name:
+lcnames = [os.path.basename(os.path.normpath(lcname)) for lcname in lcnames]
+
 figname = f"_".join(
     ["qualcheck", "-".join(lcnames), "-".join([loc[:3] for loc in locations])]
 )
@@ -108,4 +111,5 @@ if args.savefig:
     fig.savefig(figpath)
     print("Figure saved:", figpath)
 
-plt.show(block=False)
+# Don't use .show() on LUMI
+#plt.show(block=False)

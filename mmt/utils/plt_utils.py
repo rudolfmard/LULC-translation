@@ -35,7 +35,7 @@ DEFAULT_FIGDIR = (
     "../figures"  # Images will be saved in this directory (prefix of plt.savefig)
 )
 
-DEFAULT_SAVEFIG = False  # If True, figures are saved in files but not shown. Else, figures are not saved in files but are shown
+DEFAULT_SAVEFIG = True  # If True, figures are saved in files but not shown. Else, figures are not saved in files but are shown
 
 
 def plot_loss(
