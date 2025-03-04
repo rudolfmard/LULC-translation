@@ -101,7 +101,7 @@ for translator in translator_list + ["ecosg"]:
         if hasattr(translator, "checkpoint_path")
         else translator
     )
-    cmxs[method] = scores.look_in_cache_else_compute(translator, h5f, n_patches)
+    cmxs[method] = scores.look_in_cache_else_compute(translator, h5f, n_patches, device=device)
     print(f"Bulk total overall accuracy ({method}): {scores.oaccuracy(cmxs[method])}")
 
 

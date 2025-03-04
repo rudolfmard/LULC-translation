@@ -159,7 +159,7 @@ def latexstyleprint(pms) -> None:
     print(latexstyle)
 
 
-def look_in_cache_else_compute(translator, h5f, n_patches, pandas=True):
+def look_in_cache_else_compute(translator, h5f, n_patches, pandas=True, device="cuda"):
     """Look in the cache if these scores have been previously computed and
     compute them if they have not.
 
@@ -201,7 +201,7 @@ def look_in_cache_else_compute(translator, h5f, n_patches, pandas=True):
         cachedcmx_header["weights"] = repr(
             (
                 io.get_epoch_of_best_model(
-                    translator.checkpoint_path, return_iteration=True
+                    translator.checkpoint_path, return_iteration=True, device=device
                 ),
                 translator,
             )
@@ -349,8 +349,9 @@ def perlabel_scores(
         index=labels, columns=scores + ["support", "support_frac"], dtype=float
     )
     for k, l in enumerate(labels):
-        with warnings.catch_warnings(category=RuntimeWarning):
-            warnings.simplefilter("ignore")
+        # TEMPORARY: Move argument category=RuntimeWarning from .catch_warnings() to .simplefilter(), as category parameter was added in python 3.11 and I currently use python 3.10.13
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
             if "user_accuracy" in scores:
                 plscores.loc[l, "user_accuracy"] = cmx.iloc[k, k] / cmx.iloc[:, k].sum()
             if "prod_accuracy" in scores:

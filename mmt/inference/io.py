@@ -198,7 +198,7 @@ def dump_labels_in_tif(labels, domain, crs, tifpath, dtype="int16") -> None:
             f.write(labels, 1)
 
 
-def get_epoch_of_best_model(xp_name, return_iteration=False) -> int:
+def get_epoch_of_best_model(xp_name, return_iteration=False, device="cuda") -> int:
     """Read the value of epoch recorded in the best model checkpoint.
 
 
@@ -218,7 +218,7 @@ def get_epoch_of_best_model(xp_name, return_iteration=False) -> int:
         Epoch (and iteration, if `return_iteration=True`) of the model
     """
     checkpoint_path = misc.weights_to_checkpoint(xp_name)
-    checkpoint = torch.load(checkpoint_path)
+    checkpoint = torch.load(checkpoint_path, map_location=device)
 
     if return_iteration:
         return checkpoint["epoch"], checkpoint["iteration"]
