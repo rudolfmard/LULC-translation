@@ -126,7 +126,7 @@ class MultiLULCAgent(base.BaseAgent):
             optim_class(net.parameters(), **self.config.optimizer.params)
             for net in self.models_wrapper.module.models
         ]
-        if self.config.model.use_pos:
+        if self.config.model.use_pos == "sinusoidal":
             self.coord_optimizer = optim_class(
                 self.models_wrapper.module.coord_model.parameters(), **self.config.optimizer.params
             )
@@ -179,7 +179,7 @@ class MultiLULCAgent(base.BaseAgent):
                 self.models_wrapper.module.load_state_dict(checkpoint["model"])
                 self.current_epoch = checkpoint["epoch"] + 1
                 self.loss_log = checkpoint["loss_log"]
-                if self.config.model.use_pos:
+                if self.config.model.use_pos == "sinusoidal":
                     self.coord_optimizer.load_state_dict(checkpoint["coord_optimizer"])
                 for i, d in enumerate(self.datasets):
                     self.optimizers[i].load_state_dict(checkpoint["encoder_optimizer_" + d])
@@ -215,7 +215,7 @@ class MultiLULCAgent(base.BaseAgent):
         }
 
         state["model"] = self.models_wrapper.module.state_dict()
-        if self.config.model.use_pos:
+        if self.config.model.use_pos == "sinusoidal":
             state["coord_optimizer"] = self.coord_optimizer.state_dict()
         for i, d in enumerate(self.datasets):
             state["encoder_optimizer_" + d] = self.optimizers[i].state_dict()
@@ -309,10 +309,13 @@ class MultiLULCAgent(base.BaseAgent):
         loss_arrays = {d: [] for d in self.datasets}
 
         # LUMI-multi-GPU: Set the models to training mode:
+        self.models_wrapper.train()
+        """
         for model in self.models_wrapper.module.models:
             model.train()
-        if self.config.model.use_pos:
+        if self.config.model.use_pos == "sinusoidal":
             self.models_wrapper.module.coord_model.train()
+        """
 
         # LUMI-multi-GPU: call set_epoch on the DistributedSampler
         for _, targetval in self.data_loader.train_loader.items():
@@ -346,20 +349,24 @@ class MultiLULCAgent(base.BaseAgent):
                         end = True
                         break
 
-                    pos_enc = data.get("coordenc").float().to(self.device)
-                    # LUMI: also move all data below to device
-                    source_patch = data.get("source_one_hot").to(self.device)
-                    target_patch = data.get("target_one_hot").to(self.device)
-                    sv = data.get("source_data")[:, 0].to(self.device)
-                    tv = data.get("target_data")[:, 0].to(self.device)
+                    # If use_pos model config is "sinusoidal", pass sinusoidal encoding of coordinates to model instead of raw coordinates:
+                    if self.config.model.use_pos == "sinusoidal":
+                        coordinates = data.get("coordenc").float().to(self.device)
+                    else:
+                        coordinates = data.get("coordinate_tensor")
+                    #TODO: Moving data to device should not matter, as dataloader already does it
+                    source_patch = data.get("source_one_hot")#.to(self.device)
+                    target_patch = data.get("target_one_hot")#.to(self.device)
+                    sv = data.get("source_data")[:, 0]#.to(self.device)
+                    tv = data.get("target_data")[:, 0]#.to(self.device)
 
                     self.optimizers[i_source].zero_grad(set_to_none=True)
                     self.optimizers[i_target].zero_grad(set_to_none=True)
-                    if self.config.model.use_pos:
+                    if self.config.model.use_pos == "sinusoidal":
                         self.coord_optimizer.zero_grad(set_to_none=True)
 
                     ### LUMI-multi-GPU: Forward pass, call forward only on the AutoencoderWrapper
-                    rec_source, rec_target, embedding_source, embedding_target, src_to_target, target_to_src = self.models_wrapper(i_source, i_target, source_patch, target_patch, pos_enc)
+                    rec_source, rec_target, embedding_source, embedding_target, src_to_target, target_to_src = self.models_wrapper(i_source, i_target, source_patch, target_patch, coordinates)
 
                     # Calculate and add source reconstruction error to reconstruction loss:
                     loss_rec_source = torch.nn.CrossEntropyLoss(ignore_index=0)(rec_source, sv)        # self reconstruction loss
@@ -391,7 +398,7 @@ class MultiLULCAgent(base.BaseAgent):
                     loss.backward()
                     self.optimizers[i_source].step()
                     self.optimizers[i_target].step()
-                    if self.config.model.use_pos:
+                    if self.config.model.use_pos == "sinusoidal":
                         self.coord_optimizer.step()
 
                     # Accumulate the running loss and count loss items:
@@ -415,10 +422,13 @@ class MultiLULCAgent(base.BaseAgent):
         loss_arrays = {d: [] for d in self.datasets}
 
         # LUMI-multi-GPU: Set the models to evaluation mode:
+        self.models_wrapper.eval()
+        """
         for model in self.models_wrapper.module.models:
             model.eval()
-        if self.config.model.use_pos:
+        if self.config.model.use_pos == "sinusoidal":
             self.models_wrapper.module.coord_model.eval()
+        """
 
         test_loss = 0
         with torch.no_grad():
@@ -439,7 +449,10 @@ class MultiLULCAgent(base.BaseAgent):
                         except:
                             end = True
                             break
-                        pos_enc = data.get("coordenc").float().to(self.device)
+                        if self.config.model.use_pos == "sinusoidal":
+                            coordinates = data.get("coordenc").float().to(self.device)
+                        else:
+                            coordinates = data.get("coordinate_tensor")
                         source_patch = data.get("source_one_hot").to(self.device)
                         target_patch = data.get("target_one_hot").to(self.device)
                         sv = data.get("source_data")[:, 0].to(self.device)
@@ -460,7 +473,7 @@ class MultiLULCAgent(base.BaseAgent):
                             _, trad = self.models[i_target](embedding)
                         """
                         # LUMI-multi-GPU:
-                        rec_source, rec_target, embedding_source, embedding_target, src_to_target, target_to_src = self.models_wrapper(i_source, i_target, source_patch, target_patch, pos_enc)
+                        rec_source, rec_target, embedding_source, embedding_target, src_to_target, target_to_src = self.models_wrapper(i_source, i_target, source_patch, target_patch, coordinates)
 
                         """
                         loss = torch.nn.CrossEntropyLoss(ignore_index=0)(trad, torch.argmax(target_patch, 1)) # TODO: Make sure why argmax is here
@@ -534,10 +547,13 @@ class MultiLULCAgent(base.BaseAgent):
             ##### Read ground_truth_file
             self.load_checkpoint(default_bestmodel_filename)
             # LUMI-multi-GPU: Set the models to evaluation mode:
+            self.models_wrapper.eval()
+            """
             for model in self.models_wrapper.module.models:
                 model.eval()
-            if self.config.model.use_pos:
+            if self.config.model.use_pos == "sinusoidal":
                 self.models_wrapper.module.coord_model.eval()
+            """
 
             res_oa = {d: {j: [0, 0] for j in self.datasets} for d in self.datasets}
             conf_matrix = {
@@ -558,7 +574,11 @@ class MultiLULCAgent(base.BaseAgent):
                 for target, val in targetval.items():
                     i_target = self.datasets.index(target)
                     for nb_it, data in enumerate(val):
-                        pos_enc = data.get("coordenc").float().to(self.device)
+                        #pos_enc = data.get("coordenc").float().to(self.device)
+                        if self.config.model.use_pos == "sinusoidal":
+                            coordinates = data.get("coordenc").float().to(self.device)
+                        else:
+                            coordinates = data.get("coordinate_tensor")
                         source_patch = data.get("source_one_hot").to(self.device)
                         target_patch = data.get("target_one_hot").to(self.device)
                         sv = data.get("source_data")[:, 0].to(self.device)
@@ -588,7 +608,7 @@ class MultiLULCAgent(base.BaseAgent):
                             _, trad = self.models[i_target](embedding)
                         """
                         # LUMI-multi-GPU:
-                        rec_source, rec_target, embedding_source, embedding_target, src_to_target, target_to_src = self.models_wrapper(i_source, i_target, source_patch, target_patch, pos_enc)
+                        rec_source, rec_target, embedding_source, embedding_target, src_to_target, target_to_src = self.models_wrapper(i_source, i_target, source_patch, target_patch, coordinates)
                         embedding = embedding_source
                         trad = src_to_target
 

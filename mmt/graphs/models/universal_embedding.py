@@ -136,6 +136,27 @@ class SimpleDecoder(nn.Module):
         x = self.decoder(x)
         return x
 
+class CoordinateEmbedding(nn.Module):
+    """
+    Implements CoordinateEmbedding module, which applies input embedding to the input patch and
+    encodes normalized coordinate values. The encoded coordinate data is summed to the input embeddings.
+    """
+    def __init__(self, ):
+        super().__init__()
+
+        if resize is not None:
+            self.input_embedding = nn.Sequential(
+                Upsample(scale_factor=resize, mode="nearest"),
+                DoubleConv(input_channels, number_feature_map, num_groups=num_groups, bias=bias),
+            )
+        else:
+            self.input_embedding = DoubleConv(input_channels, number_feature_map, num_groups=num_groups, bias=bias)
+        self.coordinate_encoder = nn.Linear(2, number_feature_map)
+
+    def forward(self, x, coordinates):
+        x = self.input_embedding(x)
+        x = x + self.coordinate_encoder(coordinates).unsqueeze(-1).unsqueeze(-1) # Broadcast the coordinate encoding vector along spatial dimensions
+        return x
 
 class DUNet(nn.Module):
     def __init__(
@@ -151,22 +172,24 @@ class DUNet(nn.Module):
         pooling_factors=[2, 2, 2, 2, 3],
         tlm_p=0,
         bias=False,
+        use_pos=None
     ):
         down_mode = "maxpool"
         super().__init__()
         self.embedding_dim = embedding_dim
-
-        if resize is not None:
-            self.inc = nn.Sequential(
-                Upsample(scale_factor=resize, mode="nearest"),
-                DoubleConv(
-                    input_channels, number_feature_map, num_groups=num_groups, bias=bias
-                ),
-            )
+        self.use_pos = use_pos
+        
+        if use_pos == "embed_layer":
+            self.inc = CoordinateEmbedding()
         else:
-            self.inc = DoubleConv(
-                input_channels, number_feature_map, num_groups=num_groups, bias=bias
-            )
+            if resize is not None:
+                self.inc = nn.Sequential(
+                    Upsample(scale_factor=resize, mode="nearest"),
+                    DoubleConv(input_channels, number_feature_map, num_groups=num_groups, bias=bias),
+                )
+            else:
+                self.inc = DoubleConv(input_channels, number_feature_map, num_groups=num_groups, bias=bias)
+        
         if mode == "light":
             self.down1 = Down(
                 number_feature_map,
@@ -333,7 +356,12 @@ class DUNet(nn.Module):
             )
             self.outc = nn.Conv2d(2 * number_feature_map, embedding_dim, kernel_size=1)
 
-        self.forward_method = self.classical_forward
+        #TODO: self.forward_method() is redundant if this logic is moved to self.forward() method?
+        if use_pos == "embed_layer":
+            self.forward_method = self.forward_with_coordinates
+        else:
+            self.forward_method = self.classical_forward
+
         if memory_monger:
             self.dummy_tensor = torch.ones(1, dtype=torch.float32, requires_grad=True)
             self.encoder_wrapper = ModuleWrapperIgnores2ndArg(self.encoder_part)
@@ -360,6 +388,20 @@ class DUNet(nn.Module):
         x1, x2, x3, x4, x5, x6 = self.encoder_part(x)
         return self.decoder_part(x1, x2, x3, x4, x5, x6)
 
+    def forward_with_coordinates(self, x, coordinates):
+        x1 = self.inc(x, coordinates)
+        x2 = self.down1(x1)
+        x3 = self.down2(x2)
+        x4 = self.down3(x3)
+        x5 = self.down4(x4)
+        x6 = self.down5(x5)
+        x = self.up1(x6, x5)
+        x = self.up2(x, x4)
+        x = self.up3(x, x3)
+        x = self.up4(x, x2)
+        x = self.up5(x, x1)
+        return self.outc(x)
+
     def MemoryMonged_forward(self, x):
         x1, x2, x3, x4, x5, x6 = checkpoint.checkpoint(
             self.encoder_wrapper,
@@ -370,7 +412,9 @@ class DUNet(nn.Module):
         )
         return self.decoder_part(x1, x2, x3, x4, x5, x6)
 
-    def forward(self, x):
+    def forward(self, x, coordinates=None):
+        if self.use_pos == "embed_layer":
+            return self.forward_with_coordinates(x, coordinates)
         return self.forward_method(x)
 
     def check_shapes(self, x=None):
@@ -399,6 +443,7 @@ class UnivEmb(nn.Module):
         n_channels_hiddenlay=30,
         embedding_dim=None,
         n_channels_embedding=32,
+        use_pos=None,
         memory_monger=False,
         num_groups=None,
         up_mode="bilinear",
@@ -427,6 +472,7 @@ class UnivEmb(nn.Module):
                 f"<{self.__class__.__name__}>mmt-0.2 API changes: 'embedding_dim' is now renamed 'n_channels_hiddenlay'. Please use it for now on. Current value: n_channels_embedding={n_channels_embedding}"
             )
 
+        self.use_pos = use_pos
         if not isinstance(resize, list):
             enc_resize = resize
             dec_resize = resize
@@ -445,6 +491,7 @@ class UnivEmb(nn.Module):
             pooling_factors=pooling_factors,
             tlm_p=tlm_p,
             bias=bias,
+            use_pos=use_pos,
         )
         in_dec = self.encoder.embedding_dim
         self.cat = cat
@@ -475,8 +522,11 @@ class UnivEmb(nn.Module):
         if image_operator == "mul":
             self.image_mul = True
 
+    #TODO: merge "res" and "coordinates" into one parameter, rename parameter "full" to something more descriptive like "decode_only"
+
     # LUMI: alternative forward method for concatenating position encoding into the input
     def forward_with_coordinate_encoding(self, x, full=False, res=None, image=None):
+        raise NotImplementedError("Handling of the given argument 'image' is not implemented!" )
         if res is not None and full:
             # x shape before concating: (batch_size, n_categories (1-hot), lon, lat)
             # res shape (encoded position data): (batch_size, n_channels_embedding)
@@ -488,6 +538,12 @@ class UnivEmb(nn.Module):
             x = self.encoder(x)
         if image is not None:
             raise NotImplementedError("Handling of the given argument 'image' is not implemented!" )
+        return x, self.decoder(x)
+    
+    def forward_with_coordinates(self, x, coordinates=None, full=False):
+        # Run encoder to obtain latent space representation:
+        if full:
+            x = self.encoder(x, coordinates)
         return x, self.decoder(x)
 
     def classical_forward(self, x, full=False, res=None, image=None):
@@ -531,7 +587,9 @@ class UnivEmb(nn.Module):
                 x += image
         return x, self.decoder(x)
 
-    def forward(self, x, full=False, res=None, image=None):
+    def forward(self, x, full=False, res=None, image=None, coordinates=None):
+        if self.use_pos == "embed_layer":
+            return self.forward_with_coordinates(x, coordinates, full)
         return self.forward_method(x, full, res, image)
 
 

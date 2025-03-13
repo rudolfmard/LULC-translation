@@ -28,7 +28,7 @@ class AutoencoderWrapper(nn.Module):
             )
         
         #LUMI: add the number of elements position encoding to input_channel
-        if config.model.use_pos:
+        if config.model.use_pos == "sinusoidal":
             pos_enc_dim = config.model.pos_enc_dim
             self.coord_model = position_encoding.PositionEncoder(n_channels_embedding=pos_enc_dim)
         else:
@@ -44,27 +44,32 @@ class AutoencoderWrapper(nn.Module):
                 n_px_embedding=config.dimensions.n_px_embedding,
                 n_channels_hiddenlay=config.dimensions.n_channels_hiddenlay,
                 n_channels_embedding=config.dimensions.n_channels_embedding,
+                use_pos=config.model.use_pos,
                 **config.model.params,
             )
             for i_model, (input_channel, output_channel) in enumerate(zip(in_channels, out_channels))]
         )
 
-    def forward(self, i_source, i_target, source_patch, target_patch, pos_enc):
+    def forward(self, i_source, i_target, source_patch, target_patch, coordinates):
         """
         Forward is always performed between two autoencoders
         """
 
         # Encode+Decode the source patches:
-        if self.config.model.use_pos:
+        if self.config.model.use_pos == "sinusoidal":
             # LUMI: Pass the raw output from coord_model to autoencoder (no unsqueezing here)
-            pos_enc =  self.coord_model(pos_enc)
+            pos_enc =  self.coord_model(coordinates)
             embedding_source, rec_source = self.models[i_source](source_patch, full=True, res=pos_enc)
+        elif self.config.model.use_pos == "embed_layer":
+            embedding_source, rec_source = self.models[i_source](source_patch, full=True, coordinates=coordinates)
         else:
             embedding_source, rec_source = self.models[i_source](source_patch, full=True)
 
         # Encode+Decode the target patches:
-        if self.config.model.use_pos:
+        if self.config.model.use_pos == "sinusoidal":
             embedding_target, rec_target = self.models[i_target](target_patch, full=True, res=pos_enc)
+        elif self.config.model.use_pos == "embed_layer":
+            embedding_target, rec_target = self.models[i_target](target_patch, full=True, coordinates=coordinates)
         else:
             embedding_target, rec_target = self.models[i_target](target_patch, full=True)
 

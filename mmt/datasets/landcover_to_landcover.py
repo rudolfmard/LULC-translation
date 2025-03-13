@@ -661,6 +661,12 @@ class LandcoverToLandcover(Dataset):
                 tmp.attrs["x_coor"].astype(float),
                 tmp.attrs["y_coor"].astype(float),
             )
+            # Create a new attribute to easily access the coordinates as torch.tensors (shape = (batch_size, 2):
+            sample["coordinate_tensor"] = torch.tensor(
+                (tmp.attrs["x_coor"].astype(float), tmp.attrs["y_coor"].astype(float)),
+                dtype=torch.float,
+                device=self.device,
+            )
 
             sample["source_name"] = self.source
             sample["target_name"] = self.target
