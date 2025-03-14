@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 import time
+import itertools
 
 import numpy as np
 import torch
@@ -95,14 +96,7 @@ class MultiLULCAgent(base.BaseAgent):
         self.best_metric = 0
 
         # Initialize a dictionary to hold loss values
-        self.loss_log = {
-            "training": {
-                "reconstruction": {d: [] for d in self.datasets},
-                "total_average": [],
-        }, "validation": {
-                "reconstruction": {d: [] for d in self.datasets},
-                "total_average": []
-        }}
+        self.loss_log, self.loss_log_lookup_table = self.initialize_loss_log(key_lookup=True)
 
         # Get required param for network initialisation
         input_channels = self.data_loader.input_channels
@@ -274,17 +268,16 @@ class MultiLULCAgent(base.BaseAgent):
                 )
                 # LUMI-multi-GPU: Validate the model
                 self.validate()
-                print(f"Rank 0 process spent {time.time()-rank_0_t} seconds validating")
                 # LUMI-multi-GPU: Check if this is the best model so far (based on total average loss)
                 last_validation_loss = self.loss_log["validation"]["total_average"][-1][1]
                 if last_validation_loss == min([item[1] for item in self.loss_log["validation"]["total_average"]]):
                     self.logger.info("Best model for now: saved")
                     self.save_checkpoint(is_best=1)
                 torch.cuda.empty_cache()
-            
-            # LUMI-multi-GPU: Check if the training and validation loss logging lists has enough data (>1 data points) to plot and proceed accordingly:
-            enough_data = all(len(self.loss_log["training"]["reconstruction"][d])>1 for d in self.datasets) and all(len(self.loss_log["validation"]["reconstruction"][d])>1 for d in self.datasets)
-            if self.rank == 0 and enough_data:
+                print(f"Rank 0 process spent {time.time()-rank_0_t} seconds validating")
+        
+            #TODO: Only plot every n epochs
+            if self.rank == 0 and self.current_epoch > 1:
                 plot_loss(
                     self.loss_log["training"]["reconstruction"],
                     self.loss_log["validation"]["reconstruction"],
@@ -296,21 +289,24 @@ class MultiLULCAgent(base.BaseAgent):
                 self.save_checkpoint()
                 print("Chekpoint saved!")
 
-            self.current_epoch += 1
-
             # LUMI-multi-GPU: The processes with rank != 0 stop here, and continue when the rank 0 process reaches this point after validation/plotting losses
             dist.barrier()
 
             # Stop training if early stopping criterion is met:
             if self.early_stopping():
+                print(f"TRAINING STOPPED AFTER {current_epoch+1} EPOCHS DUE TO EARLY STOPPING POLICY!")
+                #TODO: plot the losses once more
                 break
+            self.current_epoch += 1
         if self.rank == 0:
             self.logger.info("Training ended!")
 
     @timeit
     def train_one_epoch(self) -> None:
         """One epoch of training"""
-        loss_arrays = {d: [] for d in self.datasets}
+
+        # Initialize log for collecting running losses and loss item counts throughout the epoch:
+        running_loss = self.initialize_loss_log(running=True)
 
         # LUMI-multi-GPU: Set the models to training mode:
         self.models_wrapper.train()
@@ -335,8 +331,6 @@ class MultiLULCAgent(base.BaseAgent):
         for source, targetval in data_loader.items():
             for target, dl in targetval.items():
                 dlcount[dl] = 0
-
-        epoch_running_loss, n_loss_items = 0, 0
 
         end = False
         while not end:
@@ -378,18 +372,18 @@ class MultiLULCAgent(base.BaseAgent):
                     # Calculate and add target reconstruction error to reconstruction loss:
                     loss_rec_target = torch.nn.CrossEntropyLoss(ignore_index=0)(rec_target, tv)       # self reconstruction loss
 
-                    loss_rec = loss_rec_source + loss_rec_target
-
                     # Calculate embedding loss:
                     loss_emb = torch.nn.MSELoss()(embedding_source, embedding_target)           # similar embedding loss
 
                     # Calculate translation loss from source->target:
-                    loss_tra = torch.nn.CrossEntropyLoss(ignore_index=0)(src_to_target, tv)     # translation loss
+                    loss_tra_src_to_target = torch.nn.CrossEntropyLoss(ignore_index=0)(src_to_target, tv)     # translation loss
 
                     # Calculate translation loss from target->source:
-                    loss_tra += torch.nn.CrossEntropyLoss(ignore_index=0)(target_to_src, sv)    # translation loss
+                    loss_tra_target_to_src = torch.nn.CrossEntropyLoss(ignore_index=0)(target_to_src, sv)    # translation loss
 
                     # Combine all losses:
+                    loss_rec = loss_rec_source + loss_rec_target
+                    loss_tra = loss_tra_src_to_target + loss_tra_target_to_src
                     loss = loss_rec + loss_emb + loss_tra
 
                     # Divide rec and trans losses by two as they are sum of two losses?
@@ -405,24 +399,46 @@ class MultiLULCAgent(base.BaseAgent):
                     if self.config.model.use_pos == "sinusoidal":
                         self.coord_optimizer.step()
 
-                    # Accumulate the running loss and count loss items:
-                    epoch_running_loss += loss.item()
-                    n_loss_items += 1
-
-                    # LUMI-multi-GPU: collect model specific loss data, currently collects reconstruction losses.
-                    loss_arrays[source].append(loss_rec_source.item())
-                    loss_arrays[target].append(loss_rec_target.item())
+                    # Accumulate the running losses and count loss items
+                    # Loss averages:
+                    running_loss["total_average"] = [running_loss["total_average"][0]+loss.item(), running_loss["total_average"][1]+1]
+                    running_loss["reconstruction_average"] = [running_loss["reconstruction_average"][0]+loss_rec.item(), running_loss["reconstruction_average"][1]+1]
+                    running_loss["embedding_average"] = [running_loss["embedding_average"][0]+loss_emb.item(), running_loss["embedding_average"][1]+1]
+                    running_loss["translation_average"] = [running_loss["translation_average"][0]+loss_tra.item(), running_loss["translation_average"][1]+1]
+                    # Model specific reconstruction losses:
+                    rec_key_source = self.loss_log_lookup_table["reconstruction_keys"][i_source]
+                    rec_key_target = self.loss_log_lookup_table["reconstruction_keys"][i_target]
+                    running_loss["reconstruction"][rec_key_source] = [running_loss["reconstruction"][rec_key_source][0]+loss_rec_source.item(), running_loss["reconstruction"][rec_key_source][1]+1]
+                    running_loss["reconstruction"][rec_key_target] = [running_loss["reconstruction"][rec_key_target][0]+loss_rec_target.item(), running_loss["reconstruction"][rec_key_target][1]+1]
+                    # Model specific embedding losses:
+                    embedding_key = self.loss_log_lookup_table["embedding_keys"][(i_source, i_target)]
+                    running_loss["embedding"][embedding_key] = [running_loss["embedding"][embedding_key][0]+loss_emb.item(), running_loss["embedding"][embedding_key][1]+1]
+                    # Model specific translation losses:
+                    source_to_target_key = self.loss_log_lookup_table["translation_keys"][(i_source, i_target)]
+                    target_to_source_key = self.loss_log_lookup_table["translation_keys"][(i_target, i_source)]
+                    running_loss["translation"][source_to_target_key] = [running_loss["translation"][source_to_target_key][0]+loss_tra_src_to_target.item(), running_loss["translation"][source_to_target_key][1]+1]
+                    running_loss["translation"][target_to_source_key] = [running_loss["translation"][target_to_source_key][0]+loss_tra_target_to_src.item(), running_loss["translation"][target_to_source_key][1]+1]
                 if end:
                     break
             # One iteration here corresponds to fetching one batch from all soure-target dataloaders.
             self.current_iteration += 1
-        # LUMI-multi-GPU: Store loss values to the loss_log:
-        for d, l in loss_arrays.items():
-            self.loss_log["training"]["reconstruction"][d].append([self.current_epoch+1, np.mean(l)])
-        self.loss_log["training"]["total_average"].append([self.current_epoch+1, epoch_running_loss/n_loss_items])
+        # LUMI-multi-GPU: Store epoch average loss values to the loss_log:
+        self.loss_log["training"]["total_average"].append([self.current_epoch+1, running_loss["total_average"][0]/running_loss["total_average"][1]])
+        self.loss_log["training"]["reconstruction_average"].append([self.current_epoch+1, running_loss["reconstruction_average"][0]/running_loss["reconstruction_average"][1]])
+        self.loss_log["training"]["embedding_average"].append([self.current_epoch+1, running_loss["embedding_average"][0]/running_loss["embedding_average"][1]])
+        self.loss_log["training"]["translation_average"].append([self.current_epoch+1, running_loss["translation_average"][0]/running_loss["translation_average"][1]])
+        for key in self.loss_log["training"]["reconstruction"].keys():
+            self.loss_log["training"]["reconstruction"][key].append([self.current_epoch+1, running_loss["reconstruction"][key][0]/running_loss["reconstruction"][key][1]])
+        for key in self.loss_log["training"]["embedding"].keys():
+            self.loss_log["training"]["embedding"][key].append([self.current_epoch+1, running_loss["embedding"][key][0]/running_loss["embedding"][key][1]])
+        for key in self.loss_log["training"]["translation"].keys():
+            self.loss_log["training"]["translation"][key].append([self.current_epoch+1, running_loss["translation"][key][0]/running_loss["translation"][key][1]])
     
     def validate(self) -> None:
         """One cycle of model validation"""
+        # Initialize log for collecting running losses and loss item counts throughout the epoch:
+        running_loss = self.initialize_loss_log(running=True)
+
         loss_arrays = {d: [] for d in self.datasets}
 
         # LUMI-multi-GPU: Set the models to evaluation mode:
@@ -434,7 +450,6 @@ class MultiLULCAgent(base.BaseAgent):
             self.models_wrapper.module.coord_model.eval()
         """
 
-        test_loss = 0
         with torch.no_grad():
             im_save = {d: {j: 0 for j in self.datasets} for d in self.datasets}
             data_loader = {
@@ -487,14 +502,15 @@ class MultiLULCAgent(base.BaseAgent):
                         loss_rec_source = torch.nn.CrossEntropyLoss(ignore_index=0)(rec_source, sv)        # self reconstruction loss
                         # Calculate and add target reconstruction error to reconstruction loss:
                         loss_rec_target = torch.nn.CrossEntropyLoss(ignore_index=0)(rec_target, tv)       # self reconstruction loss
-                        loss_rec = loss_rec_source + loss_rec_target
                         # Calculate embedding loss:
                         loss_emb = torch.nn.MSELoss()(embedding_source, embedding_target)           # similar embedding loss
                         # Calculate translation loss from source->target:
-                        loss_tra = torch.nn.CrossEntropyLoss(ignore_index=0)(src_to_target, tv)     # translation loss
+                        loss_tra_src_to_target = torch.nn.CrossEntropyLoss(ignore_index=0)(src_to_target, tv)     # translation loss
                         # Calculate translation loss from target->source:
-                        loss_tra += torch.nn.CrossEntropyLoss(ignore_index=0)(target_to_src, sv)    # translation loss
+                        loss_tra_target_to_src = torch.nn.CrossEntropyLoss(ignore_index=0)(target_to_src, sv)    # translation loss
                         # Combine all losses:
+                        loss_rec = loss_rec_source + loss_rec_target
+                        loss_tra = loss_tra_src_to_target + loss_tra_target_to_src
                         loss = loss_rec + loss_emb + loss_tra
 
                         if im_save[source][target] == 0:
@@ -529,18 +545,38 @@ class MultiLULCAgent(base.BaseAgent):
                             )
                             im_save[source][source] = 1
                         
-                        # Accumulate the running loss and count loss items:
-                        epoch_running_loss += loss.item()
-                        n_loss_items += 1
-
-                        # LUMI-multi-GPU: Collect reconstruction losses for each model 
-                        loss_arrays[source].append(loss_rec_source.item())
-                        loss_arrays[target].append(loss_rec_target.item())
+                        # Accumulate the running losses and count loss items
+                        # Loss averages:
+                        running_loss["total_average"] = [running_loss["total_average"][0]+loss.item(), running_loss["total_average"][1]+1]
+                        running_loss["reconstruction_average"] = [running_loss["reconstruction_average"][0]+loss_rec.item(), running_loss["reconstruction_average"][1]+1]
+                        running_loss["embedding_average"] = [running_loss["embedding_average"][0]+loss_emb.item(), running_loss["embedding_average"][1]+1]
+                        running_loss["translation_average"] = [running_loss["translation_average"][0]+loss_tra.item(), running_loss["translation_average"][1]+1]
+                        # Model specific reconstruction losses:
+                        rec_key_source = self.loss_log_lookup_table["reconstruction_keys"][i_source]
+                        rec_key_target = self.loss_log_lookup_table["reconstruction_keys"][i_target]
+                        running_loss["reconstruction"][rec_key_source] = [running_loss["reconstruction"][rec_key_source][0]+loss_rec_source.item(), running_loss["reconstruction"][rec_key_source][1]+1]
+                        running_loss["reconstruction"][rec_key_target] = [running_loss["reconstruction"][rec_key_target][0]+loss_rec_target.item(), running_loss["reconstruction"][rec_key_target][1]+1]
+                        # Model specific embedding losses:
+                        embedding_key = self.loss_log_lookup_table["embedding_keys"][(i_source, i_target)]
+                        running_loss["embedding"][embedding_key] = [running_loss["embedding"][embedding_key][0]+loss_emb.item(), running_loss["embedding"][embedding_key][1]+1]
+                        # Model specific translation losses:
+                        source_to_target_key = self.loss_log_lookup_table["translation_keys"][(i_source, i_target)]
+                        target_to_source_key = self.loss_log_lookup_table["translation_keys"][(i_target, i_source)]
+                        running_loss["translation"][source_to_target_key] = [running_loss["translation"][source_to_target_key][0]+loss_tra_src_to_target.item(), running_loss["translation"][source_to_target_key][1]+1]
+                        running_loss["translation"][target_to_source_key] = [running_loss["translation"][target_to_source_key][0]+loss_tra_target_to_src.item(), running_loss["translation"][target_to_source_key][1]+1]
                     if end:
                         break
-        for d, l in loss_arrays.items():
-            self.loss_log["validation"]["reconstruction"][d].append([self.current_epoch+1, np.mean(l)])
-        self.loss_log["validation"]["total_average"].append([self.current_epoch+1, epoch_running_loss/n_loss_items])
+        # LUMI-multi-GPU: Store epoch average loss values to the loss_log:
+        self.loss_log["validation"]["total_average"].append([self.current_epoch+1, running_loss["total_average"][0]/running_loss["total_average"][1]])
+        self.loss_log["validation"]["reconstruction_average"].append([self.current_epoch+1, running_loss["reconstruction_average"][0]/running_loss["reconstruction_average"][1]])
+        self.loss_log["validation"]["embedding_average"].append([self.current_epoch+1, running_loss["embedding_average"][0]/running_loss["embedding_average"][1]])
+        self.loss_log["validation"]["translation_average"].append([self.current_epoch+1, running_loss["translation_average"][0]/running_loss["translation_average"][1]])
+        for key in self.loss_log["validation"]["reconstruction"].keys():
+            self.loss_log["validation"]["reconstruction"][key].append([self.current_epoch+1, running_loss["reconstruction"][key][0]/running_loss["reconstruction"][key][1]])
+        for key in self.loss_log["validation"]["embedding"].keys():
+            self.loss_log["validation"]["embedding"][key].append([self.current_epoch+1, running_loss["embedding"][key][0]/running_loss["embedding"][key][1]])
+        for key in self.loss_log["validation"]["translation"].keys():
+            self.loss_log["validation"]["translation"][key].append([self.current_epoch+1, running_loss["translation"][key][0]/running_loss["translation"][key][1]])
 
     def test(self) -> None:
         """Final testing on left-out dataset"""
@@ -693,6 +729,66 @@ class MultiLULCAgent(base.BaseAgent):
         all_worse = all(loss > (best_loss - delta) for loss in last_n)
 
         return all_worse
+
+    def initialize_loss_log(self, running=False, key_lookup=False) -> dict:
+        """
+        Creates and empty dict to hold loss values.
+
+        Parameters:
+            running (bool):    If True, initialize the lists as [0,0] for collecting running loss information. False by default.
+        """
+        dataset_names = [os.path.splitext() for name in self.datasets]
+
+        name_combinations_ = list(itertools.combinations(dataset_names, 2))
+        name_combinations= [f"{d[0]}-{d[1]}" for d in name_combinations_]
+
+        name_permutations_ = list(itertools.permutations(dataset_names, 2))
+        name_permutations = [f"{d[0]}-{d[1]}" for d in name_permutations_]
+
+        if running:
+            loss_log = {
+                "total_average": [0,0],
+                "reconstruction_average": [0,0],
+                "embedding_average": [0,0],
+                "translation_average": [0,0],
+                "reconstruction": {d: [0,0] for d in dataset_names},
+                "embedding": {d: [0,0] for d in name_combinations},
+                "translation": {d: [0,0] for d in name_permutations},
+            }
+        else:
+            loss_log = {
+                "training": {
+                    "total_average": [],
+                    "reconstruction_average": [],
+                    "embedding_average": [],
+                    "translation_average": [],
+                    "reconstruction": {d: [] for d in dataset_names},
+                    "embedding": {d: [] for d in name_combinations},
+                    "translation": {d: [] for d in name_permutations},
+            }, "validation": {
+                    "total_average": [],
+                    "reconstruction_average": [],
+                    "embedding_average": [],
+                    "translation_average": [],
+                    "reconstruction": {d: [] for d in dataset_names},
+                    "embedding": {d: [] for d in name_combinations},
+                    "translation": {d: [] for d in name_permutations},
+            }}
+
+        if key_lookup:
+            #TODO: Explain!
+            dataset_indices = [dataset_names.index(d) for d in dataset_names]
+            index_combinations = [(i,j) for i,j in list(itertools.combinations(dataset_indices, 2))]
+            index_permutations = [(i,j) for i,j in list(itertools.permutations(dataset_indices, 2))]
+            lookup_table = {
+                "reconstruction_keys": {i: d for i, d in zip(dataset_indices, dataset_names)},
+                "embedding_keys": {i: d for i, d in zip(index_combinations, name_combinations)},
+                "translation_keys": {i: d for i, d in zip(index_permutations, name_permutations)},
+            }
+            for i, d in zip(index_combinations, name_combinations):
+                lookup_table["embedding_keys"][(i[1],i[0])] = d
+            return loss_log, lookup_table
+        return loss_log
 
     def finalize(self) -> None:
         """Finalizes all the operations of the 2 Main classes of the process, the operator and the data loader"""
