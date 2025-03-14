@@ -300,6 +300,10 @@ class MultiLULCAgent(base.BaseAgent):
 
             # LUMI-multi-GPU: The processes with rank != 0 stop here, and continue when the rank 0 process reaches this point after validation/plotting losses
             dist.barrier()
+
+            # Stop training if early stopping criterion is met:
+            if self.early_stopping():
+                break
         if self.rank == 0:
             self.logger.info("Training ended!")
 
@@ -676,7 +680,7 @@ class MultiLULCAgent(base.BaseAgent):
         patience = 10
         delta = 0.001
 
-        validation_epoch_averages = loss_log["validation"]["total_average"]
+        validation_epoch_averages = self.loss_log["validation"]["total_average"]
 
         if len(validation_epoch_averages) <= patience:
             return False  # Not enough data to make decision
