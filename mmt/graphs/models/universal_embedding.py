@@ -151,7 +151,10 @@ class CoordinateEmbedding(nn.Module):
             )
         else:
             self.input_embedding = DoubleConv(input_channels, number_feature_map, num_groups=num_groups, bias=bias)
-        self.coordinate_encoder = nn.Linear(2, number_feature_map)
+        self.coordinate_encoder = nn.Sequential(
+            nn.Linear(2, number_feature_map),
+            nn.ReLU(inplace=True),
+        )
 
     def forward(self, x, coordinates):
         x = self.input_embedding(x)

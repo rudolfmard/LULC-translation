@@ -661,9 +661,19 @@ class LandcoverToLandcover(Dataset):
                 tmp.attrs["x_coor"].astype(float),
                 tmp.attrs["y_coor"].astype(float),
             )
-            # Create a new attribute to easily access the coordinates as torch.tensors (shape = (batch_size, 2):
+
+            # Created to check that source and target coordinates match:
+            sample["coordinate_target"] = (
+                tmp2.attrs["x_coor"].astype(float),
+                tmp2.attrs["y_coor"].astype(float),
+            )
+            
+            # Create a new attribute to easily access the coordinates as torch.tensors (shape (,2)),
+            # Also use min-max rescaling to  scale coordinates to range [0,1]: #TODO: Create a custom transform for rescaling
+            x_min, x_max = 93639.6885, 1245639.6885
+            y_min, y_max = 6046786.6972, 7120786.6972
             sample["coordinate_tensor"] = torch.tensor(
-                (tmp.attrs["x_coor"].astype(float), tmp.attrs["y_coor"].astype(float)),
+                ((tmp.attrs["x_coor"].astype(float)-x_min)/(x_max-x_min), (tmp.attrs["y_coor"].astype(float)-y_min)/(y_max-y_min)),
                 dtype=torch.float,
                 device=self.device,
             )
@@ -1077,8 +1087,8 @@ class LandcoverToLandcoverDataLoader:
                 target: DataLoader(
                     val,
                     batch_size=self.config.training.batch_size,
-                    shuffle=False, # LUMI-multi-GPU: Set DataLoader shuffle to False, and sampler shuffle to True
-                    sampler = DistributedSampler(val, num_replicas=world_size, rank=rank, shuffle=True, drop_last=False), #LUMI-multi-GPU
+                    shuffle=False if self.config.cuda else True, # LUMI-multi-GPU: Set DataLoader shuffle to False, and sampler shuffle to True
+                    sampler = DistributedSampler(val, num_replicas=world_size, rank=rank, shuffle=True, drop_last=False) if self.config.cuda else None, #LUMI-multi-GPU
                     num_workers=num_workers,
                     pin_memory=pin_memory,
                     persistent_workers=num_workers > 0,
