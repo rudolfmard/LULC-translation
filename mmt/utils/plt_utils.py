@@ -66,14 +66,14 @@ def plot_loss(
         try:
             v = np.array(v)
             plt.plot(
-                v[:, 0], v[:, 1], "--", color=DATASET_COLORS[k], label="training " + k
+                v[:, 0], v[:, 1], "--", color=DATASET_COLORS[k+".hdf5"], label="training " + k
             )
         except:
             print(f"Error plotting loss for {k}. Values are {v}")
 
     for k, v in valid_loss.items():
         v = np.array(v)
-        plt.plot(v[:, 0], v[:, 1], color=DATASET_COLORS[k], label="validation " + k)
+        plt.plot(v[:, 0], v[:, 1], color=DATASET_COLORS[k+".hdf5"], label="validation " + k)
 
     plt.legend(bbox_to_anchor=(1.0, 0.5), loc="center left", borderaxespad=0.5)
     plt.tight_layout(rect=[0, 0, 1, 1])

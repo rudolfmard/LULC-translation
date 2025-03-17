@@ -141,7 +141,7 @@ class CoordinateEmbedding(nn.Module):
     Implements CoordinateEmbedding module, which applies input embedding to the input patch and
     encodes normalized coordinate values. The encoded coordinate data is summed to the input embeddings.
     """
-    def __init__(self, ):
+    def __init__(self, input_channels, number_feature_map, num_groups, bias, resize):
         super().__init__()
 
         if resize is not None:
@@ -183,7 +183,7 @@ class DUNet(nn.Module):
         self.use_pos = use_pos
         
         if use_pos == "embed_layer":
-            self.inc = CoordinateEmbedding()
+            self.inc = CoordinateEmbedding(input_channels, number_feature_map, num_groups, bias, resize)
         else:
             if resize is not None:
                 self.inc = nn.Sequential(

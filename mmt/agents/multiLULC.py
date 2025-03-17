@@ -277,12 +277,14 @@ class MultiLULCAgent(base.BaseAgent):
                 print(f"Rank 0 process spent {time.time()-rank_0_t} seconds validating")
         
             #TODO: Only plot every n epochs
+            """
             if self.rank == 0 and self.current_epoch > 1:
                 plot_loss(
                     self.loss_log["training"]["reconstruction"],
                     self.loss_log["validation"]["reconstruction"],
                     savefig=os.path.join(self.config.paths.out_dir, "reconstruction_loss.png"),
                 )
+            """
             
             # LUMI-multi-GPU: Save checkpoint only on process rank 0, after training and validation losses has been stored
             if self.rank == 0:
@@ -737,7 +739,7 @@ class MultiLULCAgent(base.BaseAgent):
         Parameters:
             running (bool):    If True, initialize the lists as [0,0] for collecting running loss information. False by default.
         """
-        dataset_names = [os.path.splitext() for name in self.datasets]
+        dataset_names = [os.path.splitext(name)[0] for name in self.datasets]
 
         name_combinations_ = list(itertools.combinations(dataset_names, 2))
         name_combinations= [f"{d[0]}-{d[1]}" for d in name_combinations_]
