@@ -296,7 +296,7 @@ class MultiLULCAgent(base.BaseAgent):
 
             # Stop training if early stopping criterion is met:
             if self.early_stopping():
-                print(f"TRAINING STOPPED AFTER {current_epoch+1} EPOCHS DUE TO EARLY STOPPING POLICY!")
+                print(f"TRAINING STOPPED AFTER {self.current_epoch+1} EPOCHS DUE TO EARLY STOPPING POLICY!")
                 #TODO: plot the losses once more
                 break
             self.current_epoch += 1

@@ -781,6 +781,22 @@ class LandcoverToLandcoverNoJson(LandcoverToLandcover):
                 src.attrs["y_coor"].astype(float),
             )
 
+            # Created to check that source and target coordinates match:
+            sample["coordinate_target"] = (
+                trg.attrs["x_coor"].astype(float),
+                trg.attrs["y_coor"].astype(float),
+            )
+            
+            # Create a new attribute to easily access the coordinates as torch.tensors (shape (,2)),
+            # Also use min-max rescaling to  scale coordinates to range [0,1]: #TODO: Create a custom transform for rescaling
+            x_min, x_max = 93639.6885, 1245639.6885
+            y_min, y_max = 6046786.6972, 7120786.6972
+            sample["coordinate_tensor"] = torch.tensor(
+                ((src.attrs["x_coor"].astype(float)-x_min)/(x_max-x_min), (src.attrs["y_coor"].astype(float)-y_min)/(y_max-y_min)),
+                dtype=torch.float,
+                device=self.device,
+            )
+
             sample["source_name"] = self.source
             sample["target_name"] = self.target
 
