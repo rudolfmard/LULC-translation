@@ -406,13 +406,15 @@ def load_pytorch_model(
     # The AEs corresponding to the lc_in and lc_out should be in order [lc_in, lc_out] within the ModuleList inside models_wrapper.
     if lc_out == "encoder":
         #model = autoenc_in.encoder
-        model = models_wrapper.models[0].encoder
+        model = models_wrapper.models[0].encoder.train(mode=train_mode)
     elif lc_out == "decoder":
         #model = autoenc_in.decoder
-        model = models_wrapper.models[0].decoder
+        model = models_wrapper.models[0].decoder.train(mode=train_mode)
     else:
-        #model = torch.nn.Sequential(autoenc_in.encoder, autoenc_out.decoder)
-        model = torch.nn.Sequential(models_wrapper.models[0].encoder, models_wrapper.models[1].decoder)
-
-    model.train(mode=train_mode)
+        if config.model.use_pos == "embed_layer":
+            # Cannot use Sequential with the current implementation of Coordinate Embedding due to multiple inputs given as separate arguments -> Use a python List instead:
+            model = [models_wrapper.models[0].encoder.train(mode=train_mode), models_wrapper.models[1].decoder.train(mode=train_mode)]
+        else:
+            #model = torch.nn.Sequential(autoenc_in.encoder, autoenc_out.decoder)
+            model = torch.nn.Sequential(models_wrapper.models[0].encoder, models_wrapper.models[1].decoder).train(mode=train_mode)
     return model

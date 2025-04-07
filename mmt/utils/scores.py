@@ -12,6 +12,7 @@ import warnings
 import numpy as np
 import pandas as pd
 from sklearn import metrics
+import torch
 from torch import tensor
 from tqdm import tqdm
 
@@ -103,10 +104,21 @@ def _compute_confusion_matrix_translator(translator, h5f, n_patches) -> np.ndarr
     items = list(h5f["esawc"].keys())[:n_patches]
 
     for i in tqdm(items):
-        x = to_tensor(h5f["esawc"].get(i))
+        x = h5f["esawc"].get(i)
+
+        #TODO: extract coordinate tensor when coordinates are used
+        x_min, x_max = 93639.6885, 1245639.6885
+        y_min, y_max = 6046786.6972, 7120786.6972
+        coordinates = torch.tensor(
+            ((x.attrs["x_coor"].astype(float)-x_min)/(x_max-x_min), (x.attrs["y_coor"].astype(float)-y_min)/(y_max-y_min)),
+            dtype=torch.float,
+        )
+
+        x = to_tensor(x)
+    
         y_true = h5f["esgp"].get(i)
 
-        y = translator.predict_from_data(x)
+        y = translator.predict_from_data(x, coordinates)
 
         cmx += metrics.confusion_matrix(
             y_true[:].ravel(), y.ravel(), labels=np.arange(n_labels)

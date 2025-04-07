@@ -291,10 +291,13 @@ class EsawcToEsgp(_MapTranslator):
         self.encoder_decoder = io.load_pytorch_model(
             checkpoint_path, lc_in="esawc", lc_out="esgp", device=device
         )
-        self.encoder_decoder.to(self.device)
+        if type(self.encoder_decoder) == list:
+            self.encoder_decoder = [model.to(self.device) for model in self.encoder_decoder]
+        else:
+            self.encoder_decoder.to(self.device)
         self.landcover = self.esawc
 
-    def predict_from_data(self, x) -> torch.Tensor:
+    def predict_from_data(self, x, coordinates=None) -> torch.Tensor:
         """Apply translation to tensor of land cover labels.
 
 
@@ -317,7 +320,11 @@ class EsawcToEsgp(_MapTranslator):
 
         x = self.esawc_transform(x)
         with torch.no_grad():
-            y = self.encoder_decoder(x.float())
+            if type(self.encoder_decoder) == list:
+                y = self.encoder_decoder[0](x.float(), coordinates.to(self.device))
+                y = self.encoder_decoder[1](y)
+            else:
+                y = self.encoder_decoder(x.float())
 
         return self.logits_transform(y)
 
