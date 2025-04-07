@@ -65,7 +65,8 @@ class MultiLULCAgent(base.BaseAgent):
 
         # LUMI-multi-GPU: fetch world_size and rank
         world_size = int(os.environ['WORLD_SIZE'])
-        self.rank = int(os.environ['LOCAL_RANK'])
+        self.rank = int(os.environ['RANK'])
+        self.local_rank = int(os.environ['LOCAL_RANK'])
         print(f"Hello from process rank {self.rank}!")
 
         # Set device and RNG seed
@@ -73,7 +74,7 @@ class MultiLULCAgent(base.BaseAgent):
         self.manual_seed = self.config.seed
         if self.cuda:
             torch.cuda.manual_seed(self.manual_seed)
-            self.device = torch.device(f"cuda:{self.rank}")
+            self.device = torch.device(f"cuda:{self.local_rank}")
             self.logger.info("Program will run on *****GPU-CUDA***** ")
             print(f"| Number of GPUs: {torch.cuda.device_count()} | Number of processes: {world_size} |")
         else:
@@ -86,7 +87,7 @@ class MultiLULCAgent(base.BaseAgent):
         self.data_loader = DataLoader(
             config=self.config,
             world_size=world_size, # LUMI-multi-GPU: Pass the world_size (number of processes) for data distribution
-            rank=self.rank, # LUMI-multi-GPU: Pass the rank of this processes for data distribution
+            rank=self.rank, # LUMI-multi-GPU: Pass the global rank of this processes to distribute data across all GPUs
             **self.config.dataloader.params)
         self.datasets = self.data_loader.datasets  # shortcut
 
@@ -112,7 +113,7 @@ class MultiLULCAgent(base.BaseAgent):
             resizes=resizes,
             config=config
         ).to(self.device)
-        self.models_wrapper = DDP(self.models_wrapper, device_ids=[self.rank], find_unused_parameters=True)
+        self.models_wrapper = DDP(self.models_wrapper, device_ids=[self.local_rank], find_unused_parameters=True)
 
         # Define optimizers:
         optim_class = getattr(optim, self.config.optimizer.type)

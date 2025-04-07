@@ -104,14 +104,14 @@ def process_config(config_file, quiet=False) -> EasyDict:
     """
     config = get_config(config_file)
     if config.cuda:
-        if not quiet and int(os.environ['LOCAL_RANK']) == 1:
+        if not quiet and int(os.environ['RANK']) == 1:
             print(" THE Configuration of your experiment ..")
             pprint(config)
 
     # Making sure that you have provided the xp_name.
     assert hasattr(config, "xp_name"), f"The config {config_file} has no xp_name"
     if config.cuda:
-        if not quiet and int(os.environ['LOCAL_RANK']) == 1:
+        if not quiet and int(os.environ['RANK']) == 1:
             print(" *************************************** ")
             print(f"The experiment name is {config.xp_name}")
             print(" *************************************** ")
