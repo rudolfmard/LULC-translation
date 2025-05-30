@@ -78,7 +78,7 @@ class AtrouMMU(nn.Module):
 
 
 class Upsample(nn.Module):
-    def __init__(self, scale_factor=2, mode="nearest"):
+    def __init__(self, scale_factor=2, mode="nearest-exact"):
         super(Upsample, self).__init__()
         self.scale_factor = scale_factor
         self.mode = mode
@@ -101,15 +101,16 @@ class SimpleDecoder(nn.Module):
         n_classes,
         depth=1,
         num_groups=4,
-        nf=52,
+        number_feature_map=52,
         resize=None,
+        pooling_factors=None,
         atrou=True,
         bias=False,
     ):
         super().__init__()
         # self.pre=torch.nn.PixelShuffle(6)
         if num_groups is None:
-            num_groups = nf
+            num_groups = number_feature_map
 
         self.decoder = torch.nn.Sequential()
         inc = in_features
@@ -123,13 +124,13 @@ class SimpleDecoder(nn.Module):
         for i in range(1, depth):
             self.decoder.add_module(
                 "conv_{}".format(i),
-                nn.Conv2d(inc, nf, kernel_size=3, padding=1, bias=bias),
+                nn.Conv2d(inc, number_feature_map, kernel_size=3, padding=1, bias=bias),
             )
             self.decoder.add_module(
-                "groupnorm_{}".format(i), nn.GroupNorm(num_groups, nf)
+                "groupnorm_{}".format(i), nn.GroupNorm(num_groups, number_feature_map)
             )
             self.decoder.add_module("relu_{}".format(i), nn.ReLU(inplace=True))
-            inc = nf
+            inc = number_feature_map
         self.decoder.add_module("conv_{}".format(depth), nn.Conv2d(inc, n_classes, 1))
 
     def forward(self, x):
@@ -146,7 +147,7 @@ class CoordinateEmbedding(nn.Module):
 
         if resize is not None:
             self.input_embedding = nn.Sequential(
-                Upsample(scale_factor=resize, mode="nearest"),
+                Upsample(scale_factor=resize, mode="nearest-exact"),
                 DoubleConv(input_channels, number_feature_map, num_groups=num_groups, bias=bias),
             )
         else:
@@ -159,6 +160,118 @@ class CoordinateEmbedding(nn.Module):
     def forward(self, x, coordinates):
         x = self.input_embedding(x)
         x = x + self.coordinate_encoder(coordinates).unsqueeze(-1).unsqueeze(-1) # Broadcast the coordinate encoding vector along spatial dimensions
+        return x
+
+class UNetEncoder(nn.Module):
+    def __init__(
+        self,
+        input_channels,
+        number_feature_map=32,
+        embedding_dim=32,
+        mode="light",
+        num_groups=None,
+        up_mode="bilinear",
+        memory_monger=False,
+        resize=None,
+        pooling_factors=[2, 2, 2, 2, 3],
+        tlm_p=0,
+        bias=False,
+        use_pos=None
+    ):
+        down_mode = "maxpool"
+        super().__init__()
+        self.embedding_dim = embedding_dim
+        self.use_pos = use_pos
+        
+        if use_pos == "embed_layer":
+            self.inc = CoordinateEmbedding(input_channels, number_feature_map, num_groups, bias, resize)
+        else:
+            if resize is not None:
+                self.inc = nn.Sequential(
+                    Upsample(scale_factor=resize, mode="nearest-exact"),
+                    DoubleConv(input_channels, number_feature_map, num_groups=num_groups, bias=bias),
+                )
+            else:
+                self.inc = DoubleConv(input_channels, number_feature_map, num_groups=num_groups, bias=bias)
+        
+        self.down1 = Down(number_feature_map, number_feature_map, mode=down_mode, num_groups=num_groups, factor=pooling_factors[0], bias=bias,)
+        self.down2 = Down(number_feature_map, number_feature_map, mode=down_mode, num_groups=num_groups, factor=pooling_factors[1], bias=bias,)
+        self.down3 = Down(number_feature_map, number_feature_map, mode=down_mode, num_groups=num_groups, factor=pooling_factors[2], bias=bias,)
+        self.down4 = Down(number_feature_map, number_feature_map, mode=down_mode, num_groups=num_groups, factor=pooling_factors[3], bias=bias,)
+
+        self.up1 = Up(number_feature_map * 2, number_feature_map, up_mode, num_groups=num_groups, factor=pooling_factors[-1], bias=bias,)
+        self.up2 = Up(number_feature_map * 2, number_feature_map, up_mode, num_groups=num_groups, factor=pooling_factors[-2], bias=bias,)
+        self.up3 = Up(number_feature_map * 2, number_feature_map, up_mode, num_groups=num_groups, factor=pooling_factors[-3], bias=bias,)
+        self.up4 = Up(number_feature_map * 2, number_feature_map, up_mode, num_groups=num_groups, factor=pooling_factors[-4], bias=bias,)
+
+        self.outc = nn.Conv2d(number_feature_map, embedding_dim, kernel_size=1)
+
+    def forward(self, x, coordinates):
+        x1 = self.inc(x, coordinates)
+        x2 = self.down1(x1)
+        x3 = self.down2(x2)
+        x4 = self.down3(x3)
+        x5 = self.down4(x4)
+        x = self.up1(x5, x4)
+        x = self.up2(x, x3)
+        x = self.up3(x, x2)
+        x = self.up4(x, x1)
+        x = self.outc(x)
+        return x
+
+class UNetDecoder(nn.Module):
+    def __init__(
+        self,
+        in_features,
+        n_classes,
+        depth=1,
+        num_groups=4,
+        up_mode="bilinear",
+        number_feature_map=52,
+        resize=None,
+        pooling_factors=[2, 2, 2, 2, 3],
+        atrou=False,
+        bias=False,
+    ):
+        super().__init__()
+        if num_groups is None:
+            num_groups = number_feature_map
+        down_mode = "maxpool"
+        
+        self.inc = nn.Conv2d(in_features, number_feature_map, kernel_size=1)
+
+        self.down1 = Down(number_feature_map, number_feature_map, mode=down_mode, num_groups=num_groups, factor=pooling_factors[0], bias=bias,)
+        self.down2 = Down(number_feature_map, number_feature_map, mode=down_mode, num_groups=num_groups, factor=pooling_factors[1], bias=bias,)
+        self.down3 = Down(number_feature_map, number_feature_map, mode=down_mode, num_groups=num_groups, factor=pooling_factors[2], bias=bias,)
+        self.down4 = Down(number_feature_map, number_feature_map, mode=down_mode, num_groups=num_groups, factor=pooling_factors[3], bias=bias,)
+
+        self.up1 = Up(number_feature_map * 2, number_feature_map, up_mode, num_groups=num_groups, factor=pooling_factors[-1], bias=bias,)
+        self.up2 = Up(number_feature_map * 2, number_feature_map, up_mode, num_groups=num_groups, factor=pooling_factors[-2], bias=bias,)
+        self.up3 = Up(number_feature_map * 2, number_feature_map, up_mode, num_groups=num_groups, factor=pooling_factors[-3], bias=bias,)
+        self.up4 = Up(number_feature_map * 2, number_feature_map, up_mode, num_groups=num_groups, factor=pooling_factors[-4], bias=bias,)
+        
+        if resize is not None:
+            self.outc = nn.Sequential(
+                # Resizes feature map:
+                nn.Conv2d(number_feature_map, number_feature_map, kernel_size=resize, stride=resize),
+                # Channels from number_feature_map -> n_classes:
+                nn.Conv2d(number_feature_map, n_classes, kernel_size=1),
+            )
+        else:
+            # Channels from number_feature_map -> n_classes:
+            self.outc = nn.Conv2d(number_feature_map, n_classes, kernel_size=1)
+        
+    def forward(self, x):
+        x1 = self.inc(x)
+        x2 = self.down1(x1)
+        x3 = self.down2(x2)
+        x4 = self.down3(x3)
+        x5 = self.down4(x4)
+        x = self.up1(x5, x4)
+        x = self.up2(x, x3)
+        x = self.up3(x, x2)
+        x = self.up4(x, x1)
+        x = self.outc(x)
         return x
 
 class DUNet(nn.Module):
@@ -187,7 +300,7 @@ class DUNet(nn.Module):
         else:
             if resize is not None:
                 self.inc = nn.Sequential(
-                    Upsample(scale_factor=resize, mode="nearest"),
+                    Upsample(scale_factor=resize, mode="nearest-exact"),
                     DoubleConv(input_channels, number_feature_map, num_groups=num_groups, bias=bias),
                 )
             else:
@@ -482,6 +595,7 @@ class UnivEmb(nn.Module):
         else:
             enc_resize = resize[0]
             dec_resize = resize[1]
+        
         self.encoder = encoder(
             in_channels,
             number_feature_map=n_channels_hiddenlay,
@@ -496,19 +610,22 @@ class UnivEmb(nn.Module):
             bias=bias,
             use_pos=use_pos,
         )
+
         in_dec = self.encoder.embedding_dim
         self.cat = cat
         self.mul = mul
         self.softpos = softpos
         if cat:
             in_dec = in_dec * 2
+
         self.decoder = decoder(
             in_dec,
             out_channels,
             depth=decoder_depth,
             num_groups=num_groups,
-            nf=n_channels_hiddenlay,
+            number_feature_map=n_channels_hiddenlay,
             resize=dec_resize,
+            pooling_factors=pooling_factors,
             atrou=decoder_atrou,
             bias=bias,
         )

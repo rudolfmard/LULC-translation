@@ -188,6 +188,52 @@ def divscore_from_esawc(esawc) -> float:
     _, c = np.unique(esawc, return_counts=True)
     return 1 - c.max() / c.sum()
 
+def coord_to_tensor(x, y) -> torch.Tensor:
+    """
+    Normalizes x & y coordinates of a map patch and returns them as a torch.Tensor
+    Uses min-max rescaling to scale coordinates to range [0,1]
+    """
+    x_min, x_max = 93639.6885, 1245639.6885
+    y_min, y_max = 6046786.6972, 7120786.6972
+    return torch.tensor(((x-x_min)/(x_max-x_min), (y-y_min)/(y_max-y_min)), dtype=torch.float)
+
+def get_coord_from_bbox(xmin, ymin, xmax, ymax, location="upper-left") -> tuple:
+    """Return the coordinates of a point at a specific location within a bounding box.
+
+    Parameters
+    ----------
+    xmin: float
+        Left coordinate of the bounding box
+    ymin: float
+        Bottom coordinate of the bounding box
+    xmax: float
+        Right coordinate of the bounding box
+    ymax: float
+        Top coordinate of the bounding box
+    location: {'lower-left', 'center', 'upper-right', 'upper-left'}
+        Indicator of where the point is located within the bounding box.
+        For example, if location='upper-left', the point is at the upper left corner.
+
+    Returns
+    --------
+    x, y: tuple of float
+        Coordinates of the point at the specified location
+    """
+    if location == "lower-left":
+        x, y = xmin, ymin
+    elif location == "center":
+        x = (xmin + xmax) / 2
+        y = (ymin + ymax) / 2
+    elif location == "upper-right":
+        x, y = xmax, ymax
+    elif location == "upper-left":
+        x, y = xmin, ymax
+    else:
+        raise ValueError(
+            f"Unsupported location key: {location}. Supported keys are 'lower-left', 'center', 'upper-right', 'upper-left'."
+        )
+
+    return x, y
 
 def get_bbox_from_coord(x_coor, y_coor, patch_size, location="upper-left") -> tuple:
     """Return a bounding box (xmin, ymin, xmax, ymax) from a single point coordinate.

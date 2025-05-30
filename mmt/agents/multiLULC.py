@@ -232,9 +232,11 @@ class MultiLULCAgent(base.BaseAgent):
             torch.cuda.empty_cache()
             self.train()
             torch.cuda.empty_cache()
+            """
             if self.rank == 0:
                 self.test()
                 torch.cuda.empty_cache()
+            """
         except KeyboardInterrupt:
             self.logger.info("You have entered CTRL+C.. Wait to finalize")
 
@@ -514,7 +516,7 @@ class MultiLULCAgent(base.BaseAgent):
                         # Combine all losses:
                         loss_rec = loss_rec_source + loss_rec_target
                         loss_tra = loss_tra_src_to_target + loss_tra_target_to_src
-                        loss = loss_rec + loss_emb + loss_tra
+                        loss = 0.75*loss_rec + 0.75*loss_emb + loss_tra
 
                         if im_save[source][target] == 0:
                             out_img = self.data_loader.plot_samples_per_epoch(
@@ -779,7 +781,11 @@ class MultiLULCAgent(base.BaseAgent):
             }}
 
         if key_lookup:
-            #TODO: Explain!
+            # A lookup table is created to get the names corresponding to each loss component to store.
+            # Embedding loss:
+            #   Calculated pair-wise but is permutation invariant, source-target ordering does not matter. The permutations of (source_index, target_index) point to the same pair or maps and share the name.
+            # Translation loss: 
+            #   Calculated pair-wise but depends on which input is source and which is target. Each pair of (source_index, target_index) and their permutations correspond to a unique loss component and name.
             dataset_indices = [dataset_names.index(d) for d in dataset_names]
             index_combinations = [(i,j) for i,j in list(itertools.combinations(dataset_indices, 2))]
             index_permutations = [(i,j) for i,j in list(itertools.permutations(dataset_indices, 2))]

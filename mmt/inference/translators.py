@@ -353,9 +353,20 @@ class EsawcToEsgp(_MapTranslator):
         """
         if not isinstance(qb, BoundingBox):
             qb = qb.to_tgbox(self.esawc.crs)
+        
+        # Extract coordinates
+        xmin = qb.minx
+        xmax = qb.maxx
+        ymin = qb.miny
+        ymax = qb.maxy
+
+        # Recover single-point coordinate from the BoundingBox:
+        coordinates = misc.get_coord_from_bbox(xmin, ymin, xmax, ymax, location="upper-left")
+        coordinates = misc.coord_to_tensor(*coordinates)
 
         x = self.esawc[qb]
-        return self.predict_from_data(x["mask"])
+        # TODO: Extract 'x_coor' & 'y_coor' from the BoundingBox 'qb', see 'scripts/prepare_hdf5_ds1.py' & 'utils/misc.get_bbox_from_coord' and reverse functionality. Pass the coordinates to 'predict_from_data()'
+        return self.predict_from_data(x["mask"], coordinates)
 
 
 class EsawcToEsgpAsMap(EsawcToEsgp, landcovers.InferenceResults):
