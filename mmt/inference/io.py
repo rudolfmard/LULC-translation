@@ -411,7 +411,7 @@ def load_pytorch_model(
         #model = autoenc_in.decoder
         model = models_wrapper.models[0].decoder.train(mode=train_mode)
     else:
-        if config.model.use_pos == "embed_layer":
+        if config.model.use_pos == "embed_layer" or config.model.use_pos == "sinusoidal":
             # Cannot use Sequential with the current implementation of Coordinate Embedding due to multiple inputs given as separate arguments -> Use a python List instead:
             model = [models_wrapper.models[0].encoder.train(mode=train_mode), models_wrapper.models[1].decoder.train(mode=train_mode)]
         else:

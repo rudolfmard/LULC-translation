@@ -27,8 +27,10 @@ from tqdm import tqdm
 from mmt import _repopath_ as mmt_repopath
 from mmt.datasets import landcovers
 from mmt.datasets import transforms as mmt_transforms
+from mmt.datasets.transforms import CoordEnc
 from mmt.inference import io
 from mmt.utils import misc
+from mmt.utils import config as utilconf
 
 # BASE CLASSES
 # ============
@@ -297,6 +299,8 @@ class EsawcToEsgp(_MapTranslator):
             self.encoder_decoder.to(self.device)
         self.landcover = self.esawc
 
+        self.config = utilconf.get_config(checkpoint_path.replace("ckpt", "config.yaml"))
+
     def predict_from_data(self, x, coordinates=None) -> torch.Tensor:
         """Apply translation to tensor of land cover labels.
 
@@ -354,15 +358,27 @@ class EsawcToEsgp(_MapTranslator):
         if not isinstance(qb, BoundingBox):
             qb = qb.to_tgbox(self.esawc.crs)
         
-        # Extract coordinates
-        xmin = qb.minx
-        xmax = qb.maxx
-        ymin = qb.miny
-        ymax = qb.maxy
-
-        # Recover single-point coordinate from the BoundingBox:
-        coordinates = misc.get_coord_from_bbox(xmin, ymin, xmax, ymax, location="upper-left")
-        coordinates = misc.coord_to_tensor(*coordinates)
+        if self.config.model.use_pos == "sinusoidal":
+            # Extract coordinates
+            xmin = qb.minx
+            xmax = qb.maxx
+            ymin = qb.miny
+            ymax = qb.maxy
+            # Recover single-point coordinate from the BoundingBox:
+            coordinates = misc.get_coord_from_bbox(xmin, ymin, xmax, ymax, location="upper-left")
+            sinusoidal_tranform = CoordEnc(None)
+            coordinates = sinusoidal_tranform(coordinates)["coordenc"]
+        elif self.config.model.use_pos == "embed_layer":
+            # Extract coordinates
+            xmin = qb.minx
+            xmax = qb.maxx
+            ymin = qb.miny
+            ymax = qb.maxy
+            # Recover single-point coordinate from the BoundingBox:
+            coordinates = misc.get_coord_from_bbox(xmin, ymin, xmax, ymax, location="upper-left")
+            coordinates = misc.coord_to_tensor(*coordinates)
+        else:
+            coordinates = None
 
         x = self.esawc[qb]
         # TODO: Extract 'x_coor' & 'y_coor' from the BoundingBox 'qb', see 'scripts/prepare_hdf5_ds1.py' & 'utils/misc.get_bbox_from_coord' and reverse functionality. Pass the coordinates to 'predict_from_data()'

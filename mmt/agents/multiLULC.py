@@ -121,10 +121,12 @@ class MultiLULCAgent(base.BaseAgent):
             optim_class(net.parameters(), **self.config.optimizer.params)
             for net in self.models_wrapper.module.models
         ]
+        """
         if self.config.model.use_pos == "sinusoidal":
             self.coord_optimizer = optim_class(
                 self.models_wrapper.module.coord_model.parameters(), **self.config.optimizer.params
             )
+        """
         
         # Load checkpoints consecutively for each process:
         for i in range(0,world_size):
@@ -174,8 +176,10 @@ class MultiLULCAgent(base.BaseAgent):
                 self.models_wrapper.module.load_state_dict(checkpoint["model"])
                 self.current_epoch = checkpoint["epoch"] + 1
                 self.loss_log = checkpoint["loss_log"]
+                """
                 if self.config.model.use_pos == "sinusoidal":
                     self.coord_optimizer.load_state_dict(checkpoint["coord_optimizer"])
+                """
                 for i, d in enumerate(self.datasets):
                     self.optimizers[i].load_state_dict(checkpoint["encoder_optimizer_" + d])
 
@@ -210,8 +214,10 @@ class MultiLULCAgent(base.BaseAgent):
         }
 
         state["model"] = self.models_wrapper.module.state_dict()
+        """
         if self.config.model.use_pos == "sinusoidal":
             state["coord_optimizer"] = self.coord_optimizer.state_dict()
+        """
         for i, d in enumerate(self.datasets):
             state["encoder_optimizer_" + d] = self.optimizers[i].state_dict()
 
@@ -365,8 +371,10 @@ class MultiLULCAgent(base.BaseAgent):
 
                     self.optimizers[i_source].zero_grad(set_to_none=True)
                     self.optimizers[i_target].zero_grad(set_to_none=True)
+                    """
                     if self.config.model.use_pos == "sinusoidal":
                         self.coord_optimizer.zero_grad(set_to_none=True)
+                    """
 
                     ### LUMI-multi-GPU: Forward pass, call forward only on the AutoencoderWrapper
                     rec_source, rec_target, embedding_source, embedding_target, src_to_target, target_to_src = self.models_wrapper(i_source, i_target, source_patch, target_patch, coordinates)
@@ -401,8 +409,10 @@ class MultiLULCAgent(base.BaseAgent):
                     loss.backward()
                     self.optimizers[i_source].step()
                     self.optimizers[i_target].step()
+                    """
                     if self.config.model.use_pos == "sinusoidal":
                         self.coord_optimizer.step()
+                    """
 
                     # Accumulate the running losses and count loss items
                     # Loss averages:

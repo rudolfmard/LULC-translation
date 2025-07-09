@@ -162,6 +162,34 @@ class CoordinateEmbedding(nn.Module):
         x = x + self.coordinate_encoder(coordinates).unsqueeze(-1).unsqueeze(-1) # Broadcast the coordinate encoding vector along spatial dimensions
         return x
 
+class SinusoidalEmbedding(nn.Module):
+    """
+    Implements SinusoidalEmbedding module, which applies input embedding to the input patch and fuses in to
+    sinusoidal position encoded coordinates. The encoded coordinate data is summed to the input embeddings.
+    """
+    def __init__(self, input_channels, number_feature_map, num_groups, bias, resize):
+        super().__init__()
+
+        if resize is not None:
+            self.input_embedding = nn.Sequential(
+                Upsample(scale_factor=resize, mode="nearest-exact"),
+                DoubleConv(input_channels, number_feature_map, num_groups=num_groups, bias=bias),
+            )
+        else:
+            self.input_embedding = DoubleConv(input_channels, number_feature_map, num_groups=num_groups, bias=bias)
+
+        self.coordinate_encoder = nn.Sequential(
+            nn.Linear(128, 256),
+            nn.ReLU(inplace=True),
+            nn.Linear(256, number_feature_map),
+            nn.ReLU(inplace=True),
+        )
+
+    def forward(self, x, coordinates):
+        x = self.input_embedding(x)
+        x = x + self.coordinate_encoder(coordinates).unsqueeze(-1).unsqueeze(-1) # Broadcast the coordinate encoding vector along spatial dimensions
+        return x
+
 class UNetEncoder(nn.Module):
     def __init__(
         self,
@@ -297,6 +325,8 @@ class DUNet(nn.Module):
         
         if use_pos == "embed_layer":
             self.inc = CoordinateEmbedding(input_channels, number_feature_map, num_groups, bias, resize)
+        elif use_pos == "sinusoidal":
+            self.inc = SinusoidalEmbedding(input_channels, number_feature_map, num_groups, bias, resize)
         else:
             if resize is not None:
                 self.inc = nn.Sequential(
@@ -529,7 +559,7 @@ class DUNet(nn.Module):
         return self.decoder_part(x1, x2, x3, x4, x5, x6)
 
     def forward(self, x, coordinates=None):
-        if self.use_pos == "embed_layer":
+        if self.use_pos == "embed_layer" or self.use_pos == "sinusoidal":
             return self.forward_with_coordinates(x, coordinates)
         return self.forward_method(x)
 
@@ -708,7 +738,7 @@ class UnivEmb(nn.Module):
         return x, self.decoder(x)
 
     def forward(self, x, full=False, res=None, image=None, coordinates=None):
-        if self.use_pos == "embed_layer":
+        if self.use_pos == "embed_layer" or self.use_pos == "sinusoidal":
             return self.forward_with_coordinates(x, coordinates, full)
         return self.forward_method(x, full, res, image)
 

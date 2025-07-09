@@ -86,7 +86,7 @@ class CoordEnc:
         enc[1 : self.d : 2] = np.cos(x * self.freq)
         enc[self.d :: 2] = np.sin(y * self.freq)
         enc[self.d + 1 :: 2] = np.cos(y * self.freq)
-        sample["coordenc"] = enc
+        sample["coordenc"] = torch.Tensor(enc) # Added casting to torch.Tensor
         return sample
 
 
