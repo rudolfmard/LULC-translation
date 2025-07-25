@@ -32,6 +32,8 @@ from mmt.inference import io
 from mmt.utils import misc
 from mmt.utils import config as utilconf
 
+from mmt.graphs.models.one_to_one import EsawcToEsgp as EsawcToEsgpModel
+
 # BASE CLASSES
 # ============
 
@@ -290,13 +292,21 @@ class EsawcToEsgp(_MapTranslator):
         self.esawc_transform = mmt_transforms.OneHotTorchgeo(
             self.esawc.n_labels + 1, device=self.device
         )
+        """
         self.encoder_decoder = io.load_pytorch_model(
             checkpoint_path, lc_in="esawc", lc_out="esgp", device=device
         )
+        """
+        self.encoder_decoder = EsawcToEsgpModel().to(self.device)
+        checkpoint = torch.load(checkpoint_path, map_location=torch.device('cpu'))
+        self.encoder_decoder.load_state_dict(checkpoint["model"])
+
+        """
         if type(self.encoder_decoder) == list:
             self.encoder_decoder = [model.to(self.device) for model in self.encoder_decoder]
         else:
             self.encoder_decoder.to(self.device)
+        """
         self.landcover = self.esawc
 
         self.config = utilconf.get_config(checkpoint_path.replace("ckpt", "config.yaml"))
@@ -328,7 +338,7 @@ class EsawcToEsgp(_MapTranslator):
                 y = self.encoder_decoder[0](x.float(), coordinates.to(self.device))
                 y = self.encoder_decoder[1](y)
             else:
-                y = self.encoder_decoder(x.float())
+                y = self.encoder_decoder(x.float(), coordinates.to(self.device))
 
         return self.logits_transform(y)
 

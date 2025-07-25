@@ -20,6 +20,7 @@ from sklearn.metrics import confusion_matrix
 from mmt.agents import base
 from mmt.datasets import landcover_to_landcover
 from mmt.graphs.models import attention_autoencoder, universal_embedding, position_encoding, autoencoder_wrapper
+from mmt.graphs.models.one_to_one import EsawcToEsgp
 
 from mmt.utils import misc, plt_utils
 
@@ -97,15 +98,20 @@ class MultiLULCAgent(base.BaseAgent):
         self.best_metric = 0
 
         # Initialize a dictionary to hold loss values
-        self.loss_log, self.loss_log_lookup_table = self.initialize_loss_log(key_lookup=True)
+        #self.loss_log, self.loss_log_lookup_table = self.initialize_loss_log(key_lookup=True)
+        self.loss_log = {"training": [], "validation": []}
 
         # Get required param for network initialisation
+        # ONE-TO-ONE: Not needed as the whole network is customized for esawc to esgp
+        """
         input_channels = self.data_loader.input_channels
         output_channels = self.data_loader.output_channels
         resizes = self.config.dimensions.n_px_embedding // np.array(self.data_loader.real_patch_sizes)
         resizes = np.where(resizes == 1, None, resizes)
+        """
 
         # Initialize the model
+        """
         self.models_wrapper = autoencoder_wrapper.AutoencoderWrapper(        
             in_channels=input_channels,
             out_channels=output_channels,
@@ -113,14 +119,13 @@ class MultiLULCAgent(base.BaseAgent):
             resizes=resizes,
             config=config
         ).to(self.device)
-        self.models_wrapper = DDP(self.models_wrapper, device_ids=[self.local_rank], find_unused_parameters=True)
+        """
+        self.model = EsawcToEsgp().to(self.local_rank)
+        self.models_wrapper = DDP(self.model, device_ids=[self.local_rank])
 
         # Define optimizers:
         optim_class = getattr(optim, self.config.optimizer.type)
-        self.optimizers = [
-            optim_class(net.parameters(), **self.config.optimizer.params)
-            for net in self.models_wrapper.module.models
-        ]
+        self.optimizer = optim_class(self.models_wrapper.module.parameters(), **self.config.optimizer.params)
         """
         if self.config.model.use_pos == "sinusoidal":
             self.coord_optimizer = optim_class(
@@ -168,9 +173,11 @@ class MultiLULCAgent(base.BaseAgent):
                 # Exclude parameters where the key starts with "model.i" where i is not an index of an existing AE in the ModuleList within models_wrapper
                 # Phase 2 also resets the current_epoch counter, loss_log data and optimizer states, therefore these are not recovered.
                 # TODO: Possible bug! Currently only keep range(n_autoencoders) but are the AEs of interest actually the first n_autoencoders?
-                n_autoencoders = len(self.models_wrapper.module.models)
-                filtered_state_dict = {k: v for k, v in checkpoint["model"].items() if not k.startswith(f"models.") or any(k.startswith(f"models.{i}.") for i in range(n_autoencoders))}
-                self.models_wrapper.module.load_state_dict(filtered_state_dict)
+                # Not needed in one_to_one model:
+                #n_autoencoders = len(self.models_wrapper.module.models)
+                #filtered_state_dict = {k: v for k, v in checkpoint["model"].items() if not k.startswith(f"models.") or any(k.startswith(f"models.{i}.") for i in range(n_autoencoders))}
+                #self.models_wrapper.module.load_state_dict(filtered_state_dict)
+                self.models_wrapper.module.load_state_dict(checkpoint["model"])
                 self.logger.info("**Beginning of phase 2 of training**")
             else:
                 self.models_wrapper.module.load_state_dict(checkpoint["model"])
@@ -180,8 +187,9 @@ class MultiLULCAgent(base.BaseAgent):
                 if self.config.model.use_pos == "sinusoidal":
                     self.coord_optimizer.load_state_dict(checkpoint["coord_optimizer"])
                 """
-                for i, d in enumerate(self.datasets):
-                    self.optimizers[i].load_state_dict(checkpoint["encoder_optimizer_" + d])
+                #for i, d in enumerate(self.datasets):
+                #    self.optimizers[i].load_state_dict(checkpoint["encoder_optimizer_" + d])
+                self.optimizer.load_state_dict(checkpoint["optimizer"])
 
             self.logger.info(
                 "Checkpoint loaded successfully from '{}' at (epoch {}) at (iteration {})\n".format(
@@ -218,8 +226,9 @@ class MultiLULCAgent(base.BaseAgent):
         if self.config.model.use_pos == "sinusoidal":
             state["coord_optimizer"] = self.coord_optimizer.state_dict()
         """
-        for i, d in enumerate(self.datasets):
-            state["encoder_optimizer_" + d] = self.optimizers[i].state_dict()
+        #for i, d in enumerate(self.datasets):
+        #    state["encoder_optimizer_" + d] = self.optimizers[i].state_dict()
+        state["optimizer"] = self.optimizer.state_dict()
 
         # Save the state
         torch.save(state, os.path.join(self.config.paths.checkpoint_dir, file_name))
@@ -278,8 +287,8 @@ class MultiLULCAgent(base.BaseAgent):
                 # LUMI-multi-GPU: Validate the model
                 self.validate()
                 # LUMI-multi-GPU: Check if this is the best model so far (based on total average loss)
-                last_validation_loss = self.loss_log["validation"]["total_average"][-1][1]
-                if last_validation_loss == min([item[1] for item in self.loss_log["validation"]["total_average"]]):
+                last_validation_loss = self.loss_log["validation"][-1][1]
+                if last_validation_loss == min([item[1] for item in self.loss_log["validation"]]):
                     self.logger.info("Best model for now: saved")
                     self.save_checkpoint(is_best=1)
                 torch.cuda.empty_cache()
@@ -317,7 +326,8 @@ class MultiLULCAgent(base.BaseAgent):
         """One epoch of training"""
 
         # Initialize log for collecting running losses and loss item counts throughout the epoch:
-        running_loss = self.initialize_loss_log(running=True)
+        #running_loss = self.initialize_loss_log(running=True)
+        running_loss = [0,0]
 
         # LUMI-multi-GPU: Set the models to training mode:
         self.models_wrapper.train()
@@ -347,6 +357,8 @@ class MultiLULCAgent(base.BaseAgent):
         while not end:
             for source, targetval in data_loader.items():   # Iterate over source maps
                 i_source = self.datasets.index(source)
+                if source != "esawc.hdf5":
+                    continue
                 for target, dl in targetval.items():        # Iterate over target maps of current source
                     i_target = self.datasets.index(target)
 
@@ -369,16 +381,19 @@ class MultiLULCAgent(base.BaseAgent):
                     sv = data.get("source_data")[:, 0]#.to(self.device)
                     tv = data.get("target_data")[:, 0]#.to(self.device)
 
-                    self.optimizers[i_source].zero_grad(set_to_none=True)
-                    self.optimizers[i_target].zero_grad(set_to_none=True)
+                    #self.optimizers[i_source].zero_grad(set_to_none=True)
+                    #self.optimizers[i_target].zero_grad(set_to_none=True)
+                    self.optimizer.zero_grad()
                     """
                     if self.config.model.use_pos == "sinusoidal":
                         self.coord_optimizer.zero_grad(set_to_none=True)
                     """
 
                     ### LUMI-multi-GPU: Forward pass, call forward only on the AutoencoderWrapper
-                    rec_source, rec_target, embedding_source, embedding_target, src_to_target, target_to_src = self.models_wrapper(i_source, i_target, source_patch, target_patch, coordinates)
+                    #rec_source, rec_target, embedding_source, embedding_target, src_to_target, target_to_src = self.models_wrapper(i_source, i_target, source_patch, target_patch, coordinates)
+                    y = self.models_wrapper(source_patch, coordinates)
 
+                    """
                     # Calculate and add source reconstruction error to reconstruction loss:
                     loss_rec_source = torch.nn.CrossEntropyLoss(ignore_index=0)(rec_source, sv)        # self reconstruction loss
 
@@ -398,17 +413,19 @@ class MultiLULCAgent(base.BaseAgent):
                     loss_rec = loss_rec_source + loss_rec_target
                     loss_tra = loss_tra_src_to_target + loss_tra_target_to_src
                     loss = loss_rec + loss_emb + loss_tra
+                    """
+                    loss = torch.nn.CrossEntropyLoss(ignore_index=0)(y, tv)
 
                     # Divide rec and trans losses by two as they are sum of two losses?
                     if self.rank == 0 and dlcount[dl] % self.config.training.print_inc == 0:
-                        self.logger.info(
-                            f"[ep {self.current_epoch+1}, i={self.current_iteration}][batch {dlcount[dl]}/{len(dl)}] train\t {source} -> {target} \t Losses: rec={loss_rec.item()}, emb={loss_emb.item()}, tra={loss_tra.item()}"
-                        )
+                        #self.logger.info(f"[ep {self.current_epoch+1}, i={self.current_iteration}][batch {dlcount[dl]}/{len(dl)}] train\t {source} -> {target} \t Losses: rec={loss_rec.item()}, emb={loss_emb.item()}, tra={loss_tra.item()}")
+                        self.logger.info(f"[ep {self.current_epoch+1}, i={self.current_iteration}][batch {dlcount[dl]}/{len(dl)}] train\t {source} -> {target} \t Loss: {loss.item()}")
 
                     ### Backward propagation
                     loss.backward()
-                    self.optimizers[i_source].step()
-                    self.optimizers[i_target].step()
+                    #self.optimizers[i_source].step()
+                    #self.optimizers[i_target].step()
+                    self.optimizer.step()
                     """
                     if self.config.model.use_pos == "sinusoidal":
                         self.coord_optimizer.step()
@@ -416,6 +433,7 @@ class MultiLULCAgent(base.BaseAgent):
 
                     # Accumulate the running losses and count loss items
                     # Loss averages:
+                    """
                     running_loss["total_average"] = [running_loss["total_average"][0]+loss.item(), running_loss["total_average"][1]+1]
                     running_loss["reconstruction_average"] = [running_loss["reconstruction_average"][0]+loss_rec.item(), running_loss["reconstruction_average"][1]+1]
                     running_loss["embedding_average"] = [running_loss["embedding_average"][0]+loss_emb.item(), running_loss["embedding_average"][1]+1]
@@ -433,11 +451,15 @@ class MultiLULCAgent(base.BaseAgent):
                     target_to_source_key = self.loss_log_lookup_table["translation_keys"][(i_target, i_source)]
                     running_loss["translation"][source_to_target_key] = [running_loss["translation"][source_to_target_key][0]+loss_tra_src_to_target.item(), running_loss["translation"][source_to_target_key][1]+1]
                     running_loss["translation"][target_to_source_key] = [running_loss["translation"][target_to_source_key][0]+loss_tra_target_to_src.item(), running_loss["translation"][target_to_source_key][1]+1]
+                    """
+                    running_loss[0] += loss.item()
+                    running_loss[1] += 1
                 if end:
                     break
             # One iteration here corresponds to fetching one batch from all soure-target dataloaders.
             self.current_iteration += 1
         # LUMI-multi-GPU: Store epoch average loss values to the loss_log:
+        """
         self.loss_log["training"]["total_average"].append([self.current_epoch+1, running_loss["total_average"][0]/running_loss["total_average"][1]])
         self.loss_log["training"]["reconstruction_average"].append([self.current_epoch+1, running_loss["reconstruction_average"][0]/running_loss["reconstruction_average"][1]])
         self.loss_log["training"]["embedding_average"].append([self.current_epoch+1, running_loss["embedding_average"][0]/running_loss["embedding_average"][1]])
@@ -448,11 +470,14 @@ class MultiLULCAgent(base.BaseAgent):
             self.loss_log["training"]["embedding"][key].append([self.current_epoch+1, running_loss["embedding"][key][0]/running_loss["embedding"][key][1]])
         for key in self.loss_log["training"]["translation"].keys():
             self.loss_log["training"]["translation"][key].append([self.current_epoch+1, running_loss["translation"][key][0]/running_loss["translation"][key][1]])
+        """
+        self.loss_log["training"].append([self.current_epoch+1, running_loss[0]/running_loss[1]])
     
     def validate(self) -> None:
         """One cycle of model validation"""
         # Initialize log for collecting running losses and loss item counts throughout the epoch:
-        running_loss = self.initialize_loss_log(running=True)
+        #running_loss = self.initialize_loss_log(running=True)
+        running_loss = [0,0]
 
         loss_arrays = {d: [] for d in self.datasets}
 
@@ -476,6 +501,8 @@ class MultiLULCAgent(base.BaseAgent):
             while not end:
                 for source, targetval in data_loader.items():
                     i_source = self.datasets.index(source)
+                    if source != "esawc.hdf5":
+                        continue
                     for target, dl in targetval.items():
                         i_target = self.datasets.index(target)
                         try:
@@ -507,10 +534,12 @@ class MultiLULCAgent(base.BaseAgent):
                             _, trad = self.models[i_target](embedding)
                         """
                         # LUMI-multi-GPU:
-                        rec_source, rec_target, embedding_source, embedding_target, src_to_target, target_to_src = self.models_wrapper(i_source, i_target, source_patch, target_patch, coordinates)
+                        #rec_source, rec_target, embedding_source, embedding_target, src_to_target, target_to_src = self.models_wrapper(i_source, i_target, source_patch, target_patch, coordinates)
+                        y = self.models_wrapper(source_patch, coordinates)
 
                         """
                         loss = torch.nn.CrossEntropyLoss(ignore_index=0)(trad, torch.argmax(target_patch, 1)) # TODO: Make sure why argmax is here
+                        """
                         """
                         # LUMI-multi-GPU: For plotting, the training and validation losses has to be the same.
                         # Calculate and add source reconstruction error to reconstruction loss:
@@ -527,7 +556,10 @@ class MultiLULCAgent(base.BaseAgent):
                         loss_rec = loss_rec_source + loss_rec_target
                         loss_tra = loss_tra_src_to_target + loss_tra_target_to_src
                         loss = 0.75*loss_rec + 0.75*loss_emb + loss_tra
+                        """
+                        loss = torch.nn.CrossEntropyLoss(ignore_index=0)(y, tv)
 
+                        """
                         if im_save[source][target] == 0:
                             out_img = self.data_loader.plot_samples_per_epoch(
                                 source_patch,
@@ -559,9 +591,11 @@ class MultiLULCAgent(base.BaseAgent):
                                 data.get("coordinate"),
                             )
                             im_save[source][source] = 1
+                        """
                         
                         # Accumulate the running losses and count loss items
                         # Loss averages:
+                        """
                         running_loss["total_average"] = [running_loss["total_average"][0]+loss.item(), running_loss["total_average"][1]+1]
                         running_loss["reconstruction_average"] = [running_loss["reconstruction_average"][0]+loss_rec.item(), running_loss["reconstruction_average"][1]+1]
                         running_loss["embedding_average"] = [running_loss["embedding_average"][0]+loss_emb.item(), running_loss["embedding_average"][1]+1]
@@ -579,9 +613,13 @@ class MultiLULCAgent(base.BaseAgent):
                         target_to_source_key = self.loss_log_lookup_table["translation_keys"][(i_target, i_source)]
                         running_loss["translation"][source_to_target_key] = [running_loss["translation"][source_to_target_key][0]+loss_tra_src_to_target.item(), running_loss["translation"][source_to_target_key][1]+1]
                         running_loss["translation"][target_to_source_key] = [running_loss["translation"][target_to_source_key][0]+loss_tra_target_to_src.item(), running_loss["translation"][target_to_source_key][1]+1]
+                        """
+                        running_loss[0] += loss.item()
+                        running_loss[1] += 1
                     if end:
                         break
         # LUMI-multi-GPU: Store epoch average loss values to the loss_log:
+        """
         self.loss_log["validation"]["total_average"].append([self.current_epoch+1, running_loss["total_average"][0]/running_loss["total_average"][1]])
         self.loss_log["validation"]["reconstruction_average"].append([self.current_epoch+1, running_loss["reconstruction_average"][0]/running_loss["reconstruction_average"][1]])
         self.loss_log["validation"]["embedding_average"].append([self.current_epoch+1, running_loss["embedding_average"][0]/running_loss["embedding_average"][1]])
@@ -592,6 +630,8 @@ class MultiLULCAgent(base.BaseAgent):
             self.loss_log["validation"]["embedding"][key].append([self.current_epoch+1, running_loss["embedding"][key][0]/running_loss["embedding"][key][1]])
         for key in self.loss_log["validation"]["translation"].keys():
             self.loss_log["validation"]["translation"][key].append([self.current_epoch+1, running_loss["translation"][key][0]/running_loss["translation"][key][1]])
+        """
+        self.loss_log["validation"].append([self.current_epoch+1, running_loss[0]/running_loss[1]])
 
     def test(self) -> None:
         """Final testing on left-out dataset"""
@@ -729,9 +769,9 @@ class MultiLULCAgent(base.BaseAgent):
             stop_training (bool):  True if early stopping criterion is met, False otherwise.
         """
         patience = 10
-        delta = 0.001
+        delta = 0.0001
 
-        validation_epoch_averages = self.loss_log["validation"]["total_average"]
+        validation_epoch_averages = self.loss_log["validation"]
 
         if len(validation_epoch_averages) <= patience:
             return False  # Not enough data to make decision
