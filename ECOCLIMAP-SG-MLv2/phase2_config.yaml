@@ -1,0 +1,48 @@
+xp_name: iteration5_phase2
+seed: 666
+cuda: true
+paths:
+    data_dir: /project/project_465000527/LULC_translation/data/hdf5_data/
+    experiments_dir: /project/project_465000527/LULC_translation/experiments/
+versions:
+    ecosgplus: 2.0
+    ecosgml: 0.6
+dimensions:
+    n_channels_hiddenlay: 32
+    n_channels_embedding: 50
+    n_px_embedding: 600
+dataloader:
+    type: LandcoverToLandcoverDataLoader
+    params:
+        datasets: ["esawc-train.hdf5", "esgp-train.hdf5", "ecosg-train.hdf5"]
+        num_workers: 0
+        pos_enc: true
+        dataset_class: LandcoverToLandcoverNoJson
+training:
+    batch_size: 16
+    n_epochs: 200
+    tensorboard: false
+    validate_every: 1
+    print_inc: 10
+agent:
+    type: MultiLULCAgent
+    params:
+        startfrom: iteration5
+model:
+    type: universal_embedding
+    name: UnivEmb
+    use_pos: sinusoidal
+    pos_enc_dim: 10
+    params:
+        memory_monger: false
+        up_mode: bilinear
+        decoder_depth: 1
+        mode: light
+        pooling_factors: [3,3,3,3,3]
+        mul: false
+        softpos: true
+        decoder_atrou: true
+optimizer:
+    type: Adam
+    params:
+        lr: 0.0016
