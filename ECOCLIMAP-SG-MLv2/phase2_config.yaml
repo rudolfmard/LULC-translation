@@ -2,8 +2,8 @@ xp_name: iteration5_phase2
 seed: 666
 cuda: true
 paths:
-    data_dir: /project/project_465000527/LULC_translation/data/hdf5_data/
-    experiments_dir: /project/project_465000527/LULC_translation/experiments/
+    data_dir: /path/to/data/directory/
+    experiments_dir: /path/to/experiments/directory/
 versions:
     ecosgplus: 2.0
     ecosgml: 0.6
