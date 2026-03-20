@@ -64,7 +64,8 @@ plt_utils.storeImages = args.savefig
 # -----------------------------------------
 ldom_data_dir = os.path.join(mmt_repopath, "data", "hdf5_data")
 subset = "test"
-lcnames = ["esawc", "ecosg", "esgp"]
+# Experiments using elevation+coordinate data should add "coordinates" & "COP30" to the list below
+lcnames = ["esawc", "ecosg", "esgp"] 
 h5_path = {}
 h5f = {}
 for lcname in lcnames:

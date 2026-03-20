@@ -1022,6 +1022,11 @@ class ESAWorldCover(_TorchgeoLandcover):
     ]
     orig_crs = rasterio.crs.CRS.from_epsg(4326)
 
+class COP30(_TorchgeoLandcover):
+    path = os.path.join(mmt_repopath, "data", "tiff_data", "COP_aligned")
+    labels = []
+    cmap = []
+    orig_crs = rasterio.crs.CRS.from_epsg(4326)
 
 class InferenceResults(EcoclimapSG):
     """ECOSG-like land cover maps (same labels) loaded from a given path"""

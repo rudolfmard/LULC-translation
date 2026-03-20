@@ -190,6 +190,43 @@ class SinusoidalEmbedding(nn.Module):
         x = x + self.coordinate_encoder(coordinates).unsqueeze(-1).unsqueeze(-1) # Broadcast the coordinate encoding vector along spatial dimensions
         return x
 
+class CoordinateElevation(nn.Module):
+    """
+    Amalgamates coordinate and elevation fields to the LULC data
+    """
+    def __init__(self, input_channels, number_feature_map, num_groups, bias, resize):
+        super().__init__()
+
+        if resize is not None:
+            self.resize_layer = Upsample(scale_factor=resize, mode="nearest-exact")
+        else:
+            self.resize_layer = None
+
+        self.coord_elevation_conv = nn.Sequential(
+            nn.Conv2d(3, 8, kernel_size=3, padding=1),
+            nn.GroupNorm(8, 8),
+            nn.ReLU(inplace=True)
+        )
+
+        self.lulc_conv = nn.Sequential(
+            nn.Conv2d(input_channels, 32, kernel_size=3, padding=1),
+            nn.GroupNorm(32, 32),
+            nn.ReLU(inplace=True)
+        )
+
+        self.fuse_conv = DoubleConv(32+8, number_feature_map, num_groups=num_groups, bias=bias)
+
+    def forward(self, x, coordinates):
+        # coordinates are already concatenated with elevation field
+        if self.resize_layer is not None:
+            x = self.resize_layer(x)
+        x = self.lulc_conv(x)
+        coordinates = self.coord_elevation_conv(coordinates)
+        x = torch.cat((x, coordinates), dim=1)
+        x = self.fuse_conv(x)
+
+        return x
+
 class UNetEncoder(nn.Module):
     def __init__(
         self,
@@ -327,6 +364,8 @@ class DUNet(nn.Module):
             self.inc = CoordinateEmbedding(input_channels, number_feature_map, num_groups, bias, resize)
         elif use_pos == "sinusoidal":
             self.inc = SinusoidalEmbedding(input_channels, number_feature_map, num_groups, bias, resize)
+        elif use_pos == "elevation_and_coordinates":
+            self.inc = CoordinateElevation(input_channels, number_feature_map, num_groups, bias, resize)
         else:
             if resize is not None:
                 self.inc = nn.Sequential(
@@ -502,8 +541,7 @@ class DUNet(nn.Module):
             )
             self.outc = nn.Conv2d(2 * number_feature_map, embedding_dim, kernel_size=1)
 
-        #TODO: self.forward_method() is redundant if this logic is moved to self.forward() method?
-        if use_pos == "embed_layer":
+        if self.use_pos in ["embed_layer", "sinusoidal", "elevation_and_coordinates"]:
             self.forward_method = self.forward_with_coordinates
         else:
             self.forward_method = self.classical_forward
@@ -559,7 +597,7 @@ class DUNet(nn.Module):
         return self.decoder_part(x1, x2, x3, x4, x5, x6)
 
     def forward(self, x, coordinates=None):
-        if self.use_pos == "embed_layer" or self.use_pos == "sinusoidal":
+        if self.use_pos in ["embed_layer", "sinusoidal", "elevation_and_coordinates"]:
             return self.forward_with_coordinates(x, coordinates)
         return self.forward_method(x)
 
@@ -660,9 +698,6 @@ class UnivEmb(nn.Module):
             bias=bias,
         )
 
-        # LUMI: Swich forward method if needed
-        #self.forward_method = self.classical_forward
-        self.forward_method = self.forward_with_coordinate_encoding
         if memory_monger:
             self.dummy_tensor = torch.ones(1, dtype=torch.float32, requires_grad=True)
             self.encoder_wrapper = ModuleWrapperIgnores2ndArg(self.encoder)
@@ -672,31 +707,8 @@ class UnivEmb(nn.Module):
         if image_operator == "mul":
             self.image_mul = True
 
-    #TODO: merge "res" and "coordinates" into one parameter, rename parameter "full" to something more descriptive like "decode_only"
-
-    # LUMI: alternative forward method for concatenating position encoding into the input
-    def forward_with_coordinate_encoding(self, x, full=False, res=None, image=None):
-        raise NotImplementedError("Handling of the given argument 'image' is not implemented!" )
-        if res is not None and full:
-            # x shape before concating: (batch_size, n_categories (1-hot), lon, lat)
-            # res shape (encoded position data): (batch_size, n_channels_embedding)
-            # -> duplicate the res vector along lon-lat dims
-            # -> shape after concatenating: (batch_size, n_categories+n_channels_embedding, lon, lat)
-            res = res.unsqueeze(2).unsqueeze(3).expand(-1, -1, x.shape[-2], x.shape[-1])
-            x = torch.cat((x, res), 1)
-        if full:
-            x = self.encoder(x)
-        if image is not None:
-            raise NotImplementedError("Handling of the given argument 'image' is not implemented!" )
-        return x, self.decoder(x)
-    
-    def forward_with_coordinates(self, x, coordinates=None, full=False):
-        # Run encoder to obtain latent space representation:
-        if full:
-            x = self.encoder(x, coordinates)
-        return x, self.decoder(x)
-
     def classical_forward(self, x, full=False, res=None, image=None):
+        # Deprecated in this fork
         if full:
             x = self.encoder(x)
         if res is not None:
@@ -737,10 +749,20 @@ class UnivEmb(nn.Module):
                 x += image
         return x, self.decoder(x)
 
+    def forward_with_coordinates(self, x, coordinates=None, full=False):
+        # Run encoder to obtain latent space representation:
+        if full:
+            x = self.encoder(x, coordinates)
+        return x, self.decoder(x)
+
     def forward(self, x, full=False, res=None, image=None, coordinates=None):
-        if self.use_pos == "embed_layer" or self.use_pos == "sinusoidal":
+        # res and image not used in LUMI experiments...
+        if self.use_pos in ["embed_layer", "sinusoidal", "elevation_and_coordinates"]:
             return self.forward_with_coordinates(x, coordinates, full)
-        return self.forward_method(x, full, res, image)
+        if full:
+            x = self.encoder(x)
+        return x, self.decoder(x)
+
 
 
 class ModuleWrapperIgnores2ndArg(nn.Module):

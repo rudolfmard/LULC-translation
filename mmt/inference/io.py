@@ -302,7 +302,6 @@ def load_pytorch_model(
         Map translation model loaded with weights of `xp_name` translating
         from `lc_in` to `lc_out`
     """
-    # LUMI-MULTI-GPU: Made compatible with autoencoder_wrapper
 
     checkpoint_path = misc.weights_to_checkpoint(xp_name)
     config = utilconf.get_config(checkpoint_path.replace("ckpt", "config.yaml"))
@@ -338,17 +337,6 @@ def load_pytorch_model(
     except ValueError:
         print(f"lc_in or lc_out not found in the list of valid map names: {map_names}.")
 
-    """
-    if config.model.type == "universal_embedding":
-        EncDec = getattr(universal_embedding, config.model.name)
-    elif config.model.type == "attention_autoencoder":
-        EncDec = getattr(attention_autoencoder, config.model.name)
-    else:
-        raise ValueError(
-            f"Unknown model.type = {config.model.type}. Please change config to one among ['transformer_embedding', 'universal_embedding', 'attention_autoencoder']"
-        )
-    """
-
     # CAUTION: If bugged, the in- and out_channels etc. might have to be in the same order as they were when training the model. Also, always place information on lc_in first and lc_out second.
     models_wrapper = autoencoder_wrapper.AutoencoderWrapper(        
         in_channels=input_channels,
@@ -358,7 +346,78 @@ def load_pytorch_model(
         config=config
     )
 
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    # Filter the state_dict to only include weights of autoencoders corresponding to lc_in and lc_out:
+    filtered_state_dict = {k: v for k, v in checkpoint["model"].items() if not k.startswith(f"models.") or any(k.startswith(f"models.{i}.") for i in AE_indices)}
+    models_wrapper.load_state_dict(filtered_state_dict)
+
+    print(
+        f"<{__name__}.{sys._getframe().f_code.co_name}> Loaded model at epoch {checkpoint['epoch']}, iteration {checkpoint['iteration']}"
+    )
+
+    # The AEs corresponding to the lc_in and lc_out should be in order [lc_in, lc_out] within the ModuleList inside models_wrapper.
+    if lc_out == "encoder":
+        model = models_wrapper.models[0].encoder.train(mode=train_mode)
+    elif lc_out == "decoder":
+        model = models_wrapper.models[0].decoder.train(mode=train_mode)
+    else:
+        if config.model.use_pos in ["embed_layer", "sinusoidal", "elevation_and_coordinates"]:
+            # Cannot use Sequential with the current implementation of Coordinate Embedding due to multiple inputs given as separate arguments -> Use a python List instead:
+            model = [models_wrapper.models[0].encoder.train(mode=train_mode), models_wrapper.models[1].decoder.train(mode=train_mode)]
+        else:
+            model = torch.nn.Sequential(models_wrapper.models[0].encoder, models_wrapper.models[1].decoder).train(mode=train_mode)
+    return model
+
+def load_original_model(
+    xp_name, lc_in="esawc", lc_out="esgp", train_mode=False, device="cpu"
+) -> torch.nn.Module:
+    """Load a pre-trained Pytorch model to make map translation
+
+
+    Parameters
+    ----------
+    xp_name: str
+        Alias to the weights (experiment name, saved weights or absolute path)
+        See `mmt.utils.misc.weights_to_checkpoint`
+
+    lc_in: str
+        Input map's short name (esawc, ecosg, esgp)
+
+    lc_out: str
+        Input map's short name (esawc, ecosg, esgp, encoder, decoder)
+        If lc_out="encoder", the loaded model translates `lc_in` to the latent space
+        if lc_out="decoder", the loaded model translates the latent space to `lc_in`
+
+    train_mode: bool, optional
+        If True, the training mode is set on
+
+    device: {"cuda", "cpu"}
+        The device on which the model is loaded
+
+
+    Returns
+    -------
+    model: torch.nn.Module
+        Map translation model loaded with weights of `xp_name` translating
+        from `lc_in` to `lc_out`
     """
+
+    checkpoint_path = misc.weights_to_checkpoint(xp_name)
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    config = utilconf.get_config(checkpoint_path.replace("ckpt", "config.yaml"))
+
+    if config.model.type == "universal_embedding":
+        EncDec = getattr(universal_embedding, config.model.name)
+    elif config.model.type == "attention_autoencoder":
+        EncDec = getattr(attention_autoencoder, config.model.name)
+    else:
+        raise ValueError(
+            f"Unknown model.type = {config.model.type}. Please change config to one among ['transformer_embedding', 'universal_embedding', 'attention_autoencoder']"
+        )
+
+    res_in = landcover_to_landcover.RESOLUTION_CATALOG[lc_in + ".hdf5"]
+    n_channels_in = len(landcover_to_landcover.LABELS_CATALOG[lc_in + ".hdf5"]) + 1
+
     autoenc_in = EncDec(
         in_channels=n_channels_in,
         out_channels=n_channels_in,
@@ -369,14 +428,7 @@ def load_pytorch_model(
         n_channels_embedding=config.dimensions.n_channels_embedding,
         **config.model.params,
     )
-    """
 
-    checkpoint = torch.load(checkpoint_path, map_location=device)
-    # Filter the state_dict to only include weights of autoencoders corresponding to lc_in and lc_out:
-    filtered_state_dict = {k: v for k, v in checkpoint["model"].items() if not k.startswith(f"models.") or any(k.startswith(f"models.{i}.") for i in AE_indices)}
-    models_wrapper.load_state_dict(filtered_state_dict)
-
-    """
     autoenc_in.load_state_dict(checkpoint[f"encoder_state_dict_{lc_in}.hdf5"])
 
     if lc_out not in ["encoder", "decoder"]:
@@ -397,24 +449,17 @@ def load_pytorch_model(
         )
 
         autoenc_out.load_state_dict(checkpoint[f"encoder_state_dict_{lc_out}.hdf5"])
-    """
 
     print(
         f"<{__name__}.{sys._getframe().f_code.co_name}> Loaded model at epoch {checkpoint['epoch']}, iteration {checkpoint['iteration']}"
     )
 
-    # The AEs corresponding to the lc_in and lc_out should be in order [lc_in, lc_out] within the ModuleList inside models_wrapper.
     if lc_out == "encoder":
-        #model = autoenc_in.encoder
-        model = models_wrapper.models[0].encoder.train(mode=train_mode)
+        model = autoenc_in.encoder
     elif lc_out == "decoder":
-        #model = autoenc_in.decoder
-        model = models_wrapper.models[0].decoder.train(mode=train_mode)
+        model = autoenc_in.decoder
     else:
-        if config.model.use_pos == "embed_layer" or config.model.use_pos == "sinusoidal":
-            # Cannot use Sequential with the current implementation of Coordinate Embedding due to multiple inputs given as separate arguments -> Use a python List instead:
-            model = [models_wrapper.models[0].encoder.train(mode=train_mode), models_wrapper.models[1].decoder.train(mode=train_mode)]
-        else:
-            #model = torch.nn.Sequential(autoenc_in.encoder, autoenc_out.decoder)
-            model = torch.nn.Sequential(models_wrapper.models[0].encoder, models_wrapper.models[1].decoder).train(mode=train_mode)
+        model = torch.nn.Sequential(autoenc_in.encoder, autoenc_out.decoder)
+
+    model.train(mode=train_mode)
     return model

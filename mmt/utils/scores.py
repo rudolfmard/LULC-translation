@@ -17,7 +17,7 @@ from torch import tensor
 from tqdm import tqdm
 
 from mmt.datasets.landcovers import ECOCLIMAPSG_LABEL_HIERARCHY, ECOCLIMAPSG_LABELS
-from mmt.datasets.transforms import CoordEnc
+from mmt.datasets import transforms as mmt_transforms
 from mmt.inference import io
 from mmt.utils import misc
 
@@ -106,18 +106,31 @@ def _compute_confusion_matrix_translator(translator, h5f, n_patches) -> np.ndarr
 
     for i in tqdm(items):
         x = h5f["esawc"].get(i)
+
         x_coor = x.attrs["x_coor"].astype(float)
         y_coor = x.attrs["y_coor"].astype(float)
         if translator.config.model.use_pos == "embed_layer":
-            x_min, x_max = 93639.6885, 1245639.6885
-            y_min, y_max = 6046786.6972, 7120786.6972
-            coordinates = torch.tensor(
-                ((x_coor-x_min)/(x_max-x_min), (y_coor-y_min)/(y_max-y_min)),
-                dtype=torch.float,
-            )
+            coordinates = misc.coord_to_tensor(x_coor, y_coor)
         elif translator.config.model.use_pos == "sinusoidal":
-            sinusoidal_transform = CoordEnc(None)
+            sinusoidal_transform = mmt_transforms.CoordEnc(None)
             coordinates = sinusoidal_transform({"coordinate": (x_coor, y_coor)})["coordenc"]
+        elif translator.config.model.use_pos == "elevation_and_coordinates":
+            coord_patch = h5f["coordinates"].get(i)
+            coord_patch = coord_patch[:]
+            coord_patch = mmt_transforms.CoordPatchMinMaxNorm(coord_patch)
+            coord_patch = torch.tensor(
+                coord_patch, dtype=torch.float, device=translator.device
+            )
+            elevation_patch = h5f["COP30"].get(i)
+            elevation_patch = elevation_patch[:]
+            elevation_patch = mmt_transforms.ElevationNorm(elevation_patch)
+            elevation_patch = torch.tensor(
+                elevation_patch, dtype=torch.float, device=translator.device
+            )
+
+            coordinates = torch.cat((coord_patch, elevation_patch), dim=0)
+            if len(coordinates.shape) == 3:
+                coordinates = torch.unsqueeze(coordinates, 0)
         else:
             coordinates = None
 

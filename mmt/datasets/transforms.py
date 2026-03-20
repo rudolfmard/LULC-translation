@@ -89,6 +89,24 @@ class CoordEnc:
         sample["coordenc"] = torch.Tensor(enc) # Added casting to torch.Tensor
         return sample
 
+def CoordPatchMinMaxNorm(coordinates_patch):
+    # Min and Max values are boundaries of EURAT domain
+    # Normalize to range [-1, 1]
+    min_lon, max_lon = -32, 42
+    min_lat, max_lat = 20, 72
+    lons = coordinates_patch[0]
+    lats = coordinates_patch[1]
+    lons_norm = 2*(lons-min_lon)/(max_lon-min_lon)-1
+    lats_norm = 2*(lats-min_lat)/(max_lat-min_lat)-1
+    return np.stack([lons_norm, lats_norm], axis=0)
+
+def ElevationNorm(elevation):
+    # Z-score standardization, mean and sd pre-calculated from data
+    mean = 346.978837210974
+    sd = 458.34285233742787
+    elevation_norm = (elevation - mean) / (sd + 1e-8)
+    elevation_norm = np.clip(elevation_norm, -5.0, 5.0)
+    return elevation_norm
 
 class RotationTransform:
     """Rotate by one of the given angles.
@@ -101,10 +119,14 @@ class RotationTransform:
         self.angles = angles
         self.use_image = use_image
         self.keys_to_mod = keys_to_mod
+        # Also rotate elevation and coordinates_patch data:
+        self.keys_to_mod = keys_to_mod + ["elevation", "coordinates_patch"]
 
     def __call__(self, sample):
         c = random.choice(self.angles)
         for k in self.keys_to_mod:
+            if sample[k] is None:
+                continue
             sample[k] = TF.rotate(sample[k], c)
         return sample
 
@@ -117,13 +139,19 @@ class FlipTransform:
     def __init__(self, use_image=False, keys_to_mod=["source_data", "target_data"]):
         self.use_image = use_image
         self.keys_to_mod = keys_to_mod
+        # Also rotate elevation and coordinates_patch data:
+        self.keys_to_mod = keys_to_mod + ["elevation", "coordinates_patch"]
 
     def __call__(self, sample):
         if random.random() > 0.5:
             for k in self.keys_to_mod:
+                if sample[k] is None:
+                    continue
                 sample[k] = TF.hflip(sample[k])
         if random.random() > 0.5:
             for k in self.keys_to_mod:
+                if sample[k] is None:
+                    continue
                 sample[k] = TF.vflip(sample[k])
         return sample
 

@@ -6,6 +6,7 @@ Dataset and dataloaders for the training of auto-encoders in map translation
 """
 import json
 import os
+import time
 
 import h5py
 import matplotlib.pyplot as plt
@@ -14,7 +15,7 @@ import torch
 from matplotlib.colors import LinearSegmentedColormap
 from sklearn.decomposition import PCA
 from torch.utils.data import DataLoader, Dataset
-from torch.utils.data.distributed import DistributedSampler # LUMI-multi-GPU
+from torch.utils.data.distributed import DistributedSampler
 from torchvision.transforms import Compose
 
 from mmt import _repopath_ as mmt_repopath
@@ -592,10 +593,40 @@ class LandcoverToLandcover(Dataset):
         self.target_dataset = h5py.File(
             self.target_dataset_path, "r", swmr=True, libver="latest"
         )
-    
+
+        if "-" in os.path.basename(self.source_dataset_path):
+            mode = "-" + os.path.splitext(os.path.basename(self.source_dataset_path))[0].split("-")[1]
+        else:
+            mode = ""
+
+        # Open elevation data if found
+        try:
+            self.elevation_dataset = h5py.File(
+                os.path.join(os.path.dirname(self.source_dataset_path), "COP30"+mode+".hdf5"), "r", swmr=True, libver="latest"
+            )
+            # Check that elevation data has all the patches:
+            if not all(patch_id in list(self.elevation_dataset.keys()) for patch_id in self.list_patch_id):
+                print("Patch(es) not found in elevation dataset!")
+        except FileNotFoundError:
+            print(f'Warning: Elevation dataset "COP30{mode}.hdf5" not found, continuing without it.')
+            self.elevation_dataset = None
+        # Open coordinate data if found
+        try:
+            self.coordinates_dataset = h5py.File(
+                os.path.join(os.path.dirname(self.source_dataset_path), "coordinates"+mode+".hdf5"), "r", swmr=True, libver="latest"
+            )
+            # Check that elevation data has all the patches:
+            if not all(patch_id in list(self.coordinates_dataset.keys()) for patch_id in self.list_patch_id):
+                print("Patch(es) not found in coordinates dataset!")
+        except FileNotFoundError:
+            print(f'Warning: Coordinates dataset "coordinates{mode}.hdf5" not found, continuing without it.')
+            self.coordinates_dataset = None
+        
     def close_hdf5(self):
         self.source_dataset.close()
         self.target_dataset.close()
+        self.elevation_dataset.close()
+        self.coordinates_dataset.close()
 
     def __getitem__(self, idx):
         """Fetch an item of the dataset
@@ -629,7 +660,7 @@ class LandcoverToLandcover(Dataset):
             tmp = self.source_dataset.get(patch_id)
             sample["source_data"] = torch.tensor(
                 tmp[:].astype(float), dtype=torch.float, device=self.device
-            )  # .astype(float)
+            )
             tmp2 = self.target_dataset.get(patch_id)
             sample["target_data"] = torch.tensor(
                 tmp2[:].astype(float), dtype=torch.float, device=self.device
@@ -673,6 +704,28 @@ class LandcoverToLandcover(Dataset):
 
             sample["source_name"] = self.source
             sample["target_name"] = self.target
+
+            # Add elevation data to sample:
+            if self.elevation_dataset is not None:
+                elevation_patch = self.elevation_dataset.get(patch_id)
+                elevation_patch = elevation_patch[:]
+                elevation_patch = mmt_transforms.ElevationNorm(elevation_patch)
+                sample["elevation"] = torch.tensor(
+                    elevation_patch.astype(float), dtype=torch.float, device=self.device
+                )
+            else:
+                sample["elevation"] = None
+
+            # Add coordinates (2 (lon, lat), 600, 600) tensor to sample:
+            if self.coordinates_dataset is not None:
+                coordinates_patch = self.coordinates_dataset.get(patch_id)
+                coordinates_patch = coordinates_patch[:]
+                coordinates_patch = mmt_transforms.CoordPatchMinMaxNorm(coordinates_patch)
+                sample["coordinates_patch"] = torch.tensor(
+                    coordinates_patch, dtype=torch.float, device=self.device
+                )
+            else:
+                sample["coordinates_patch"] = None
 
         if self.transform:
             sample = self.transform(sample)
@@ -754,6 +807,7 @@ class LandcoverToLandcoverNoJson(LandcoverToLandcover):
         """
         if not hasattr(self, "source_dataset"):
             self.open_hdf5()
+        
         with torch.no_grad():
             patch_id = self.list_patch_id[idx]
             sample = {"patch_id": float(patch_id)}
@@ -761,9 +815,8 @@ class LandcoverToLandcoverNoJson(LandcoverToLandcover):
             src = self.source_dataset.get(patch_id)
             sample["source_data"] = torch.tensor(
                 src[:].astype(np.int64), dtype=torch.long, device=self.device
-            ).unsqueeze(
-                0
-            )  # .astype(float)
+            ).unsqueeze(0)  # .astype(float)
+
             trg = self.target_dataset.get(patch_id)
             sample["target_data"] = torch.tensor(
                 trg[:].astype(np.int64), dtype=torch.long, device=self.device
@@ -781,17 +834,33 @@ class LandcoverToLandcoverNoJson(LandcoverToLandcover):
             )
             
             # Create a new attribute to easily access the coordinates as torch.tensors (shape (,2)),
-            # Also use min-max rescaling to  scale coordinates to range [0,1]: #TODO: Create a custom transform for rescaling
-            x_min, x_max = 93639.6885, 1245639.6885
-            y_min, y_max = 6046786.6972, 7120786.6972
-            sample["coordinate_tensor"] = torch.tensor(
-                ((src.attrs["x_coor"].astype(float)-x_min)/(x_max-x_min), (src.attrs["y_coor"].astype(float)-y_min)/(y_max-y_min)),
-                dtype=torch.float,
-                device=self.device,
-            )
+            # Also use min-max rescaling to  scale coordinates to range [0,1]:
+            sample["coordinate_tensor"] = coord_to_tensor(src.attrs["x_coor"].astype(float), src.attrs["y_coor"].astype(float)).to(self.device)
 
             sample["source_name"] = self.source
             sample["target_name"] = self.target
+
+            # Add elevation data to sample:
+            if self.elevation_dataset is not None:
+                elevation_patch = self.elevation_dataset.get(patch_id)
+                elevation_patch = elevation_patch[:]
+                elevation_patch = mmt_transforms.ElevationNorm(elevation_patch)
+                sample["elevation"] = torch.tensor(
+                    elevation_patch.astype(float), dtype=torch.float, device=self.device
+                )
+            else:
+                sample["elevation"] = None
+            
+            # Add coordinates (2 (lon, lat), 600, 600) tensor to sample:
+            if self.coordinates_dataset is not None:
+                coordinates_patch = self.coordinates_dataset.get(patch_id)
+                coordinates_patch = coordinates_patch[:]
+                coordinates_patch = mmt_transforms.CoordPatchMinMaxNorm(coordinates_patch)
+                sample["coordinates_patch"] = torch.tensor(
+                    coordinates_patch, dtype=torch.float, device=self.device
+                )
+            else:
+                sample["coordinates_patch"] = None
 
         if self.transform:
             sample = self.transform(sample)
@@ -920,11 +989,11 @@ class LandcoverToLandcoverDataLoader:
             The number of CPU used to access the data
         """
         self.config = config
-        # LUMI: the mmt_repopath is different than data_dir given in config, use the one defined in config instead.
-        #self.datadir = os.path.join(mmt_repopath, "data", "hdf5_data")
         self.datadir = self.config.paths.data_dir
         self.device = "cuda" if config.cuda else "cpu"
         self.datasets = [rmsuffix(dataset) for dataset in datasets]
+        if not self.config.cuda:
+            rank = 0
 
         full_path_datasets = [
             os.path.join(self.datadir, dataset) for dataset in datasets
@@ -1112,7 +1181,7 @@ class LandcoverToLandcoverDataLoader:
                     val,
                     batch_size=self.config.training.batch_size,
                     shuffle=True, # LUMI-multi-GPU: DistributedSampler not yet needed with validation and test datasets as process 0 handles validation and testing alone currently.
-                    #sampler = DistributedSampler(val, num_replicas=world_size, rank=rank, shuffle=True, drop_last=False), #LUMI-multi-GPU, only for training loader?
+                    #sampler = DistributedSampler(val, num_replicas=world_size, rank=rank, shuffle=True, drop_last=False),
                     num_workers=num_workers,
                     pin_memory=pin_memory,
                     persistent_workers=num_workers > 0,
@@ -1127,7 +1196,7 @@ class LandcoverToLandcoverDataLoader:
                     val,
                     batch_size=self.config.training.batch_size,
                     shuffle=True, # LUMI-multi-GPU: DistributedSampler not yet needed with validation and test datasets as process 0 handles validation and testing alone currently.
-                    #sampler = DistributedSampler(val, num_replicas=world_size, rank=rank, shuffle=True, drop_last=False), #LUMI-multi-GPU, only for training loader?
+                    #sampler = DistributedSampler(val, num_replicas=world_size, rank=rank, shuffle=True, drop_last=False),
                     num_workers=num_workers,
                     pin_memory=pin_memory,
                     persistent_workers=num_workers > 0,

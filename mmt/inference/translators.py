@@ -290,9 +290,17 @@ class EsawcToEsgp(_MapTranslator):
         self.esawc_transform = mmt_transforms.OneHotTorchgeo(
             self.esawc.n_labels + 1, device=self.device
         )
-        self.encoder_decoder = io.load_pytorch_model(
-            checkpoint_path, lc_in="esawc", lc_out="esgp", device=device
-        )
+
+        self.elevation = landcovers.COP30()
+
+        if "original" in checkpoint_path.split("/"):
+            self.encoder_decoder = io.load_original_model(
+                checkpoint_path, lc_in="esawc", lc_out="esgp", device=device
+            )
+        else:
+            self.encoder_decoder = io.load_pytorch_model(
+                checkpoint_path, lc_in="esawc", lc_out="esgp", device=device
+            )
         if type(self.encoder_decoder) == list:
             self.encoder_decoder = [model.to(self.device) for model in self.encoder_decoder]
         else:
@@ -328,7 +336,7 @@ class EsawcToEsgp(_MapTranslator):
                 y = self.encoder_decoder[0](x.float(), coordinates.to(self.device))
                 y = self.encoder_decoder[1](y)
             else:
-                y = self.encoder_decoder(x.float())
+                y = self.encoder_decoder(x.float(), coordinates.to(self.device))
 
         return self.logits_transform(y)
 
@@ -357,31 +365,31 @@ class EsawcToEsgp(_MapTranslator):
         """
         if not isinstance(qb, BoundingBox):
             qb = qb.to_tgbox(self.esawc.crs)
+        xmin = qb.minx
+        xmax = qb.maxx
+        ymin = qb.miny
+        ymax = qb.maxy
         
         if self.config.model.use_pos == "sinusoidal":
-            # Extract coordinates
-            xmin = qb.minx
-            xmax = qb.maxx
-            ymin = qb.miny
-            ymax = qb.maxy
             # Recover single-point coordinate from the BoundingBox:
-            coordinates = misc.get_coord_from_bbox(xmin, ymin, xmax, ymax, location="upper-left")
+            sample = {"coordinate": misc.get_coord_from_bbox(xmin, ymin, xmax, ymax, location="upper-left")}
             sinusoidal_tranform = CoordEnc(None)
-            coordinates = sinusoidal_tranform(coordinates)["coordenc"]
+            coordinates = sinusoidal_tranform(sample)["coordenc"]
         elif self.config.model.use_pos == "embed_layer":
-            # Extract coordinates
-            xmin = qb.minx
-            xmax = qb.maxx
-            ymin = qb.miny
-            ymax = qb.maxy
             # Recover single-point coordinate from the BoundingBox:
             coordinates = misc.get_coord_from_bbox(xmin, ymin, xmax, ymax, location="upper-left")
             coordinates = misc.coord_to_tensor(*coordinates)
+        elif self.config.model.use_pos ==  "elevation_and_coordinates":
+            xs = np.linspace(xmin, xmax, 600, dtype=np.float32)
+            ys = np.linspace(ymax, ymin, 600, dtype=np.float32)
+            lons, lats = np.meshgrid(xs, ys)  # xx: x-coords, yy: y-coords
+            coord_data =  np.stack([lons, lats], axis=0)
+            elevation_patch = self.elevation[qb]["mask"]
+            coordinates = torch.cat((coord_data, elevation_patch), dim=1)
         else:
             coordinates = None
 
         x = self.esawc[qb]
-        # TODO: Extract 'x_coor' & 'y_coor' from the BoundingBox 'qb', see 'scripts/prepare_hdf5_ds1.py' & 'utils/misc.get_bbox_from_coord' and reverse functionality. Pass the coordinates to 'predict_from_data()'
         return self.predict_from_data(x["mask"], coordinates)
 
 

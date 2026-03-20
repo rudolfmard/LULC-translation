@@ -46,7 +46,7 @@ def main():
     dist.init_process_group(
         backend='nccl',
         init_method='env://',  # Required for torch.distributed.run
-        timeout=datetime.timedelta(seconds=1800)
+        timeout=datetime.timedelta(seconds=3600)
     )
 
     rank = int(os.environ['RANK'])
