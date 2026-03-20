@@ -1,3 +1,8 @@
+About this LULC-translation fork
+========================
+The default branch of this fork is  `lumi-multi-gpu`, as the work done here was developed for LUMI HPC environment. Other branches might contain incomplete work.
+The training model training was developed to be executed on multiple nodes and GPUs.
+
 Multiple Map Translation
 ========================
 This repo was forked from [MLULC](https://github.com/LBaudoux/MLULC).
